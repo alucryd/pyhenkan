@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+
+import argparse
+import collections
+import json
+import os
+import sys
+from pyanimenc import Chapters
+
+parser = argparse.ArgumentParser(description='Create Matroska chapters')
+parser.add_argument('jsons', nargs='*', help='JSON chapter files')
+args = parser.parse_args()
+
+for json in args.jsons:
+    xml = os.path.splitext(json)[0] + '.xml'
+    with open(json, 'r') as f:
+        data = json.loads(f.read(), object_pairs_hook=collections.OrderedDict)
+    c = Chapters().chapter(data)
+    with open(xml, 'wb') as f:
+        f.write(c)
+
+# vim: ts=4 sw=4 et:
