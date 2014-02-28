@@ -60,18 +60,18 @@ class MatroskaOps:
     def merge(self, vid_track, aud_tracks, sub_tracks=[], uid=''):
         if not os.path.isdir('out'):
             os.mkdir(os.getcwd() + '/out')
-        x = ('mkvmerge -o out/{}.mkv '
-             '-D -A -S {}').format(self.sname, self.source)
+        x = ('mkvmerge -o "out/{}.mkv" '
+             '-D -A -S "{}"').format(self.sname, self.source)
         v = ('-A -S -M --no-chapters --language '
-             '{}:{} {}').format(vid_track[0], vid_track[1], vid_track[2])
+             '{}:{} "{}"').format(vid_track[0], vid_track[1], vid_track[2])
         cmd = [x, v]
         for aud_track in aud_tracks:
             a = ('--no-chapters --language '
-                 '0:{} {}').format(aud_track[1], aud_track[2])
+                 '0:{} "{}"').format(aud_track[1], aud_track[2])
             cmd.append(a)
         if sub_tracks:
             for sub_track in sub_tracks:
-                s = '--language 0:{} {}'.format(sub_track[1], sub_track[2])
+                s = '--language 0:{} "{}"'.format(sub_track[1], sub_track[2])
                 cmd.append(s)
         if uid:
             u = '--segment-uid ' + uid

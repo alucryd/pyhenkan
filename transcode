@@ -95,6 +95,7 @@ for source in args.sources:
 
 # Encode video
         Encode(source).video(crf, bit_depth, preset, tune, args.preview)
+        vid_track[0] = 0
         vid_track[2] = sname + '.mp4'
 
 # Extract tracks
