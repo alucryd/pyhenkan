@@ -1,0 +1,22 @@
+{
+  "vid_track": [0, "jpn"],
+  "aud_tracks": [[1, "jpn"]],
+  "sub_tracks": [[2, "eng"], [3, "eng"]],
+  "audio":
+    {
+      "enc": true,
+      "quality": 4,
+      "container": "aac"
+    },
+  "video":
+    {
+      "enc": true,
+      "bit_depth": 8_or_10,
+      "crf": between_1_and_51,
+      "preset": "x264 preset",
+      "tune": "x264 tune",
+      "crop": [left, right, top, bottom],
+      "resize": [width, height],
+      "deband": "f3kdb preset"
+    }
+}
