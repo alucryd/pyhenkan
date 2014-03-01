@@ -20,21 +20,21 @@ aud_types = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts',
 sub_types = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
              'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
-# Read settings
-with open(args.settings, 'r') as f:
-    settings = json.loads(f.read())
-
-vid_track = settings['vid_track']
-aud_tracks = settings['aud_tracks']
-sub_tracks = settings.get('sub_tracks', [])
-vid_set = settings['video']
-aud_set = settings['audio']
-
-# Get UID and track infos
+# Get source infos
 for source in args.sources:
     sname, sext = os.path.splitext(source)
     sext = sext.strip('.')
     data = MatroskaOps(source).get_data()
+
+# Read settings
+    with open(args.settings, 'r') as f:
+        settings = json.loads(f.read())
+
+    vid_track = settings['vid_track']
+    aud_tracks = settings['aud_tracks']
+    sub_tracks = settings.get('sub_tracks', [])
+    vid_set = settings['video']
+    aud_set = settings['audio']
 
 # Make sure selected video track is video
     num = str(vid_track[0])
@@ -116,9 +116,6 @@ for source in args.sources:
                 track[2] = '.'.join((os.path.splitext(track[2])[0], container))
 
 # Mux files
-    print(vid_track)
-    print(aud_tracks)
-    print(sub_tracks)
     MatroskaOps(source).merge(vid_track, aud_tracks, sub_tracks, data['uid'])
 
 # vim: ts=4 sw=4 et:
