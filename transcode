@@ -87,9 +87,9 @@ for source in args.sources:
         if not os.path.isfile(vpyscript):
             with open(vpyscript, 'w') as f:
                 f.write((
-                    "from pyanimenc import Encode\n"
-                    "Encode('{}').vpy(fpsnum={}, fpsden={}, trim={}, crop={}, "
-                    "resize={}, deband='{}', bit_depth={})"
+                    'from pyanimenc import Encode\n'
+                    'Encode("{}").vpy(fpsnum={}, fpsden={}, trim={}, crop={}, '
+                    'resize={}, deband="{}", bit_depth={})'
                 ).format(source, str(fpsnum), str(fpsden), str(trim),
                          str(crop), str(resize), str(deband), str(bit_depth)))
 
