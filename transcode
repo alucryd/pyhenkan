@@ -17,8 +17,8 @@ parser.add_argument('--test', '-t', action='store_true',
 args = parser.parse_args()
 
 vid_types = ['V_MPEG4/ISO/AVC']
-aud_types = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts',
-             'A_FLAC': 'flac', 'A_MP3': 'mp3', 'A_VORBIS': 'ogg'}
+aud_types = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
+             'A_MP3': 'mp3', 'A_VORBIS': 'ogg', 'A_WAVPACK4': 'wv'}
 sub_types = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
              'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
