@@ -76,7 +76,6 @@ class MatroskaOps:
         if uid:
             u = '--segment-uid ' + uid
             cmd.append(u)
-        print(cmd)
         subprocess.call(' '.join(cmd), shell=True)
 
 class Chapters:

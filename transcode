@@ -12,6 +12,8 @@ parser.add_argument('--settings', '-s', default='transcode.json',
                     help='JSON settings file')
 parser.add_argument('--preview', '-p', action='store_true',
                     help='Preview video output')
+parser.add_argument('--test', '-t', action='store_true',
+                    help='Track track settings')
 args = parser.parse_args()
 
 vid_types = ['V_MPEG4/ISO/AVC']
@@ -40,8 +42,9 @@ for source in args.sources:
     num = str(vid_track[0])
     vdata = data['track' + num]
     vid_type = vdata['codec']
-    if vid_type not in vid_types:
-        print('Track {} of "{}" is no video'.format(num, source))
+    if args.test and vid_type not in vid_types:
+        print('Track {} of "{}" is no audio. Got {}.'.format(num, source,
+                                                             vid_type))
     else:
         vid_track.append(source)
 
@@ -51,8 +54,13 @@ for source in args.sources:
         adata = data['track' + num]
         aud_type = adata['codec']
         aud_lang = adata.get('lang', '')
-        if aud_type not in aud_types or aud_lang and aud_lang != track[1]:
-            print('Track {} of "{}" is no audio'.format(num, source))
+        if args.test:
+            if aud_type not in aud_types:
+                print(('Track {} of "{}" is no audio. '
+                       'Got {}.').format(num, source, aud_type))
+            elif aud_lang and aud_lang != track[1]:
+                print(('Track {} of "{}" is {} instead of '
+                       '{}.').format(num, source, aud_lang, track[1]))
         else:
             aud_ext = aud_types[aud_type]
             track.append(aud_ext)
@@ -63,59 +71,69 @@ for source in args.sources:
         sdata = data['track' + num]
         sub_type = sdata['codec']
         sub_lang = sdata.get('lang', '')
-        if sub_type not in sub_types or sub_lang and sub_lang != track[1]:
-            print('Track {} of "{}" is no subtitle'.format(num, source))
+        if args.test:
+            if sub_type not in sub_types:
+                print(('Track {} of "{}" is no subtitles. '
+                       'Got {}.').format(num, source, sub_type))
+            elif sub_lang and sub_lang != track[1]:
+                print(('Track {} of "{}" is {} instead of '
+                       '{}.').format(num, source, sub_lang, track[1]))
         else:
             sub_ext = sub_types[sub_type]
             track.append(sub_ext)
 
+    if not args.test:
+
 # Video encoding
-    if vid_set['enc']:
-        vpyscript = sname + '.vpy'
-        bit_depth = vid_set.get('bit_depth', 10)
-        crf = vid_set.get('crf', 15)
-        preset = vid_set.get('preset', 'slow')
-        tune = vid_set.get('tune', 'animation')
-        fpsnum = vid_set.get('fpsnum', 24000)
-        fpsden = vid_set.get('fpsden', 1001)
-        trim = vid_set.get('trim', [])
-        crop = vid_set.get('crop', [])
-        resize = vid_set.get('resize', [])
-        deband = vid_set.get('deband', '')
+        if vid_set['enc']:
+            vpyscript = sname + '.vpy'
+            bit_depth = vid_set.get('bit_depth', 10)
+            crf = vid_set.get('crf', 15)
+            preset = vid_set.get('preset', 'slow')
+            tune = vid_set.get('tune', 'animation')
+            fpsnum = vid_set.get('fpsnum', 24000)
+            fpsden = vid_set.get('fpsden', 1001)
+            trim = vid_set.get('trim', [])
+            crop = vid_set.get('crop', [])
+            resize = vid_set.get('resize', [])
+            deband = vid_set.get('deband', '')
 
 # Create VapourSynth script if none exists
-        if not os.path.isfile(vpyscript):
-            with open(vpyscript, 'w') as f:
-                f.write((
-                    'from pyanimenc import Encode\n'
-                    'Encode("{}").vpy(fpsnum={}, fpsden={}, trim={}, crop={}, '
-                    'resize={}, deband="{}", bit_depth={})'
-                ).format(source, str(fpsnum), str(fpsden), str(trim),
-                         str(crop), str(resize), str(deband), str(bit_depth)))
+            if not os.path.isfile(vpyscript):
+                with open(vpyscript, 'w') as f:
+                    f.write((
+                        'from pyanimenc import Encode\n'
+                        'Encode("{}").vpy(fpsnum={}, fpsden={}, trim={}, '
+                        'crop={}, resize={}, deband="{}", bit_depth={})'
+                    ).format(source, str(fpsnum), str(fpsden), str(trim),
+                             str(crop), str(resize), str(deband),
+                             str(bit_depth)))
 
 # Encode video
-        Encode(source).video(crf, bit_depth, preset, tune, args.preview)
-        vid_track[0] = 0
-        vid_track[2] = sname + '.mp4'
+            Encode(source).video(crf, bit_depth, preset, tune, args.preview)
+            vid_track[0] = 0
+            vid_track[2] = sname + '.mp4'
 
 # Extract tracks
-    tracks = aud_tracks + sub_tracks
-    for track in tracks:
-        track[2] = '{}_{}.{}'.format(sname, track[0], track[2])
-    MatroskaOps(source).extract(tracks)
+        tracks = aud_tracks + sub_tracks
+        for track in tracks:
+            track[2] = '{}_{}.{}'.format(sname, track[0], track[2])
+        MatroskaOps(source).extract(tracks)
 
 # Audio encoding
-    if aud_set['enc']:
-        quality = aud_set.get('quality', 4)
-        container = aud_set.get('container', 'aac')
+        if aud_set['enc']:
+            quality = aud_set.get('quality', 4)
+            container = aud_set.get('container', 'aac')
 
 # Encode audio if not AAC, MP3 or OGG
-        for track in aud_tracks:
-            if not re.search('\.(aac|mp3|ogg)$', track[2]):
-                Encode(track[2]).audio(quality, container)
-                track[2] = '.'.join((os.path.splitext(track[2])[0], container))
+            for track in aud_tracks:
+                if not re.search('\.(aac|mp3|ogg)$', track[2]):
+                    Encode(track[2]).audio(quality, container)
+                    track[2] = '.'.join((os.path.splitext(track[2])[0],
+                                                          container))
 
 # Mux files
-    MatroskaOps(source).merge(vid_track, aud_tracks, sub_tracks, data['uid'])
+        MatroskaOps(source).merge(vid_track, aud_tracks, sub_tracks,
+                                  data['uid'])
 
 # vim: ts=4 sw=4 et:
