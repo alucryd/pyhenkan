@@ -24,6 +24,7 @@ sub_types = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
 
 # Get source infos
 for source in args.sources:
+    print('\nProcessing "{}".\n'.format(source))
     sname, sext = os.path.splitext(source)
     sext = sext.strip('.')
     data = MatroskaOps(source).get_data()
@@ -43,7 +44,7 @@ for source in args.sources:
     vdata = data['track' + num]
     vid_type = vdata['codec']
     if args.test and vid_type not in vid_types:
-        print('Track {} of "{}" is no audio. Got {}.'.format(num, source,
+        print('Track {} of "{}" is no audio. Got {}.\n'.format(num, source,
                                                              vid_type))
     else:
         vid_track.append(source)
@@ -57,10 +58,10 @@ for source in args.sources:
         if args.test:
             if aud_type not in aud_types:
                 print(('Track {} of "{}" is no audio. '
-                       'Got {}.').format(num, source, aud_type))
+                       'Got {}.\n').format(num, source, aud_type))
             elif aud_lang and aud_lang != track[1]:
                 print(('Track {} of "{}" is {} instead of '
-                       '{}.').format(num, source, aud_lang, track[1]))
+                       '{}.\n').format(num, source, aud_lang, track[1]))
         else:
             aud_ext = aud_types[aud_type]
             track.append(aud_ext)
@@ -74,10 +75,10 @@ for source in args.sources:
         if args.test:
             if sub_type not in sub_types:
                 print(('Track {} of "{}" is no subtitles. '
-                       'Got {}.').format(num, source, sub_type))
+                       'Got {}.\n').format(num, source, sub_type))
             elif sub_lang and sub_lang != track[1]:
                 print(('Track {} of "{}" is {} instead of '
-                       '{}.').format(num, source, sub_lang, track[1]))
+                       '{}.\n').format(num, source, sub_lang, track[1]))
         else:
             sub_ext = sub_types[sub_type]
             track.append(sub_ext)
@@ -100,6 +101,7 @@ for source in args.sources:
 
 # Create VapourSynth script if none exists
             if not os.path.isfile(vpyscript):
+                print('Creating VapourSynth script.\n')
                 with open(vpyscript, 'w') as f:
                     f.write((
                         'from pyanimenc import Encode\n'
@@ -110,11 +112,13 @@ for source in args.sources:
                              str(bit_depth)))
 
 # Encode video
+            print('Encoding video.\n')
             Encode(source).video(crf, bit_depth, preset, tune, args.preview)
             vid_track[0] = 0
             vid_track[2] = sname + '.mp4'
 
 # Extract tracks
+        print('\nExtracting tracks.\n')
         tracks = aud_tracks + sub_tracks
         for track in tracks:
             track[2] = '{}_{}.{}'.format(sname, track[0], track[2])
@@ -128,11 +132,13 @@ for source in args.sources:
 # Encode audio if not AAC, MP3 or OGG
             for track in aud_tracks:
                 if not re.search('\.(aac|mp3|ogg)$', track[2]):
+                    print('\nEncoding audio.\n')
                     Encode(track[2]).audio(quality, container)
                     track[2] = '.'.join((os.path.splitext(track[2])[0],
                                                           container))
 
 # Mux files
+        print('\nMuxing tracks.\n')
         MatroskaOps(source).merge(vid_track, aud_tracks, sub_tracks,
                                   data['uid'])
 
