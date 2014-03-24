@@ -89,23 +89,23 @@ class Chapters:
         seconds = round(time - hours * 3600 - minutes * 60, 3)
         return '{:0>2d}:{:0>2d}:{:0>12.9f}'.format(hours, minutes, seconds)
 
-    def _atom(self, name, data, language='eng'):
+    def _atom(self, chapter, language='eng'):
         atom = etree.Element('ChapterAtom')
         uid = etree.SubElement(atom, 'ChapterUID')
         uid.text = str(randrange(1000000000))
-        if data.get('uid', ''):
+        if len(chapter) == 4 and chapter[3]:
             seg_uid = etree.SubElement(atom, 'ChapterSegmentUID', format='hex')
-            seg_uid.text = data['uid']
+            seg_uid.text = chapter[3]
         display = etree.SubElement(atom, 'ChapterDisplay')
         string = etree.SubElement(display, 'ChapterString')
-        string.text = name
+        string.text = chapter[0]
         lang = etree.SubElement(display, 'ChapterLanguage')
         lang.text = language
         start = etree.SubElement(atom, 'ChapterTimeStart')
-        start.text = self.timecode(data['start'])
+        start.text = self.timecode(chapter[1])
         if self.ordered:
             end = etree.SubElement(atom, 'ChapterTimeEnd')
-            end.text = self.timecode(data['end'])
+            end.text = self.timecode(chapter[2])
         return atom
 
     def chapter(self, chapters):
@@ -115,13 +115,13 @@ class Chapters:
         edit_uid = etree.SubElement(edit, 'EditionUID')
         edit_uid.text = str(randrange(1000000000))
         for chapter in chapters:
-            if 'uid' in chapters[chapter]:
+            if len(chapter) == 4 and chapter[3]:
                 self.ordered = 1
         if self.ordered:
             ordered = etree.SubElement(edit, 'EditionFlagOrdered')
             ordered.text = '1'
         for chapter in chapters:
-            c = self._atom(chapter, chapters[chapter])
+            c = self._atom(chapter)
             edit.append(c)
         doctype = '<!-- <!DOCTYPE Chapters SYSTEM "matroskachapters.dtd"> -->'
         xml = etree.tostring(chaps, encoding='UTF-8', pretty_print=True,

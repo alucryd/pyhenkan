@@ -1,7 +1,0 @@
-{
-    "Prologue": {"start": 0, "end": last_frame+1},
-    "OP": {"start": 0, "end": last_frame+1, "uid": "segment UID for ordered chapters/segment linking"},
-    "Episode": {"start": first_frame, "end": last_frame+1},
-    "ED": {"start": first_frame, "end": last_frame+1},
-    "Preview": {"start": first_frame, "end": last_frame+1}
-}
