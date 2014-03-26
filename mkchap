@@ -10,23 +10,15 @@ parser = argparse.ArgumentParser(description="Create Matroska chapters")
 parser.add_argument('yaml', nargs='*', help="YAML chapter data files")
 args = parser.parse_args()
 
-def mkchap(data, output):
-    c = Chapters().chapter(data)
-    with open(output, 'wb') as f:
-        f.write(c)
-
-def parse_yaml(input):
-    with open(input, 'r') as f:
-        data = f.read()
-    data = yaml.load(data)
-    return data
-
 class ChapterEditor(Gtk.Window):
     def __init__(self):
         self.cwd = ''
         self.output = 'chapter.xml'
         self.oc = True
-        self.data = [["New Chapter", 0, 0, '']]
+        self.lang = 'eng'
+        self.fpsnum = 24000
+        self.fpsden = 1001
+        self.chapters = [["New Chapter", 0, 0, '']]
 
         Gtk.Window.__init__(self, title="Chapter Editor")
         self.set_border_width(12)
@@ -62,12 +54,51 @@ class ChapterEditor(Gtk.Window):
         oc_box = Gtk.Box(spacing=6)
         self.box.pack_start(oc_box, False, False, 0)
 
-        oc_label = Gtk.Label(label="Ordered Chapters")
+        oc_label = Gtk.Label("Ordered Chapters")
         oc_box.pack_start(oc_label, False, False, 0)
         self.oc_checkbox = Gtk.CheckButton()
         self.oc_checkbox.set_active(self.oc)
         self.oc_checkbox.connect('toggled', self.on_oc_checked)
         oc_box.pack_start(self.oc_checkbox, False, False, 0)
+
+        lang_box = Gtk.Box(spacing=6)
+        self.box.pack_start(lang_box, False, False, 0)
+
+        lang_label = Gtk.Label("Language:")
+        lang_box.pack_start(lang_label, False, False, 0)
+        lang_entry = Gtk.Entry()
+        lang_entry.set_max_length(3)
+        lang_entry.set_width_chars(3)
+        lang_entry.set_text(self.lang)
+        lang_entry.connect('changed', self.on_lang_changed)
+        lang_box.pack_start(lang_entry, False, False, 0)
+
+        fps_box = Gtk.Box(spacing=6)
+        self.box.pack_start(fps_box, False, False, 0)
+
+        policy = Gtk.SpinButtonUpdatePolicy.IF_VALID
+        # Using the same adjustments will mirror values
+        adj1 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
+        adj2 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
+
+        fpsnum_label = Gtk.Label("FPS Numerator:")
+        fps_box.pack_start(fpsnum_label, False, False, 0)
+        fpsnum_spin = Gtk.SpinButton()
+        fpsnum_spin.set_numeric(True)
+        fpsnum_spin.set_adjustment(adj1)
+        fpsnum_spin.set_update_policy(policy)
+        fpsnum_spin.set_value(self.fpsnum)
+        fpsnum_spin.connect('value-changed', self.on_fpsnum_changed)
+        fps_box.pack_start(fpsnum_spin, False, False, 0)
+        fpsden_label = Gtk.Label("FPS Denominator:")
+        fps_box.pack_start(fpsden_label, False, False, 0)
+        fpsden_spin = Gtk.SpinButton()
+        fpsden_spin.set_numeric(True)
+        fpsden_spin.set_adjustment(adj2)
+        fpsden_spin.set_update_policy(policy)
+        fpsden_spin.set_value(self.fpsden)
+        fpsden_spin.connect('value-changed', self.on_fpsden_changed)
+        fps_box.pack_start(fpsden_spin, False, False, 0)
 
         self.chapter_entries()
 
@@ -78,8 +109,8 @@ class ChapterEditor(Gtk.Window):
     def chapter_entries(self):
         self.chapter_box = Gtk.Box(orientation=1, spacing=12)
         self.box.pack_start(self.chapter_box, False, False, 0)
-        for i in range(len(self.data)):
-            self.chapter_entry(self.data[i], i)
+        for i in range(len(self.chapters)):
+            self.chapter_entry(self.chapters[i], i)
 
     def chapter_entry(self, chapter, index):
         box = Gtk.Box(orientation=1, spacing=6)
@@ -98,11 +129,13 @@ class ChapterEditor(Gtk.Window):
         label2 = Gtk.Label("Start:")
         title = Gtk.Entry()
         title.set_text(chapter[0])
+        title.connect('changed', self.on_title_changed, index)
         start = Gtk.SpinButton()
         start.set_numeric(True)
         start.set_update_policy(policy)
         start.set_adjustment(adj1)
         start.set_value(chapter[1])
+        start.connect('value-changed', self.on_start_changed, index)
 
         box1.pack_start(label1, False, False, 0)
         box1.pack_start(title, False, False, 0)
@@ -118,6 +151,7 @@ class ChapterEditor(Gtk.Window):
             end.set_adjustment(adj2)
             # End is mandatory with OC
             end.set_value(chapter[2])
+            end.connect('value-changed', self.on_end_changed, index)
             # UID however is not
             uid = Gtk.Entry()
             uid.set_max_length(32)
@@ -126,20 +160,21 @@ class ChapterEditor(Gtk.Window):
                 uid.set_text(chapter[3])
             else:
                 uid.set_text('')
+            uid.connect('changed', self.on_uid_changed, index)
 
             box2.pack_start(label3, False, False, 0)
             box2.pack_start(end, False, False, 0)
             box2.pack_start(label4, False, False, 0)
             box2.pack_start(uid, False, False, 0)
 
-        if len(self.data) > 1:
+        if len(self.chapters) > 1:
             delete = Gtk.Button()
             del_image = Gtk.Image.new_from_icon_name('window-close-symbolic',
                                                      Gtk.IconSize.MENU)
             delete.set_image(del_image)
             delete.connect('clicked', self.on_delete_clicked, index)
             box1.pack_end(delete, False, False, 0)
-        if index < len(self.data) - 1:
+        if index < len(self.chapters) - 1:
             move_down = Gtk.Button()
             mdown_image = Gtk.Image.new_from_icon_name('go-down-symbolic',
                                                        Gtk.IconSize.MENU)
@@ -155,23 +190,67 @@ class ChapterEditor(Gtk.Window):
             box1.pack_end(move_up, False, False, 0)
 
     def update_entries(self):
+        if self.oc:
+            for chapter in self.chapters:
+                if len(chapter) == 2:
+                    chapter[2] = 0
+                if len(chapter) == 3:
+                    chapter[3] = ''
         self.box.remove(self.chapter_box)
         self.chapter_entries()
         win.show_all()
 
+    def on_oc_checked(self, radio):
+        if radio.get_active():
+            self.oc = True
+            self.update_entries()
+        else:
+            self.oc = False
+            self.update_entries()
+
+    def on_lang_changed(self, entry):
+        self.lang = entry.get_text()
+        print(self.lang)
+
+    def on_fpsnum_changed(self, button):
+        self.fpsnum = int(button.get_value())
+        print(self.fpsnum)
+
+    def on_fpsden_changed(self, button):
+        self.fpsden = int(button.get_value())
+        print(self.fpsden)
+
+    def on_title_changed(self, entry, index):
+        self.chapters[index][0] = entry.get_text()
+        print(self.chapters)
+
+    def on_start_changed(self, button, index):
+        self.chapters[index][1] = int(button.get_value())
+        print(self.chapters)
+
+    def on_end_changed(self, button, index):
+        self.chapters[index][2] = int(button.get_value())
+        print(self.chapters)
+
+    def on_uid_changed(self, entry, index):
+        self.chapters[index][3] = entry.get_text()
+        print(self.chapters)
+
     def on_delete_clicked(self, button, index):
-        self.data.pop(index)
+        self.chapters.pop(index)
         self.update_entries()
 
     def on_new_clicked(self, button):
-        self.data.append(["New Chapter", 0, 0, ''])
+        self.chapters.append(["New Chapter", 0, 0, ''])
         self.update_entries()
 
     def on_move_clicked(self, button, direction, index):
         if direction == 'up':
-            self.data[index - 1:index + 1] = [self.data[index], self.data[index - 1]]
+            self.chapters[index - 1:index + 1] = [self.chapters[index],
+                                                  self.chapters[index - 1]]
         elif direction == 'down':
-            self.data[index :index + 2] = [self.data[index + 1], self.data[index]]
+            self.chapters[index :index + 2] = [self.chapters[index + 1],
+                                               self.chapters[index]]
         self.update_entries()
 
     def on_open_clicked(self, button):
@@ -188,10 +267,14 @@ class ChapterEditor(Gtk.Window):
             input = dialog.get_filename()
             self.cwd, self.output = os.path.split(input)
             self.output = os.path.splitext(self.output)[0] + '.xml'
-            self.data = parse_yaml(input)
+            data = parse_yaml(input)
+            self.lang = data.get('lang', 'eng')
+            self.fpsnum = data.get('fpsnum', 24000)
+            self.fpsden = data.get('fpsden', 1001)
+            self.chapters = data['chapters']
             self.oc = False
-            for chapter in self.data:
-                if len(chapter) == 4 and chapter[3]:
+            for chapter in self.chapters:
+                if len(chapter) > 2:
                     self.oc = True
             self.oc_checkbox.set_active(self.oc)
             self.update_entries()
@@ -212,7 +295,8 @@ class ChapterEditor(Gtk.Window):
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             xml_file = dialog.get_filename()
-            mkchap(self.data, xml_file)
+            mkchap(self.chapters, xml_file, self.lang, self.fpsnum,
+                   self.fpsden)
 
         dialog.destroy()
 
@@ -222,19 +306,26 @@ class ChapterEditor(Gtk.Window):
          filt.add_pattern('*.' + ext)
          dialog.add_filter(filt)
 
-    def on_oc_checked(self, radio):
-        if radio.get_active():
-            self.oc = True
-            self.update_entries()
-        else:
-            self.oc = False
-            self.update_entries()
+def parse_yaml(input):
+    with open(input, 'r') as f:
+        data = f.read()
+    data = yaml.load(data)
+    return data
+
+def mkchap(chapters, output, lang='eng', fpsnum=24000, fpsden=1001):
+    c = Chapters(lang, fpsnum, fpsden).chapter(chapters)
+    with open(output, 'wb') as f:
+        f.write(c)
 
 if args.yaml:
     for yaml_file in args.yaml:
         output = os.path.splitext(yaml_file)[0] + '.xml'
         data = parse_yaml(input)
-        mkchap(data, output)
+        lang = data.get('lang', 'eng')
+        fpsnum = data.get('fpsnum', 24000)
+        fpsden = data.get('fpsden', 1001)
+        chapters = data['chapters']
+        mkchap(chapters, output)
 else:
     win = ChapterEditor()
     win.connect('delete-event', Gtk.main_quit)

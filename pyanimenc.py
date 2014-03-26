@@ -79,17 +79,19 @@ class MatroskaOps:
         subprocess.call(' '.join(cmd), shell=True)
 
 class Chapters:
-    def __init__(self):
-        pass
+    def __init__(self, lang='eng', fpsnum=24000, fpsden=1001):
+        self.lang = lang
+        self.fpsnum = fpsnum
+        self.fpsden = fpsden
 
     def timecode(self, frames):
-        time = Decimal(frames) * Decimal(1001) / Decimal(24000)
+        time = Decimal(frames) * Decimal(self.fpsden) / Decimal(self.fpsnum)
         hours = int(time // 3600)
         minutes = int((time - hours * 3600) // 60)
         seconds = round(time - hours * 3600 - minutes * 60, 3)
         return '{:0>2d}:{:0>2d}:{:0>12.9f}'.format(hours, minutes, seconds)
 
-    def _atom(self, chapter, language='eng'):
+    def _atom(self, chapter):
         atom = etree.Element('ChapterAtom')
         uid = etree.SubElement(atom, 'ChapterUID')
         uid.text = str(randrange(1000000000))
@@ -100,7 +102,7 @@ class Chapters:
         string = etree.SubElement(display, 'ChapterString')
         string.text = chapter[0]
         lang = etree.SubElement(display, 'ChapterLanguage')
-        lang.text = language
+        lang.text = self.lang
         start = etree.SubElement(atom, 'ChapterTimeStart')
         start.text = self.timecode(chapter[1])
         if self.ordered:

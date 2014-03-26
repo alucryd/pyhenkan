@@ -1,14 +1,12 @@
 # This is an example YAML chapters definition file for mkchap.
-#
-# Format: ["Chapter Name", start_frame, end_frame + 1, "Segment UID"]
-#
-# Chapter Name and start_frame are always required, end_frame is required for
-# ordered chapters, and Segment UID is required for segment linking.
 
-[
-    ["Prologue", 0, 4339],
-    ["OP", 0, 2159, "17b3f9b136676c5cb0be07546e24e83d"],
-    ["Episode", 4339, 29368],
-    ["ED", 29368, 31527],
-    ["Preview", 31527, 31887]
-]
+{
+    'language': 'eng', # Optional
+    'fpsnum': 24000, # Optional
+    'fpsden': 1001, # Optional
+    'chapters': [
+        ["Chapter 1", start_frame], # Regular chapters
+        ["Chapter 2", start_frame, end_frame + 1], # Ordered chapters
+        ["Chapter 3", start_frame, end_frame + 1, "Segment UID (hex)"], # Ordered chapters + Segment linking
+    ]
+}
