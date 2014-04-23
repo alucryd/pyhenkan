@@ -10,118 +10,23 @@ parser = argparse.ArgumentParser(description="Create Matroska chapters")
 parser.add_argument('yaml', nargs='*', help="YAML chapter data files")
 args = parser.parse_args()
 
-class ChapterEditor(Gtk.Window):
+class Entries():
     def __init__(self):
-        self.cwd = ''
-        self.output = 'chapter.xml'
-        self.oc = True
-        self.lang = 'eng'
-        self.fpsnum = 24000
-        self.fpsden = 1001
-        self.chapters = [["New Chapter", 0, 0, '']]
-
-        Gtk.Window.__init__(self, title="Chapter Editor")
-        self.set_border_width(12)
-
-        hb = Gtk.HeaderBar(spacing=6)
-        hb.props.show_close_button = True
-        hb.props.title = "Chapter Editor"
-        self.set_titlebar(hb)
-
-        open_button = Gtk.Button()
-        open_image = Gtk.Image.new_from_icon_name('document-open-symbolic',
-                                                  Gtk.IconSize.MENU)
-        open_button.set_image(open_image)
-        open_button.connect('clicked', self.on_open_clicked)
-        hb.pack_start(open_button)
-
-        import_button = Gtk.Button()
-        import_image = Gtk.Image.new_from_icon_name('document-import-symbolic',
-                                                    Gtk.IconSize.MENU)
-        import_button.set_image(import_image)
-        hb.pack_start(import_button)
-
-        save_button = Gtk.Button()
-        save_image = Gtk.Image.new_from_icon_name('document-save-symbolic',
-                                                  Gtk.IconSize.MENU)
-        save_button.set_image(save_image)
-        save_button.connect('clicked', self.on_save_clicked)
-        hb.pack_start(save_button)
-
-        self.box = Gtk.Box(orientation=1, spacing=12)
-        self.add(self.box)
-
-        oc_box = Gtk.Box(spacing=6)
-        self.box.pack_start(oc_box, False, False, 0)
-
-        oc_label = Gtk.Label("Ordered Chapters")
-        oc_box.pack_start(oc_label, False, False, 0)
-        self.oc_checkbox = Gtk.CheckButton()
-        self.oc_checkbox.set_active(self.oc)
-        self.oc_checkbox.connect('toggled', self.on_oc_checked)
-        oc_box.pack_start(self.oc_checkbox, False, False, 0)
-
-        lang_box = Gtk.Box(spacing=6)
-        self.box.pack_start(lang_box, False, False, 0)
-
-        lang_label = Gtk.Label("Language:")
-        lang_box.pack_start(lang_label, False, False, 0)
-        lang_entry = Gtk.Entry()
-        lang_entry.set_max_length(3)
-        lang_entry.set_width_chars(3)
-        lang_entry.set_text(self.lang)
-        lang_entry.connect('changed', self.on_lang_changed)
-        lang_box.pack_start(lang_entry, False, False, 0)
-
-        fps_box = Gtk.Box(spacing=6)
-        self.box.pack_start(fps_box, False, False, 0)
-
-        policy = Gtk.SpinButtonUpdatePolicy.IF_VALID
-        # Using the same adjustments will mirror values
-        adj1 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
-        adj2 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
-
-        fpsnum_label = Gtk.Label("FPS Numerator:")
-        fps_box.pack_start(fpsnum_label, False, False, 0)
-        fpsnum_spin = Gtk.SpinButton()
-        fpsnum_spin.set_numeric(True)
-        fpsnum_spin.set_adjustment(adj1)
-        fpsnum_spin.set_update_policy(policy)
-        fpsnum_spin.set_value(self.fpsnum)
-        fpsnum_spin.connect('value-changed', self.on_fpsnum_changed)
-        fps_box.pack_start(fpsnum_spin, False, False, 0)
-        fpsden_label = Gtk.Label("FPS Denominator:")
-        fps_box.pack_start(fpsden_label, False, False, 0)
-        fpsden_spin = Gtk.SpinButton()
-        fpsden_spin.set_numeric(True)
-        fpsden_spin.set_adjustment(adj2)
-        fpsden_spin.set_update_policy(policy)
-        fpsden_spin.set_value(self.fpsden)
-        fpsden_spin.connect('value-changed', self.on_fpsden_changed)
-        fps_box.pack_start(fpsden_spin, False, False, 0)
-
-        self.chapter_entries()
-
-        new = Gtk.Button('New Chapter')
-        new.connect('clicked', self.on_new_clicked)
-        self.box.pack_end(new, False, False, 0)
-
-    def chapter_entries(self):
         self.chapter_box = Gtk.Box(orientation=1, spacing=12)
-        self.box.pack_start(self.chapter_box, False, False, 0)
-        for i in range(len(self.chapters)):
-            self.chapter_entry(self.chapters[i], i)
+        box.pack_start(self.chapter_box, False, False, 0)
+        for i in range(len(chapters)):
+            self.entry(chapters[i], i)
+        window.show_all()
 
-    def chapter_entry(self, chapter, index):
-        box = Gtk.Box(orientation=1, spacing=6)
+    def entry(self, chapter, index):
+        entry_box = Gtk.Box(orientation=1, spacing=6)
         box1 = Gtk.Box(spacing=6)
         box2 = Gtk.Box(spacing=6)
-        self.chapter_box.pack_start(box, False, False, 0)
-        box.pack_start(box1, False, False, 0)
-        box.pack_start(box2, False, False, 0)
+        entry_box.pack_start(box1, False, False, 0)
+        entry_box.pack_start(box2, False, False, 0)
+        self.chapter_box.pack_start(entry_box, False, False, 0)
 
         policy = Gtk.SpinButtonUpdatePolicy.IF_VALID
-        # Using the same adjustments will mirror values
         adj1 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
         adj2 = Gtk.Adjustment(0, 0, 1000000, 1, 10, 0)
 
@@ -129,20 +34,20 @@ class ChapterEditor(Gtk.Window):
         label2 = Gtk.Label("Start:")
         title = Gtk.Entry()
         title.set_text(chapter[0])
-        title.connect('changed', self.on_title_changed, index)
+        title.connect('changed', handler.on_title_changed, index)
         start = Gtk.SpinButton()
         start.set_numeric(True)
         start.set_update_policy(policy)
         start.set_adjustment(adj1)
         start.set_value(chapter[1])
-        start.connect('value-changed', self.on_start_changed, index)
+        start.connect('value-changed', handler.on_start_changed, index)
 
         box1.pack_start(label1, False, False, 0)
         box1.pack_start(title, False, False, 0)
         box2.pack_start(label2, False, False, 0)
         box2.pack_start(start, False, False, 0)
 
-        if self.oc:
+        if ordered:
             label3 = Gtk.Label("End:")
             label4 = Gtk.Label("UID:")
             end = Gtk.SpinButton()
@@ -151,7 +56,7 @@ class ChapterEditor(Gtk.Window):
             end.set_adjustment(adj2)
             # End is mandatory with OC
             end.set_value(chapter[2])
-            end.connect('value-changed', self.on_end_changed, index)
+            end.connect('value-changed', handler.on_end_changed, index)
             # UID however is not
             uid = Gtk.Entry()
             uid.set_max_length(32)
@@ -160,176 +65,194 @@ class ChapterEditor(Gtk.Window):
                 uid.set_text(chapter[3])
             else:
                 uid.set_text('')
-            uid.connect('changed', self.on_uid_changed, index)
+            uid.connect('changed', handler.on_uid_changed, index)
 
             box2.pack_start(label3, False, False, 0)
             box2.pack_start(end, False, False, 0)
             box2.pack_start(label4, False, False, 0)
             box2.pack_start(uid, False, False, 0)
 
-        if len(self.chapters) > 1:
+        if len(chapters) > 1:
             delete = Gtk.Button()
             del_image = Gtk.Image.new_from_icon_name('window-close-symbolic',
                                                      Gtk.IconSize.MENU)
             delete.set_image(del_image)
-            delete.connect('clicked', self.on_delete_clicked, index)
+            delete.connect('clicked', handler.on_delete_clicked, index)
             box1.pack_end(delete, False, False, 0)
-        if index < len(self.chapters) - 1:
+        if index < len(chapters) - 1:
             move_down = Gtk.Button()
             mdown_image = Gtk.Image.new_from_icon_name('go-down-symbolic',
                                                        Gtk.IconSize.MENU)
             move_down.set_image(mdown_image)
-            move_down.connect('clicked', self.on_move_clicked, 'down', index)
+            move_down.connect('clicked', handler.on_move_clicked, 'down',
+                              index)
             box1.pack_end(move_down, False, False, 0)
         if index > 0:
             move_up = Gtk.Button()
             mup_image = Gtk.Image.new_from_icon_name('go-up-symbolic',
                                                      Gtk.IconSize.MENU)
             move_up.set_image(mup_image)
-            move_up.connect('clicked', self.on_move_clicked, 'up', index)
+            move_up.connect('clicked', handler.on_move_clicked, 'up', index)
             box1.pack_end(move_up, False, False, 0)
 
-    def update_entries(self):
-        if self.oc:
-            for chapter in self.chapters:
+    def update(self):
+        if ordered:
+            for chapter in chapters:
                 if len(chapter) == 2:
-                    chapter[2] = 0
+                    chapter.append(0)
                 if len(chapter) == 3:
-                    chapter[3] = ''
-        self.box.remove(self.chapter_box)
-        self.chapter_entries()
-        win.show_all()
+                    chapter.append('')
+        print(chapters)
+        box.remove(self.chapter_box)
+        self.__init__()
 
-    def on_oc_checked(self, radio):
+class Handler:
+    def on_settings_clicked(self, button):
+        settings_dialog.run()
+
+    def on_ordered_toggled(self, radio):
+        global ordered
         if radio.get_active():
-            self.oc = True
-            self.update_entries()
+            ordered = True
+            entries.update()
         else:
-            self.oc = False
-            self.update_entries()
+            ordered = False
+            entries.update()
 
     def on_lang_changed(self, entry):
-        self.lang = entry.get_text()
-        print(self.lang)
+        global lang
+        lang = entry.get_text()
 
     def on_fpsnum_changed(self, button):
-        self.fpsnum = int(button.get_value())
-        print(self.fpsnum)
+        global fpsnum
+        fpsnum = int(button.get_value())
 
     def on_fpsden_changed(self, button):
-        self.fpsden = int(button.get_value())
-        print(self.fpsden)
+        global fpsden
+        fpsden = int(button.get_value())
+
+    def on_settings_ok_clicked(self, button):
+        settings_dialog.hide()
+
+    def on_new_chapter_clicked(self, button):
+        chapters.append(["New Chapter", 0, 0, ''])
+        entries.update()
+
+    def on_open_clicked(self, button):
+        open_dialog.run()
+
+    def on_open_ok_clicked(self, button):
+        global cwd
+        global output
+        global lang
+        global fpsnum
+        global fpsden
+        global chapters
+
+        input = open_dialog.get_filename()
+        cwd, output = os.path.split(input)
+        output = os.path.splitext(output)[0] + '.xml'
+        data = parse(input)
+        ordered = data.get('ordered', True)
+        lang = data.get('lang', 'eng')
+        fpsnum = data.get('fpsnum', 24000)
+        fpsden = data.get('fpsden', 1001)
+        chapters = data['chapters']
+        ordered_check.set_active(ordered)
+        print(chapters)
+        entries.update()
+
+        open_dialog.hide()
+
+    def on_open_cancel_clicked(self, button):
+        open_dialog.hide()
+
+    def on_save_clicked(self, button):
+        save_dialog.set_current_folder(cwd)
+        save_dialog.set_current_name(output)
+        save_dialog.run()
+
+    def on_save_ok_clicked(self, button):
+        xml_file = save_dialog.get_filename()
+        mkchap(chapters, xml_file, lang, fpsnum, fpsden, ordered)
+
+        save_dialog.hide()
+
+    def on_save_cancel_clicked(self, button):
+        save_dialog.hide()
 
     def on_title_changed(self, entry, index):
-        self.chapters[index][0] = entry.get_text()
-        print(self.chapters)
+        chapters[index][0] = entry.get_text()
 
     def on_start_changed(self, button, index):
-        self.chapters[index][1] = int(button.get_value())
-        print(self.chapters)
+        chapters[index][1] = int(button.get_value())
 
     def on_end_changed(self, button, index):
-        self.chapters[index][2] = int(button.get_value())
-        print(self.chapters)
+        chapters[index][2] = int(button.get_value())
 
     def on_uid_changed(self, entry, index):
-        self.chapters[index][3] = entry.get_text()
-        print(self.chapters)
+        chapters[index][3] = entry.get_text()
 
     def on_delete_clicked(self, button, index):
-        self.chapters.pop(index)
-        self.update_entries()
-
-    def on_new_clicked(self, button):
-        self.chapters.append(["New Chapter", 0, 0, ''])
-        self.update_entries()
+        chapters.pop(index)
+        entries.update()
 
     def on_move_clicked(self, button, direction, index):
         if direction == 'up':
-            self.chapters[index - 1:index + 1] = [self.chapters[index],
-                                                  self.chapters[index - 1]]
+            chapters[index - 1:index + 1] = [chapters[index],
+                                             chapters[index - 1]]
         elif direction == 'down':
-            self.chapters[index :index + 2] = [self.chapters[index + 1],
-                                               self.chapters[index]]
-        self.update_entries()
+            chapters[index :index + 2] = [chapters[index + 1],
+                                          chapters[index]]
+        entries.update()
 
-    def on_open_clicked(self, button):
-        dialog = Gtk.FileChooserDialog("Please choose a file", self,
-                                       Gtk.FileChooserAction.OPEN,
-                                       (Gtk.STOCK_CANCEL,
-                                        Gtk.ResponseType.CANCEL,
-                                        Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
+    def on_window_delete_event(self, *args):
+        Gtk.main_quit(*args)
 
-        self.add_filter(dialog, 'yaml')
-
-        response = dialog.run()
-        if response == Gtk.ResponseType.OK:
-            input = dialog.get_filename()
-            self.cwd, self.output = os.path.split(input)
-            self.output = os.path.splitext(self.output)[0] + '.xml'
-            data = parse_yaml(input)
-            self.lang = data.get('lang', 'eng')
-            self.fpsnum = data.get('fpsnum', 24000)
-            self.fpsden = data.get('fpsden', 1001)
-            self.chapters = data['chapters']
-            self.oc = False
-            for chapter in self.chapters:
-                if len(chapter) > 2:
-                    self.oc = True
-            self.oc_checkbox.set_active(self.oc)
-            self.update_entries()
-
-        dialog.destroy()
-
-    def on_save_clicked(self, button):
-        dialog = Gtk.FileChooserDialog("Please choose a file", self,
-                                       Gtk.FileChooserAction.SAVE,
-                                       (Gtk.STOCK_CANCEL,
-                                        Gtk.ResponseType.CANCEL,
-                                        Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
-        dialog.set_current_folder(self.cwd)
-        dialog.set_current_name(self.output)
-
-        self.add_filter(dialog, 'xml')
-
-        response = dialog.run()
-        if response == Gtk.ResponseType.OK:
-            xml_file = dialog.get_filename()
-            mkchap(self.chapters, xml_file, self.lang, self.fpsnum,
-                   self.fpsden)
-
-        dialog.destroy()
-
-    def add_filter(self, dialog, ext):
-         filt = Gtk.FileFilter()
-         filt.set_name(ext.upper() + " files")
-         filt.add_pattern('*.' + ext)
-         dialog.add_filter(filt)
-
-def parse_yaml(input):
+def parse(input):
     with open(input, 'r') as f:
         data = f.read()
     data = yaml.load(data)
     return data
 
-def mkchap(chapters, output, lang='eng', fpsnum=24000, fpsden=1001):
-    c = Chapters(lang, fpsnum, fpsden).chapter(chapters)
+def mkchap(chapters, output, lang='eng', fpsnum=24000, fpsden=1001, ordered=True):
+    c = Chapters(lang, fpsnum, fpsden, ordered).chapter(chapters)
     with open(output, 'wb') as f:
         f.write(c)
 
 if args.yaml:
     for yaml_file in args.yaml:
-        output = os.path.splitext(yaml_file)[0] + '.xml'
-        data = parse_yaml(input)
+        xml_file = os.path.splitext(yaml_file)[0] + '.xml'
+        data = parse(input)
+        ordered = data.get('ordered', True)
         lang = data.get('lang', 'eng')
         fpsnum = data.get('fpsnum', 24000)
         fpsden = data.get('fpsden', 1001)
         chapters = data['chapters']
-        mkchap(chapters, output)
+        mkchap(chapters, xml_file, lang, fpsnum, fpsden, ordered)
 else:
-    win = ChapterEditor()
-    win.connect('delete-event', Gtk.main_quit)
-    win.show_all()
+    cwd = ''
+    output = 'chapter.xml'
+    ordered = True
+    lang = 'eng'
+    fpsnum = 24000
+    fpsden = 1001
+    chapters = [["New Chapter", 0, 0, '']]
+
+    builder = Gtk.Builder()
+    handler = Handler()
+    builder.add_from_file('mkchap.glade')
+    builder.connect_signals(handler)
+
+    window = builder.get_object('window')
+    box = builder.get_object('box')
+    open_dialog = builder.get_object('open-dialog')
+    save_dialog = builder.get_object('save-dialog')
+    settings_dialog = builder.get_object('settings-dialog')
+    ordered_check = builder.get_object('ordered-check')
+
+    entries = Entries()
+
     Gtk.main()
 
 # vim: ts=4 sw=4 et:

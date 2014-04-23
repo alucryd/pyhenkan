@@ -79,7 +79,8 @@ class MatroskaOps:
         subprocess.call(' '.join(cmd), shell=True)
 
 class Chapters:
-    def __init__(self, lang='eng', fpsnum=24000, fpsden=1001):
+    def __init__(self, lang='eng', fpsnum=24000, fpsden=1001, ordered=True):
+        self.ordered = ordered
         self.lang = lang
         self.fpsnum = fpsnum
         self.fpsden = fpsden
@@ -95,7 +96,7 @@ class Chapters:
         atom = etree.Element('ChapterAtom')
         uid = etree.SubElement(atom, 'ChapterUID')
         uid.text = str(randrange(1000000000))
-        if len(chapter) == 4 and chapter[3]:
+        if self.ordered:
             seg_uid = etree.SubElement(atom, 'ChapterSegmentUID', format='hex')
             seg_uid.text = chapter[3]
         display = etree.SubElement(atom, 'ChapterDisplay')
@@ -111,14 +112,10 @@ class Chapters:
         return atom
 
     def chapter(self, chapters):
-        self.ordered = 0
         chaps = etree.Element('Chapters')
         edit = etree.SubElement(chaps, 'EditionEntry')
         edit_uid = etree.SubElement(edit, 'EditionUID')
         edit_uid.text = str(randrange(1000000000))
-        for chapter in chapters:
-            if len(chapter) == 4 and chapter[3]:
-                self.ordered = 1
         if self.ordered:
             ordered = etree.SubElement(edit, 'EditionFlagOrdered')
             ordered.text = '1'
