@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import os
 import re
+import yaml
 from pyanimenc import MatroskaOps, Encode
 
 parser = argparse.ArgumentParser(description='Transcode files')
 parser.add_argument('sources', nargs='*', help='Source files')
-parser.add_argument('--settings', '-s', default='transcode.json',
+parser.add_argument('--settings', '-s', default='transcode.yml',
                     help='JSON settings file')
 parser.add_argument('--preview', '-p', action='store_true',
                     help='Preview video output')
@@ -31,7 +31,8 @@ for source in args.sources:
 
 # Read settings
     with open(args.settings, 'r') as f:
-        settings = json.loads(f.read())
+        data = f.read()
+        settings = yaml.load(data)
 
     vid_track = settings['vid_track']
     aud_tracks = settings['aud_tracks']
@@ -45,7 +46,7 @@ for source in args.sources:
     vid_type = vdata['codec']
     if args.test and vid_type not in vid_types:
         print('Track {} of "{}" is no audio. Got {}.\n'.format(num, source,
-                                                             vid_type))
+                                                               vid_type))
     else:
         vid_track.append(source)
 

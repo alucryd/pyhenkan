@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-import yaml
 import os
+import yaml
 from gi.repository import Gtk
 from pyanimenc import Chapters
 
@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description="Create Matroska chapters")
 parser.add_argument('yaml', nargs='*', help="YAML chapter data files")
 args = parser.parse_args()
 
-class Entries():
+class Entries:
     def __init__(self):
         self.chapter_box = Gtk.Box(orientation=1, spacing=12)
         box.pack_start(self.chapter_box, False, False, 0)
@@ -74,6 +74,8 @@ class Entries():
 
         if len(chapters) > 1:
             delete = Gtk.Button()
+            delete.set_property('height-request', 32)
+            delete.set_property('width-request', 32)
             del_image = Gtk.Image.new_from_icon_name('window-close-symbolic',
                                                      Gtk.IconSize.MENU)
             delete.set_image(del_image)
@@ -81,6 +83,8 @@ class Entries():
             box1.pack_end(delete, False, False, 0)
         if index < len(chapters) - 1:
             move_down = Gtk.Button()
+            move_down.set_property('height-request', 32)
+            move_down.set_property('width-request', 32)
             mdown_image = Gtk.Image.new_from_icon_name('go-down-symbolic',
                                                        Gtk.IconSize.MENU)
             move_down.set_image(mdown_image)
@@ -89,6 +93,8 @@ class Entries():
             box1.pack_end(move_down, False, False, 0)
         if index > 0:
             move_up = Gtk.Button()
+            move_up.set_property('height-request', 32)
+            move_up.set_property('width-request', 32)
             mup_image = Gtk.Image.new_from_icon_name('go-up-symbolic',
                                                      Gtk.IconSize.MENU)
             move_up.set_image(mup_image)
@@ -102,7 +108,6 @@ class Entries():
                     chapter.append(0)
                 if len(chapter) == 3:
                     chapter.append('')
-        print(chapters)
         box.remove(self.chapter_box)
         self.__init__()
 
@@ -144,22 +149,22 @@ class Handler:
     def on_open_ok_clicked(self, button):
         global cwd
         global output
+        global chapters
         global lang
         global fpsnum
         global fpsden
-        global chapters
+        global ordered
 
         input = open_dialog.get_filename()
         cwd, output = os.path.split(input)
         output = os.path.splitext(output)[0] + '.xml'
         data = parse(input)
-        ordered = data.get('ordered', True)
+        chapters = data['chapters']
         lang = data.get('lang', 'eng')
         fpsnum = data.get('fpsnum', 24000)
         fpsden = data.get('fpsden', 1001)
-        chapters = data['chapters']
+        ordered = data.get('ordered', True)
         ordered_check.set_active(ordered)
-        print(chapters)
         entries.update()
 
         open_dialog.hide()
@@ -215,7 +220,8 @@ def parse(input):
     data = yaml.load(data)
     return data
 
-def mkchap(chapters, output, lang='eng', fpsnum=24000, fpsden=1001, ordered=True):
+def mkchap(chapters, output, lang='eng', fpsnum=24000, fpsden=1001,
+           ordered=True):
     c = Chapters(lang, fpsnum, fpsden, ordered).chapter(chapters)
     with open(output, 'wb') as f:
         f.write(c)
@@ -224,20 +230,20 @@ if args.yaml:
     for yaml_file in args.yaml:
         xml_file = os.path.splitext(yaml_file)[0] + '.xml'
         data = parse(input)
-        ordered = data.get('ordered', True)
+        chapters = data['chapters']
         lang = data.get('lang', 'eng')
         fpsnum = data.get('fpsnum', 24000)
         fpsden = data.get('fpsden', 1001)
-        chapters = data['chapters']
+        ordered = data.get('ordered', True)
         mkchap(chapters, xml_file, lang, fpsnum, fpsden, ordered)
 else:
     cwd = ''
     output = 'chapter.xml'
-    ordered = True
+    chapters = [["New Chapter", 0, 0, '']]
     lang = 'eng'
     fpsnum = 24000
     fpsden = 1001
-    chapters = [["New Chapter", 0, 0, '']]
+    ordered = True
 
     builder = Gtk.Builder()
     handler = Handler()

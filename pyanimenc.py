@@ -156,24 +156,32 @@ class Encode:
                                        height=resize[1])
         clip.set_output()
 
-    def video(self, q=15, d=10, p='slow', t='animation', preview=False):
-        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
-        if preview:
-            enc = 'mpv -'
-        else:
-            if d == 10:
-                x = 'x264-10bit'
-            elif d == 8:
-                x = 'x264'
-            enc = ('{} - --crf {} --preset {} --tune {} --demuxer y4m '
-                   '--output "{}.mp4"').format(x, q, p, t, self.sname)
-        cmd = (dec, enc)
-        subprocess.call(' | '.join(cmd), shell=True)
+    def info(self):
+        cmd = 'vspipe "{}" - -info'.format(self.source)
+        return cmd
 
-    def audio(self, q=4, c='m4a'):
+    def preview(self):
+        dec = 'vspipe "{}" - -y4m'.format(self.source)
+        enc = 'mpv -'
+        cmd = (dec, enc)
+        cmd = '|'.join([ dec, enc ])
+        return cmd
+
+    def x264(self, q=15, c='mp4', d=10, p='slow', t='animation'):
+        dec = 'vspipe "{}" - -y4m'.format(self.source)
+        if d == 10:
+            x = 'x264-10bit'
+        elif d == 8:
+            x = 'x264'
+        enc = ('{} - --crf {} --preset {} --tune {} --demuxer y4m '
+               '--output "{}.{}"').format(x, q, p, t, self.sname, c)
+        cmd = '|'.join([ dec, enc ])
+        return cmd
+
+    def fdkaac(self, q=4, c='aac'):
         dec = 'ffmpeg -i "{}" -f caf -'.format(self.source)
         enc = 'fdkaac - -m{} -o "{}.{}"'.format(q, self.sname, c)
-        cmd = (dec, enc)
-        subprocess.call(' | '.join(cmd), shell=True)
+        cmd = '|'.join([ dec, enc ])
+        return cmd
 
 # vim: ts=4 sw=4 et:

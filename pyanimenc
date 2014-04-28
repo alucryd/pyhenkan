@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import subprocess
+import yaml
+from gi.repository import Gtk
+from pyanimenc import Encode
+
+class Handler:
+    def on_vsource_file_set(self, button):
+        global vsource
+        vsource = button.get_filename()
+        video_pbar.set_fraction(0)
+
+    def on_asource_file_set(self, button):
+        global asource
+        asource = button.get_filename()
+        audio_pbar.set_fraction(0)
+
+    def on_vstart_clicked(self, button):
+        if venc == 'x264' or venc == 'x264-10bit':
+            cmd = Encode(vsource).info()
+            with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                  universal_newlines=True) as proc:
+                while True:
+                    line = proc.stdout.readline()
+                    if line:
+                        # Get the frame total
+                        if 'Frames' in line:
+                            dur = line.split(' ')[1]
+                            dur = int(dur)
+                    else:
+                        break
+
+            cmd = Encode(vsource).x264(vquality, vcontainer, vdepth, vpreset,
+                                       vtune)
+            with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                  universal_newlines=True) as proc:
+                while True:
+                    line = proc.stderr.readline()
+                    log_buffer.insert(log_buffer.get_end_iter(), line)
+                    if line:
+                        # Get the current frame
+                        if re.match('^[0-9]+ ', line):
+                            pos = line.split(' ')[0]
+                            pos = int(pos)
+                            progress = round(pos / dur, 2)
+                            video_pbar.set_fraction(progress)
+                        while Gtk.events_pending():
+                             Gtk.main_iteration()
+                    else:
+                        video_pbar.set_fraction(1)
+                        break
+
+    def on_vstop_clicked(self, button):
+        subprocess.call('killall ' + venc, shell=True)
+
+    def on_astart_clicked(self, button):
+        if aenc == 'fdkaac':
+            cmd = Encode(asource).fdkaac(aquality, acontainer)
+            with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                  universal_newlines=True) as proc:
+                while True:
+                    line = proc.stderr.readline()
+                    log_buffer.insert(log_buffer.get_end_iter(), line)
+                    if line:
+                        # Get the clip duration
+                        if 'Duration' in line:
+                            dur = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}',
+                                             line)[0]
+                            h, m, s = dur.split(':')
+                            dur = int(h) * 3600 + int(m) * 60 + int(s)
+                        # Get the current timestamp
+                        if re.match('[0-9]{2}:[0-9]{2}\.[0-9]{3}', line):
+                            pos = re.findall('^[0-9]{2}:[0-9]{2}', line)[0]
+                            m, s = pos.split(':')
+                            pos = int(m) * 60 + int(s)
+                            progress = round(pos / dur, 2)
+                            audio_pbar.set_fraction(progress)
+                            while Gtk.events_pending():
+                                Gtk.main_iteration()
+                    else:
+                        audio_pbar.set_fraction(1)
+                        break
+
+    def on_astop_clicked(self, button):
+        subprocess.call('killall ' + aenc, shell=True)
+
+    def on_venc_changed(self, combo):
+        global venc
+        global vdepth
+        global vquality
+        global vcontainer
+        global vpreset
+        global vtune
+        venc = combo.get_active_text()
+        if venc == 'x264' or venc == 'x264-10bit':
+            vquality = x264_quality_spin.get_value()
+            vcontainer = x264_container_cbtext.get_active_text()
+            vpreset = x264_preset_cbtext.get_active_text()
+            vtune = x264_tune_cbtext.get_active_text()
+        if venc == 'x264':
+            vdepth = 8
+        elif venc == 'x264-10bit':
+            vdepth = 10
+
+    def on_aenc_changed(self, combo):
+        global aenc
+        global aquality
+        global acontainer
+        aenc = combo.get_active_text()
+        if aenc == 'fdkaac':
+            aquality = fdkaac_quality_spin.get_value()
+            acontainer = fdkaac_container_cbtext.get_active_text()
+
+    def on_vsettings_clicked(self, button):
+        if venc == 'x264' or venc == 'x264-10bit':
+            x264_dialog.run()
+
+    def on_asettings_clicked(self, button):
+        if aenc == 'fdkaac':
+            fdkaac_dialog.run()
+
+    def on_x264_quality_changed(self, spin):
+        global vquality
+        vquality = spin.get_value()
+
+    def on_x264_container_changed(self, combo):
+        global vcontainer
+        vcontainer = combo.get_active_text()
+
+    def on_x264_preset_changed(self, combo):
+        global vpreset
+        vpreset = combo.get_active_text()
+
+    def on_x264_tune_changed(self, combo):
+        global vtune
+        vtune = combo.get_active_text()
+
+    def on_x264_ok_clicked(self, button):
+        x264_dialog.hide()
+
+    def on_fdkaac_quality_changed(self, spin):
+        global aquality
+        aquality = spin.get_value()
+
+    def on_fdkaac_container_changed(self, combo):
+        global acontainer
+        acontainer = combo.get_active_text()
+
+    def on_fdkaac_ok_clicked(self, button):
+        fdkaac_dialog.hide()
+
+    def on_log_clear_clicked(self, button):
+        log_buffer.set_text('')
+
+    def on_window_delete_event(self, *args):
+        Gtk.main_quit(*args)
+
+# Initialize some variables
+vsource = ''
+vencs = [ 'x264', 'x264-10bit' ]
+venc = ''
+vdepth = 0
+vquality = 0
+vcontainer = ''
+vpreset = ''
+vtune = ''
+asource = ''
+aencs = [ 'fdkaac' ]
+aenc = ''
+aquality = 0
+acontainer = ''
+
+# Build the GUI
+builder = Gtk.Builder()
+handler = Handler()
+builder.add_from_file('pyanimenc.glade')
+builder.connect_signals(handler)
+
+window = builder.get_object('window')
+venc_cbtext = builder.get_object('venc-cbtext')
+aenc_cbtext = builder.get_object('aenc-cbtext')
+video_pbar = builder.get_object('video-pbar')
+audio_pbar = builder.get_object('audio-pbar')
+log_buffer = builder.get_object('log-buffer')
+
+# Populate the encoder combos
+for enc in vencs:
+    if os.path.isfile('/usr/bin/' + enc):
+        venc_cbtext.append_text(enc)
+    else:
+        vencs.pop(enc)
+
+for enc in aencs:
+    if os.path.isfile('/usr/bin/' + enc):
+        aenc_cbtext.append_text(enc)
+    else:
+        aencs.pop(enc)
+
+# Set the default settings
+if 'x264' in vencs or 'x264-10bit' in vencs:
+    x264_dialog = builder.get_object('x264-dialog')
+    x264_quality_spin = builder.get_object('x264_quality-spin')
+    x264_quality_spin.set_value(15)
+    x264_container_cbtext = builder.get_object('x264_container-cbtext')
+    x264_container_cbtext.set_active(3)
+    x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
+    x264_preset_cbtext.set_active(6)
+    x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
+    x264_tune_cbtext.set_active(1)
+
+if 'fdkaac' in aencs:
+    fdkaac_dialog = builder.get_object('fdkaac-dialog')
+    fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
+    fdkaac_quality_spin.set_value(4)
+    fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
+    fdkaac_container_cbtext.set_active(0)
+
+venc_cbtext.set_active(0)
+aenc_cbtext.set_active(0)
+
+window.show_all()
+
+Gtk.main()
+
+# vim: ts=4 sw=4 et:
