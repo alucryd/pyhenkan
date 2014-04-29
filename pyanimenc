@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 import yaml
-from gi.repository import Gtk
+from gi.repository import Gtk,GdkPixbuf
 from pyanimenc import Encode
 
 class Handler:
@@ -95,7 +95,7 @@ class Handler:
         global vpreset
         global vtune
         venc = combo.get_active_text()
-        if venc == 'x264' or venc == 'x264-10bit':
+        if venc in ['x264', 'x264-10bit']:
             vquality = x264_quality_spin.get_value()
             vcontainer = x264_container_cbtext.get_active_text()
             vpreset = x264_preset_cbtext.get_active_text()
@@ -115,7 +115,7 @@ class Handler:
             acontainer = fdkaac_container_cbtext.get_active_text()
 
     def on_vsettings_clicked(self, button):
-        if venc == 'x264' or venc == 'x264-10bit':
+        if venc in ['x264', 'x264-10bit']:
             x264_dialog.run()
 
     def on_asettings_clicked(self, button):
@@ -155,6 +155,189 @@ class Handler:
     def on_log_clear_clicked(self, button):
         log_buffer.set_text('')
 
+    def on_vs_creator_clicked(self, button):
+        self.source = ''
+        self.crop = []
+        self.deband = []
+        self.resize = []
+        vs_creator_window.show()
+
+    def update_script(self):
+        # Tried to set up marks to only replace relevant parts, but left or
+        # right gravity can't cover all user input cases, marks will always end
+        # up in weird places, only choice is flush the buffer every time.
+        source_text = ''
+        crop_text = ''
+        deband_text = ''
+        resize_text = ''
+        vs_script_buffer.set_text("")
+        vs_script_buffer.insert_at_cursor("import vapoursynth as vs\n")
+        vs_script_buffer.insert_at_cursor("core = vs.get_core()\n")
+        source_text = 'clip = core.ffms2.Source("{}")\n'.format(self.source)
+        if self.crop:
+            crop_text = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
+            crop_text = crop_text.format(self.crop[0], self.crop[1],
+                                         self.crop[2], self.crop[3])
+        if self.deband:
+            deband_text = 'clip = core.f3kdb.Deband(clip, preset="{}", '
+            deband_text = deband_text + 'output_depth=16)\n'
+            preset = self.deband[0]
+            if self.deband[1] in ['luma', 'chroma']:
+                preset = '/'.join([preset, self.deband[1]])
+            if self.deband[2]:
+                preset = '/'.join([preset, 'nograin'])
+            deband_text = deband_text.format(preset)
+        if self.resize:
+            resize_text = 'clip = core.resize.{}(clip, {}, {})\n'
+            resize_text = resize_text.format(self.resize[2].capitalize(),
+                                             self.resize[0], self.resize[1])
+        vs_script_buffer.insert_at_cursor(source_text + crop_text +
+                                          deband_text + resize_text)
+        vs_script_buffer.insert_at_cursor("clip.set_output()")
+
+    def on_vs_source_file_set(self, button):
+        self.source = button.get_filename()
+        vs_crop_check.set_sensitive(True)
+        vs_resize_check.set_sensitive(True)
+        vs_deband_check.set_sensitive(True)
+        self.update_script()
+
+    def on_vs_crop_toggled(self, check):
+        if check.get_active():
+            vs_lcrop_spin.set_sensitive(True)
+            vs_rcrop_spin.set_sensitive(True)
+            vs_tcrop_spin.set_sensitive(True)
+            vs_bcrop_spin.set_sensitive(True)
+            self.crop = [vs_lcrop_spin.get_value_as_int(),
+                         vs_rcrop_spin.get_value_as_int(),
+                         vs_tcrop_spin.get_value_as_int(),
+                         vs_bcrop_spin.get_value_as_int()]
+        else:
+            self.crop = []
+            vs_lcrop_spin.set_sensitive(False)
+            vs_rcrop_spin.set_sensitive(False)
+            vs_tcrop_spin.set_sensitive(False)
+            vs_bcrop_spin.set_sensitive(False)
+        self.update_script()
+
+    def on_vs_lcrop_changed(self, spin):
+        self.crop[0] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_rcrop_changed(self, spin):
+        self.crop[1] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_tcrop_changed(self, spin):
+        self.crop[2] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_bcrop_changed(self, spin):
+        self.crop[3] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_resize_toggled(self, check):
+        if check.get_active():
+            vs_wresize_spin.set_sensitive(True)
+            vs_hresize_spin.set_sensitive(True)
+            vs_resize_filter_cbtext.set_sensitive(True)
+            self.resize = [vs_wresize_spin.get_value_as_int(),
+                           vs_hresize_spin.get_value_as_int(),
+                           vs_resize_filter_cbtext.get_active_text()]
+        else:
+            self.resize = []
+            vs_wresize_spin.set_sensitive(False)
+            vs_hresize_spin.set_sensitive(False)
+            vs_resize_filter_cbtext.set_sensitive(False)
+        self.update_script()
+
+    def on_vs_wresize_changed(self, spin):
+        self.resize[0] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_hresize_changed(self, spin):
+        self.resize[1] = spin.get_value_as_int()
+        self.update_script()
+
+    def on_vs_resize_filter_changed(self, combo):
+        self.resize[2] = combo.get_active_text()
+        self.update_script()
+
+    def on_vs_deband_toggled(self, check):
+        if check.get_active():
+            vs_deband_preset_cbtext.set_sensitive(True)
+            vs_deband_channel_cbtext.set_sensitive(True)
+            vs_deband_nograin_check.set_sensitive(True)
+            self.deband = [vs_deband_preset_cbtext.get_active_text(),
+                           vs_deband_channel_cbtext.get_active_text(),
+                           vs_deband_nograin_check.get_active()]
+        else:
+            self.deband = []
+            vs_deband_preset_cbtext.set_sensitive(False)
+            vs_deband_channel_cbtext.set_sensitive(False)
+            vs_deband_nograin_check.set_sensitive(False)
+        self.update_script()
+
+    def on_vs_deband_preset_changed(self, combo):
+        self.deband[0] = combo.get_active_text()
+        self.update_script()
+
+    def on_vs_deband_channel_changed(self, combo):
+        self.deband[1] = combo.get_active_text()
+        self.update_script()
+
+    def on_vs_deband_nograin_toggled(self, check):
+        self.deband[2] = check.get_active()
+        self.update_script()
+
+    def on_vs_script_changed(self, buffer):
+        vs_save_button.set_sensitive(True)
+        vs_preview_button.set_sensitive(True)
+
+    def update_preview(self, frame):
+        vpy = vs_script_buffer.get_text(vs_script_buffer.get_start_iter(),
+                                        vs_script_buffer.get_end_iter(),
+                                        include_hidden_chars=True)
+        vpy = compile(vpy, '<string>', 'exec')
+        preview_ns = {}
+        exec(vpy, preview_ns)
+        vs = preview_ns['vs']
+        core = preview_ns['core']
+        clip = preview_ns['clip']
+        clip = core.resize.Bicubic(clip, format=vs.RGB24)
+        data = clip.get_frame(frame)
+        width = data.width
+        height = data.height
+        stride = data.get_stride(0)
+        pixbuf = GdkPixbuf.Pixbuf.new_from_data(data.get_read_ptr(0),
+                                                GdkPixbuf.Colorspace.RGB,
+                                                False, 8, width, height,
+                                                stride, None, True)
+        vs_preview_image.set_from_pixbuf(pixbuf)
+
+    def on_vs_preview_clicked(self, button):
+        self.update_preview(0)
+        vs_preview_dialog.run()
+
+    def on_vs_save_clicked(self, button):
+        vs_save_fcdialog.run()
+
+    def on_vs_save_ok_clicked(self, button):
+        output = vs_save_fcdialog.get_filename()
+        vpy = vs_script_buffer.get_text(vs_script_buffer.get_start_iter(),
+                                        vs_script_buffer.get_end_iter(),
+                                        include_hidden_chars=True)
+        with open(output, 'w') as file:
+            file.write(vpy)
+        vs_save_fcdialog.hide()
+
+    def on_vs_save_cancel_clicked(self, button):
+        vs_save_fcdialog.hide()
+
+    def on_vs_creator_window_delete_event(self, *args):
+        vs_creator_window.hide()
+        return True
+
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
 
@@ -185,6 +368,29 @@ aenc_cbtext = builder.get_object('aenc-cbtext')
 video_pbar = builder.get_object('video-pbar')
 audio_pbar = builder.get_object('audio-pbar')
 log_buffer = builder.get_object('log-buffer')
+
+# VS Script Creator
+vs_creator_window = builder.get_object('vs_creator-window')
+vs_crop_check = builder.get_object('vs_crop-check')
+vs_lcrop_spin = builder.get_object('vs_lcrop-spin')
+vs_rcrop_spin = builder.get_object('vs_rcrop-spin')
+vs_tcrop_spin = builder.get_object('vs_tcrop-spin')
+vs_bcrop_spin = builder.get_object('vs_bcrop-spin')
+vs_resize_check = builder.get_object('vs_resize-check')
+vs_wresize_spin = builder.get_object('vs_wresize-spin')
+vs_hresize_spin = builder.get_object('vs_hresize-spin')
+vs_resize_filter_cbtext = builder.get_object('vs_resize_filter-cbtext')
+vs_deband_check = builder.get_object('vs_deband-check')
+vs_deband_preset_cbtext = builder.get_object('vs_deband_preset-cbtext')
+vs_deband_channel_cbtext = builder.get_object('vs_deband_channel-cbtext')
+vs_deband_nograin_check = builder.get_object('vs_deband_nograin-check')
+vs_script_textview = builder.get_object('vs_script-textview')
+vs_script_buffer = builder.get_object('vs_script-buffer')
+vs_preview_button = builder.get_object('vs_preview-button')
+vs_preview_dialog = builder.get_object('vs_preview-dialog')
+vs_preview_image = builder.get_object('vs_preview-image')
+vs_save_button = builder.get_object('vs_save-button')
+vs_save_fcdialog = builder.get_object('vs_save-fcdialog')
 
 # Populate the encoder combos
 for enc in vencs:
