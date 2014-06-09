@@ -4,6 +4,7 @@
     'language': 'eng', # Optional
     'fpsnum': 24000, # Optional
     'fpsden': 1001, # Optional
+    'ordered': False, # Optional
     'chapters': [
         ["Chapter 1", start_frame], # Regular chapters
         ["Chapter 2", start_frame, end_frame + 1], # Ordered chapters

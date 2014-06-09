@@ -5,7 +5,7 @@ import re
 import subprocess
 import yaml
 from gi.repository import Gtk,GdkPixbuf
-from pyanimenc import Encode
+from pyanimenc import Chapters,Encode
 
 class Handler:
     def on_vsource_file_set(self, button):
@@ -165,7 +165,7 @@ class Handler:
     def update_script(self):
         # Tried to set up marks to only replace relevant parts, but left or
         # right gravity can't cover all user input cases, marks will always end
-        # up in weird places, only choice is flush the buffer every time.
+        # up in weird places, only choice is to flush the buffer every time.
         source_text = ''
         crop_text = ''
         deband_text = ''
@@ -304,7 +304,7 @@ class Handler:
         vs = preview_ns['vs']
         core = preview_ns['core']
         clip = preview_ns['clip']
-        clip = core.resize.Bicubic(clip, format=vs.RGB24)
+        clip = core.resize.Bicubic(clip, format=vs.COMPATBGR32)
         data = clip.get_frame(frame)
         width = data.width
         height = data.height
@@ -338,6 +338,149 @@ class Handler:
         vs_creator_window.hide()
         return True
 
+    def on_chap_editor_clicked(self, button):
+        self.cwd = ''
+        self.output = 'chapters.xml'
+        self.chapters = [["New Chapter", 0, 0, '']]
+        self.update_entries()
+
+    def on_chap_open_clicked(self, button):
+        chap_open_fcdialog.run()
+
+    def on_chap_open_ok_clicked(self, button):
+        input = chap_open_fcdialog.get_filename()
+        with open(input, 'r') as f:
+            data = f.read()
+        data = yaml.load(data)
+
+        self.cwd, self.output = os.path.split(input)
+        self.output = os.path.splitext(self.output)[0] + '.xml'
+        self.chapters = data['chapters']
+        lang = data.get('lang', 'eng')
+        lang_entry.set_text(lang)
+        fpsnum = data.get('fpsnum', 24000)
+        fpsnum_spin.set_value(fpsnum)
+        fpsden = data.get('fpsden', 1001)
+        fpsden_spin.set_value(fpsden)
+        ordered = data.get('ordered', False)
+        ordered_check.set_active(ordered)
+        self.update_entries()
+        chap_open_fcdialog.hide()
+
+    def on_chap_open_cancel_clicked(self, button):
+        chap_open_fcdialog.hide()
+
+    def on_chap_save_clicked(self, button):
+        chap_save_fcdialog.set_current_folder(self.cwd)
+        chap_save_fcdialog.set_current_name(self.output)
+        chap_save_fcdialog.run()
+
+    def on_chap_save_ok_clicked(self, button):
+        output = chap_save_fcdialog.get_filename()
+        ordered = ordered_check.get_active()
+        lang = lang_entry.get_text()
+        fpsnum = fpsnum_spin.get_value_as_int()
+        fpsden = fpsden_spin.get_value_as_int()
+
+        c = Chapters(lang, fpsnum, fpsden, ordered).chapter(self.chapters)
+        with open(output, 'wb') as f:
+            f.write(c)
+
+        chap_save_fcdialog.hide()
+
+    def on_chap_save_cancel_clicked(self, button):
+        chap_save_fcdialog.hide()
+
+    def on_chap_settings_clicked(self, button):
+        chap_settings_dialog.run()
+
+    def on_chap_settings_ok_clicked(self, button):
+        chap_settings_dialog.hide()
+
+    def on_ordered_toggled(self, check):
+        self.update_entries()
+
+    def update_entries(self):
+        for entry in chap_entries_box.get_children():
+            chap_entries_box.remove(entry)
+
+        for i in range(len(self.chapters)):
+            # A new builder instance needs to be created for each entry,
+            # therefore put the template on its own to avoid loading a large
+            # file every time
+            builder = Gtk.Builder()
+            builder.add_from_file('chapter.glade')
+            grid = builder.get_object('grid')
+            chap_entries_box.pack_start(grid, False, False, 0)
+            ordered = ordered_check.get_active()
+            title = builder.get_object('title-entry')
+            title.connect('changed', handler.on_title_changed, i)
+            start = builder.get_object('start-spin')
+            start.connect('value-changed', handler.on_start_changed, i)
+            end = builder.get_object('end-spin')
+            end.connect('value-changed', handler.on_end_changed, i)
+            end.set_sensitive(ordered)
+            uid = builder.get_object('uid-entry')
+            uid.connect('changed', handler.on_uid_changed, i)
+            uid.set_sensitive(ordered)
+            delete = builder.get_object('delete-button')
+            delete.connect('clicked', handler.on_delete_clicked, i)
+            down = builder.get_object('down-button')
+            down.connect('clicked', handler.on_move_clicked, 'down', i)
+            up = builder.get_object('up-button')
+            up.connect('clicked', handler.on_move_clicked, 'up', i)
+
+            title.set_text(self.chapters[i][0])
+            start.set_value(self.chapters[i][1])
+            if ordered:
+                end.set_value(self.chapters[i][2])
+            if ordered:
+                if len(self.chapters[i]) < 4:
+                    self.chapters[i].append('')
+                uid.set_text(self.chapters[i][3])
+
+            if len(self.chapters) > 1:
+                delete.set_sensitive(True)
+            if i < len(self.chapters) - 1:
+                down.set_sensitive(True)
+            if i > 0:
+                up.set_sensitive(True)
+
+        chap_editor_window.show()
+
+    def on_chap_new_clicked(self, button):
+        self.chapters.append(["New Chapter", 0, 0, ''])
+        self.update_entries()
+
+    def on_title_changed(self, entry, i):
+        self.chapters[i][0] = entry.get_text()
+
+    def on_start_changed(self, button, i):
+        self.chapters[i][1] = button.get_value_as_int()
+
+    def on_end_changed(self, button, i):
+        self.chapters[i][2] = button.get_value_as_int()
+
+    def on_uid_changed(self, entry, i):
+        self.chapters[i][3] = entry.get_text()
+
+    def on_delete_clicked(self, button, i):
+        self.chapters.pop(i)
+        self.update_entries()
+
+    def on_move_clicked(self, button, direction, i):
+        if direction == 'up':
+            self.chapters[i - 1:i + 1] = [self.chapters[i],
+                                          self.chapters[i - 1]]
+        elif direction == 'down':
+            self.chapters[i:i + 2] = [self.chapters[i + 1],
+                                      self.chapters[i]]
+        self.update_entries()
+
+    def on_chap_editor_window_delete_event(self, *args):
+        chap_editor_window.hide()
+        return True
+
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
 
@@ -369,6 +512,9 @@ video_pbar = builder.get_object('video-pbar')
 audio_pbar = builder.get_object('audio-pbar')
 log_buffer = builder.get_object('log-buffer')
 
+batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
+batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
+
 # VS Script Creator
 vs_creator_window = builder.get_object('vs_creator-window')
 vs_crop_check = builder.get_object('vs_crop-check')
@@ -392,16 +538,29 @@ vs_preview_image = builder.get_object('vs_preview-image')
 vs_save_button = builder.get_object('vs_save-button')
 vs_save_fcdialog = builder.get_object('vs_save-fcdialog')
 
+# Chapter Editor
+chap_editor_window = builder.get_object('chap_editor-window')
+chap_entries_box = builder.get_object('chap_entries-box')
+chap_open_fcdialog = builder.get_object('chap_open-fcdialog')
+chap_save_fcdialog = builder.get_object('chap_save-fcdialog')
+chap_settings_dialog = builder.get_object('chap_settings-dialog')
+ordered_check = builder.get_object('ordered-check')
+lang_entry = builder.get_object('lang-entry')
+fpsnum_spin = builder.get_object('fpsnum-spin')
+fpsden_spin = builder.get_object('fpsden-spin')
+
 # Populate the encoder combos
 for enc in vencs:
     if os.path.isfile('/usr/bin/' + enc):
         venc_cbtext.append_text(enc)
+        batch_venc_cbtext.append_text(enc)
     else:
         vencs.pop(enc)
 
 for enc in aencs:
     if os.path.isfile('/usr/bin/' + enc):
         aenc_cbtext.append_text(enc)
+        batch_aenc_cbtext.append_text(enc)
     else:
         aencs.pop(enc)
 
@@ -425,7 +584,9 @@ if 'fdkaac' in aencs:
     fdkaac_container_cbtext.set_active(0)
 
 venc_cbtext.set_active(0)
+batch_venc_cbtext.set_active(0)
 aenc_cbtext.set_active(0)
+batch_aenc_cbtext.set_active(0)
 
 window.show_all()
 
