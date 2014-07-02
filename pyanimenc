@@ -4,150 +4,561 @@ import os
 import re
 import subprocess
 import yaml
+from concurrent.futures import ThreadPoolExecutor
 from gi.repository import Gtk,GdkPixbuf
-from pyanimenc import Chapters,Encode
+from pyanimenc import Encode,MatroskaOps
 
 class Handler:
+    def __init__(self):
+        self.vsource = ''
+        self.venc = ''
+        self.vdepth = 8
+        self.vquality = 0
+        self.vcontainer = ''
+        self.vpreset = ''
+        self.vtune = ''
+        self.asource = ''
+        self.aenc = ''
+        self.aquality = 0
+        self.acontainer = ''
+        self.trim = []
+        self.crop = []
+        self.resize = []
+        self.deband = ''
+        self.fpsnum = 24000
+        self.fpsden = 1001
+        self.queue = ThreadPoolExecutor(max_workers=1)
+        self.tools = ThreadPoolExecutor(max_workers=2)
+
+    def on_vs_creator_clicked(self, button):
+        self.tools.submit(self.vs_creator)
+
+    def vs_creator(self):
+        cmd = '/usr/lib/python3.4/site-packages/pyanimenc/vs-script-creator.py'
+        subprocess.call(cmd)
+
+    def on_chap_editor_clicked(self, button):
+        self.tools.submit(self.chapter_editor)
+
+    def chapter_editor(self):
+        cmd = '/usr/lib/python3.4/site-packages/pyanimenc/chapter-editor.py'
+        subprocess.call(cmd)
+
     def on_vsource_file_set(self, button):
-        global vsource
-        vsource = button.get_filename()
-        video_pbar.set_fraction(0)
+        self.vsource = button.get_filename()
+        self.folder = os.path.dirname(self.vsource)
+        os.chdir(self.folder)
+        status_pbar.set_fraction(0)
 
     def on_asource_file_set(self, button):
-        global asource
-        asource = button.get_filename()
-        audio_pbar.set_fraction(0)
+        self.asource = button.get_filename()
+        self.folder = os.path.dirname(self.asource)
+        os.chdir(self.folder)
+        status_pbar.set_fraction(0)
 
     def on_vstart_clicked(self, button):
-        if venc == 'x264' or venc == 'x264-10bit':
-            cmd = Encode(vsource).info()
-            with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                                  universal_newlines=True) as proc:
-                while True:
-                    line = proc.stdout.readline()
-                    if line:
-                        # Get the frame total
-                        if 'Frames' in line:
-                            dur = line.split(' ')[1]
-                            dur = int(dur)
-                    else:
-                        break
-
-            cmd = Encode(vsource).x264(vquality, vcontainer, vdepth, vpreset,
-                                       vtune)
-            with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                  universal_newlines=True) as proc:
-                while True:
-                    line = proc.stderr.readline()
-                    log_buffer.insert(log_buffer.get_end_iter(), line)
-                    if line:
-                        # Get the current frame
-                        if re.match('^[0-9]+ ', line):
-                            pos = line.split(' ')[0]
-                            pos = int(pos)
-                            progress = round(pos / dur, 2)
-                            video_pbar.set_fraction(progress)
-                        while Gtk.events_pending():
-                             Gtk.main_iteration()
-                    else:
-                        video_pbar.set_fraction(1)
-                        break
-
-    def on_vstop_clicked(self, button):
-        subprocess.call('killall ' + venc, shell=True)
+        if not os.path.isdir('out'):
+            os.mkdir(self.folder + '/out')
+        dest = 'out/' + os.path.basename(os.path.splitext(self.vsource)[0])
+        if self.venc == 'x264' or self.venc == 'x264-10bit':
+            self.queue.submit(self.x264, self.vsource, dest)
 
     def on_astart_clicked(self, button):
-        if aenc == 'fdkaac':
-            cmd = Encode(asource).fdkaac(aquality, acontainer)
-            with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                  universal_newlines=True) as proc:
-                while True:
-                    line = proc.stderr.readline()
-                    log_buffer.insert(log_buffer.get_end_iter(), line)
-                    if line:
-                        # Get the clip duration
-                        if 'Duration' in line:
-                            dur = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}',
-                                             line)[0]
-                            h, m, s = dur.split(':')
-                            dur = int(h) * 3600 + int(m) * 60 + int(s)
-                        # Get the current timestamp
-                        if re.match('[0-9]{2}:[0-9]{2}\.[0-9]{3}', line):
-                            pos = re.findall('^[0-9]{2}:[0-9]{2}', line)[0]
-                            m, s = pos.split(':')
-                            pos = int(m) * 60 + int(s)
-                            progress = round(pos / dur, 2)
-                            audio_pbar.set_fraction(progress)
-                            while Gtk.events_pending():
-                                Gtk.main_iteration()
-                    else:
-                        audio_pbar.set_fraction(1)
-                        break
+        if not os.path.isdir('out'):
+            os.mkdir(self.folder + '/out')
+        dest = 'out/' + os.path.basename(os.path.splitext(self.asource)[0])
+        if self.aenc == 'fdkaac':
+            self.queue.submit(self.fdkaac, self.asource, dest)
 
-    def on_astop_clicked(self, button):
-        subprocess.call('killall ' + aenc, shell=True)
+    def on_batch_source_set(self, button):
+        self.folder = button.get_filename()
+        os.chdir(self.folder)
+        self.sources = []
+        self.data = []
+        self.tracks = []
+
+        # Keep videos only
+        for f in os.listdir():
+            for cont in vcontainers:
+                if re.search('\.' + cont + '$', f):
+                    self.sources.append(f)
+
+        # Get source infos
+        for i in range(len(self.sources)):
+            s = self.sources[i]
+            data = MatroskaOps(s).get_data()
+            self.data.append(data)
+
+        # Make sure tracks are identical across files
+        # Dirty way of modifying a GtkMessageDialog primary message.
+        error = track_mismatch_dialog.get_children()[0].get_children()[0]
+        error = error.get_children()[0].get_children()[0]
+        for i in range(1, len(self.data)):
+            tracks_orig = self.data[0]
+            tracks = self.data[i]
+            if len(tracks) != len(tracks_orig):
+                t = ('{} ({} tracks) and {} ({} tracks) differ from each '
+                     'other. Please make sure all files share the same '
+                     'layout.'
+                    ).format(self.sources[0], str(len(tracks_orig)),
+                             self.sources[i], str(len(tracks)))
+                error.set_text(t)
+                track_mismatch_dialog.run()
+            # -1 because there is a 'uid' entry
+            for j in range(len(tracks) - 1):
+                k = 'track' + str(j)
+                codec_orig = tracks_orig[k]['codec']
+                lang_orig = tracks_orig[k].get('lang', '')
+                channels_orig = tracks_orig[k].get('channels', '')
+                codec = tracks[k]['codec']
+                lang = tracks[k].get('lang', '')
+                channels = tracks[k].get('channels', '')
+                if codec != codec_orig:
+                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                         'different codecs. Please make sure all files '
+                         'share the same layout.'
+                        ).format(self.sources[0], str(j), codec_orig,
+                                 self.sources[i], str(j), codec)
+                    error.set_text(t)
+                    track_mismatch_dialog.run()
+                elif lang != lang_orig:
+                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                         'different languages. Please make sure all files '
+                         'share the same layout.'
+                        ).format(self.sources[0], str(j), lang_orig,
+                                 self.sources[i], str(j), lang)
+                    error.set_text(t)
+                    track_mismatch_dialog.run()
+                elif channels != channels_orig:
+                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                         'different channels. Please make sure all files '
+                         'share the same layout.'
+                        ).format(self.sources[0], str(j), channels_orig,
+                                 self.sources[i], str(j), channels)
+                    error.set_text(t)
+                    track_mismatch_dialog.run()
+        self.update_tracks()
+
+    def update_tracks(self):
+        # A new builder instance needs to be created for each entry,
+        # therefore put the template on its own to avoid loading a large
+        # file every time
+        for track in batch_tracks_vbox.get_children():
+            batch_tracks_vbox.remove(track)
+
+        # -1 because there is a 'uid' entry
+        tracks = self.data[0]
+        for i in range(len(tracks) - 1):
+            builder = Gtk.Builder()
+            builder.add_from_file('/home/alucryd/pyanimenc/track.glade')
+            grid = builder.get_object('grid')
+            batch_tracks_vbox.pack_start(grid, False, False, 0)
+            enable_check = builder.get_object('enable-check')
+            enable_check.connect('toggled', handler.on_track_enable_toggled, i)
+            codec_entry = builder.get_object('codec-entry')
+            name_entry = builder.get_object('name-entry')
+            name_entry.connect('changed', handler.on_track_name_changed, i)
+            lang_entry = builder.get_object('lang-entry')
+            lang_entry.connect('changed', handler.on_track_lang_changed, i)
+            encode_check = builder.get_object('encode-check')
+            encode_check.connect('toggled', handler.on_track_encode_toggled, i)
+
+            track = tracks['track' + str(i)]
+            codec = track['codec']
+            name = track.get('name', '')
+            lang = track.get('lang', 'und')
+            if codec in vtypes:
+                type = 'video'
+                enable_check.set_label('Video')
+                enable_check.set_sensitive(False)
+                codec = vtypes[codec]
+            elif codec in atypes:
+                type = 'audio'
+                enable_check.set_label('Audio')
+                channels = track['channels']
+                if channels == '2':
+                    channels = '2.0'
+                elif channels == '6':
+                    channels = '5.1'
+                elif channels == '8':
+                    channels = '7.1'
+                codec = atypes[codec]
+            elif codec in stypes:
+                type = 'subtitle'
+                enable_check.set_label('Subtitle')
+                encode_check.set_sensitive(False)
+                codec = stypes[codec]
+
+            self.tracks.append([type, codec, name, lang, True, True, i])
+            if type == 'audio':
+                codec = codec + ' ' + channels
+            if type == 'subtitle':
+                # Put this here to avoid out of range index.
+                encode_check.set_active(False)
+            codec_entry.set_text(codec)
+            name_entry.set_text(name)
+            lang_entry.set_text(lang)
+
+        window.show()
+
+    def on_track_mismatch_ok_clicked(self, button):
+        track_mismatch_dialog.hide()
+
+    def on_batch_start_clicked(self, button):
+        if not os.path.isdir('out'):
+            os.mkdir(self.folder + '/out')
+
+        for i in range(len(self.sources)):
+            vtrack = []
+            atracks = []
+            stracks = []
+            s = self.sources[i]
+            uid = self.data[i]['uid']
+            for track in self.tracks:
+                # [[id, filename, extension, name, language, transcode?]...]
+                j = track[6]
+                f, e = os.path.splitext(s)
+                e = e.strip('.')
+                n = track[2]
+                l = track[3]
+                t = track[5]
+                if track[0] == 'video' and track[4]:
+                    if track[5]:
+                        f = 'out/' + f
+                        e = track[1]
+                    vtrack = [j, f, e, n, l, t]
+                if track[0] == 'audio' and track[4]:
+                    if track[5]:
+                        f = 'out/' + f
+                        e = track[1]
+                        f = f + '_' + str(j)
+                    atracks.append([j, f, e, n, l, t])
+                if track[0] == 'subtitle' and track[4]:
+                    stracks.append([j, f, e, n, l, t])
+
+            # Extract tracks
+            # Only extract audio tracks that need transcoding.
+            tracks = []
+            for track in atracks:
+                if track[5]:
+                    tracks.append(track)
+
+            self.queue.submit(self.extract, s, tracks)
+
+            if vtrack[5]:
+                # Create VapourSynth script
+                self.queue.submit(self.vpy, s)
+
+                # Encode video
+                if self.venc == 'x264' or self.venc == 'x264-10bit':
+                    self.queue.submit(self.x264, s, vtrack[1])
+
+            # Encode audio
+            for i in range(len(atracks)):
+                track = atracks[i]
+                if track[5]:
+                    a = track[1] + '.' + track[2]
+                    if self.aenc == 'fdkaac':
+                        self.queue.submit(self.fdkaac, a, track[1])
+
+            # Merge tracks
+            self.queue.submit(self.merge, s, vtrack, atracks, stracks, uid)
+
+            # Clean up
+            self.queue.submit(self.clean)
+
+    def extract(self, source, tracks):
+        cmd = MatroskaOps(source).extract(tracks)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+        #                      universal_newlines=True) as proc:
+        #    while True:
+        #        line = proc.stdout.readline()
+        #        log_buffer.insert(log_buffer.get_end_iter(), line)
+        #        if line:
+        #            print(line)
+        #        else:
+        #            break
+
+    def merge(self, source, vtrack, atracks, stracks, uid):
+        # These variables cannot be changed earlier because the
+        # asynchronous mkvextract process will get the wrong values.
+        if vtrack[5]:
+            vtrack[0] = 0
+            vtrack[2] = 'mp4'
+        for i in range(len(atracks)):
+            if atracks[i][5]:
+                atracks[i][0] = 0
+                atracks[i][2] = self.acontainer
+
+        cmd = MatroskaOps(source).merge(vtrack, atracks, stracks, uid)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+        #                      universal_newlines=True) as proc:
+        #    while True:
+        #        line = proc.stdout.readline()
+        #        log_buffer.insert(log_buffer.get_end_iter(), line)
+        #        if line:
+        #            print(line)
+        #        else:
+        #            break
+
+    def clean(self):
+        for f in os.listdir():
+            if re.search('\.vpy$', f) or re.search('\.ffindex$', f):
+                os.remove(f)
+        for f in os.listdir('out/'):
+            if not re.search('\.mkv$', f):
+                os.remove('out/' + f)
+
+    def vpy(self, source):
+        v = ''
+        s = ''
+        c = ''
+        d = ''
+        r = ''
+
+        v = 'import vapoursynth as vs\n'
+        v = v + 'core = vs.get_core()\n'
+        s = 'clip = core.ffms2.Source("{}", fpsnum={}, fpsden{})\n'
+        s = s.format(source, self.fpsnum, self.fpsden)
+        if self.crop:
+            c = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
+            c = c.format(self.crop[0], self.crop[1], self.crop[2],
+                         self.crop[3])
+        if self.deband:
+            d = 'clip = core.f3kdb.Deband(clip, preset="{}", '
+            d = d + 'output_depth=16)\n'
+            d = d.format(self.deband)
+        if self.resize:
+            r = 'clip = core.resize.{}(clip, {}, {})\n'
+            r = r.format(self.resize[2].capitalize(), self.resize[0],
+                         self.resize[1])
+        v = v + s + c + d + r
+        v = v + 'clip.set_output()'
+
+        vpy = re.sub('[^.]*$', 'vpy', source)
+        with open(vpy, 'w') as f:
+            f.write(v)
+
+    def x264(self, source, dest):
+        #cmd = Encode(source).info()
+        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+        #                      universal_newlines=True) as proc:
+        #    while True:
+        #        line = proc.stdout.readline()
+        #        if line:
+        #            # Get the frame total
+        #            if 'Frames' in line:
+        #                dur = line.split(' ')[1]
+        #                dur = int(dur)
+        #        else:
+        #            break
+
+        cmd = Encode(source).x264(self.vquality, self.vcontainer, self.vdepth,
+                                  self.vpreset, self.vtune, dest)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+        #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+        #                      universal_newlines=True) as proc:
+        #    while True:
+        #        line = proc.stderr.readline()
+        #        log_buffer.insert(log_buffer.get_end_iter(), line)
+        #        if line:
+        #            # Get the current frame
+        #            if re.match('^[0-9]+ ', line):
+        #                pos = line.split(' ')[0]
+        #                pos = int(pos)
+        #                progress = round(pos / dur, 2)
+        #                status_pbar.set_fraction(progress)
+        #        else:
+        #            status_pbar.set_fraction(1)
+        #            break
+
+    def fdkaac(self, source, dest):
+        cmd = Encode(source).fdkaac(self.aquality, self.acontainer, dest)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+        #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+        #                      universal_newlines=True) as proc:
+        #    while True:
+        #        line = proc.stderr.readline()
+        #        log_buffer.insert(log_buffer.get_end_iter(), line)
+        #        if line:
+        #            # Get the clip duration
+        #            if 'Duration' in line:
+        #                dur = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
+        #                h, m, s = dur.split(':')
+        #                dur = int(h) * 3600 + int(m) * 60 + int(s)
+        #            # Get the current timestamp
+        #            if re.match('[0-9]{2}:[0-9]{2}\.[0-9]{3}', line):
+        #                pos = re.findall('^[0-9]{2}:[0-9]{2}', line)[0]
+        #                m, s = pos.split(':')
+        #                pos = int(m) * 60 + int(s)
+        #                progress = round(pos / dur, 2)
+        #                status_pbar.set_fraction(progress)
+        #        else:
+        #            status_pbar.set_fraction(1)
+        #            break
+
+    def on_stop_clicked(self, button):
+        self.queue.shutdown()
+
+    def on_batch_vpy_clicked(self, button):
+        vpy_dialog.run()
+
+    def on_vpy_crop_toggled(self, check):
+        if check.get_active():
+            vpy_lcrop_spin.set_sensitive(True)
+            vpy_rcrop_spin.set_sensitive(True)
+            vpy_tcrop_spin.set_sensitive(True)
+            vpy_bcrop_spin.set_sensitive(True)
+            self.crop = [vpy_lcrop_spin.get_value_as_int(),
+                         vpy_rcrop_spin.get_value_as_int(),
+                         vpy_tcrop_spin.get_value_as_int(),
+                         vpy_bcrop_spin.get_value_as_int()]
+        else:
+            self.crop = []
+            vpy_lcrop_spin.set_sensitive(False)
+            vpy_rcrop_spin.set_sensitive(False)
+            vpy_tcrop_spin.set_sensitive(False)
+            vpy_bcrop_spin.set_sensitive(False)
+
+    def on_vpy_lcrop_changed(self, spin):
+        self.crop[0] = spin.get_value_as_int()
+
+    def on_vpy_rcrop_changed(self, spin):
+        self.crop[1] = spin.get_value_as_int()
+
+    def on_vpy_tcrop_changed(self, spin):
+        self.crop[2] = spin.get_value_as_int()
+
+    def on_vpy_bcrop_changed(self, spin):
+        self.crop[3] = spin.get_value_as_int()
+
+    def on_vpy_resize_toggled(self, check):
+        if check.get_active():
+            vpy_wresize_spin.set_sensitive(True)
+            vpy_hresize_spin.set_sensitive(True)
+            vpy_resize_filter_cbtext.set_sensitive(True)
+            self.resize = [vpy_wresize_spin.get_value_as_int(),
+                           vpy_hresize_spin.get_value_as_int(),
+                           vpy_resize_filter_cbtext.get_active_text()]
+        else:
+            self.resize = []
+            vpy_wresize_spin.set_sensitive(False)
+            vpy_hresize_spin.set_sensitive(False)
+            vpy_resize_filter_cbtext.set_sensitive(False)
+
+    def on_vpy_wresize_changed(self, spin):
+        self.resize[0] = spin.get_value_as_int()
+
+    def on_vpy_hresize_changed(self, spin):
+        self.resize[1] = spin.get_value_as_int()
+
+    def on_vpy_resize_filter_changed(self, combo):
+        self.resize[2] = combo.get_active_text()
+
+    def on_vpy_deband_toggled(self, check):
+        if check.get_active():
+            vpy_deband_preset_cbtext.set_sensitive(True)
+            vpy_deband_channel_cbtext.set_sensitive(True)
+            vpy_deband_nograin_check.set_sensitive(True)
+            self.deband_preset()
+        else:
+            self.deband = ''
+            vpy_deband_preset_cbtext.set_sensitive(False)
+            vpy_deband_channel_cbtext.set_sensitive(False)
+            vpy_deband_nograin_check.set_sensitive(False)
+
+    def on_vpy_deband_preset_changed(self, combo):
+        self.deband_preset()
+
+    def on_vpy_deband_channel_changed(self, combo):
+        self.deband_preset()
+
+    def on_vpy_deband_nograin_toggled(self, check):
+        self.deband_preset()
+
+    def deband_preset(self):
+        p = vpy_deband_preset_cbtext.get_active_text()
+        c = vpy_deband_channel_cbtext.get_active_text()
+        n = vpy_deband_nograin_check.get_active()
+        self.deband = p
+        if c in ['luma', 'chroma']:
+            self.deband = '/'.join([self.deband, c])
+        if n:
+            self.deband = '/'.join([self.deband, 'nograin'])
+
+    def on_vpy_fpsden_changed(self, spin):
+        self.fpsden = spin.get_value_as_int()
+
+    def on_vpy_fpsnum_changed(self, spin):
+        self.fpsnum = spin.get_value_as_int()
+
+    def on_vpy_ok_clicked(self, button):
+        vpy_dialog.hide()
+
+    def on_track_name_changed(self, entry, i):
+        self.tracks[i][2] = entry.get_text()
+
+    def on_track_lang_changed(self, entry, i):
+        self.tracks[i][3] = entry.get_text()
+
+    def on_track_enable_toggled(self, check, i):
+        self.tracks[i][4] = check.get_active()
+
+    def on_track_encode_toggled(self, check, i):
+        self.tracks[i][5] = check.get_active()
 
     def on_venc_changed(self, combo):
-        global venc
-        global vdepth
-        global vquality
-        global vcontainer
-        global vpreset
-        global vtune
-        venc = combo.get_active_text()
-        if venc in ['x264', 'x264-10bit']:
-            vquality = x264_quality_spin.get_value()
-            vcontainer = x264_container_cbtext.get_active_text()
-            vpreset = x264_preset_cbtext.get_active_text()
-            vtune = x264_tune_cbtext.get_active_text()
-        if venc == 'x264':
-            vdepth = 8
-        elif venc == 'x264-10bit':
-            vdepth = 10
+        self.venc = combo.get_active_text()
+        if self.venc in ['x264', 'x264-10bit']:
+            self.vquality = x264_quality_spin.get_value()
+            self.vcontainer = x264_container_cbtext.get_active_text()
+            self.vpreset = x264_preset_cbtext.get_active_text()
+            self.vtune = x264_tune_cbtext.get_active_text()
+        if self.venc == 'x264':
+            self.vdepth = 8
+        elif self.venc == 'x264-10bit':
+            self.vdepth = 10
 
     def on_aenc_changed(self, combo):
-        global aenc
-        global aquality
-        global acontainer
-        aenc = combo.get_active_text()
-        if aenc == 'fdkaac':
-            aquality = fdkaac_quality_spin.get_value()
-            acontainer = fdkaac_container_cbtext.get_active_text()
+        self.aenc = combo.get_active_text()
+        if self.aenc == 'fdkaac':
+            self.aquality = fdkaac_quality_spin.get_value()
+            self.acontainer = fdkaac_container_cbtext.get_active_text()
 
     def on_vsettings_clicked(self, button):
-        if venc in ['x264', 'x264-10bit']:
+        if self.venc in ['x264', 'x264-10bit']:
             x264_dialog.run()
 
     def on_asettings_clicked(self, button):
-        if aenc == 'fdkaac':
+        if self.aenc == 'fdkaac':
             fdkaac_dialog.run()
 
     def on_x264_quality_changed(self, spin):
-        global vquality
-        vquality = spin.get_value()
+        self.vquality = spin.get_value()
 
     def on_x264_container_changed(self, combo):
-        global vcontainer
-        vcontainer = combo.get_active_text()
+        self.vcontainer = combo.get_active_text()
 
     def on_x264_preset_changed(self, combo):
-        global vpreset
-        vpreset = combo.get_active_text()
+        self.vpreset = combo.get_active_text()
 
     def on_x264_tune_changed(self, combo):
-        global vtune
-        vtune = combo.get_active_text()
+        self.vtune = combo.get_active_text()
 
     def on_x264_ok_clicked(self, button):
         x264_dialog.hide()
 
     def on_fdkaac_quality_changed(self, spin):
-        global aquality
-        aquality = spin.get_value()
+        self.aquality = spin.get_value()
 
     def on_fdkaac_container_changed(self, combo):
-        global acontainer
-        acontainer = combo.get_active_text()
+        self.acontainer = combo.get_active_text()
 
     def on_fdkaac_ok_clicked(self, button):
         fdkaac_dialog.hide()
@@ -155,399 +566,55 @@ class Handler:
     def on_log_clear_clicked(self, button):
         log_buffer.set_text('')
 
-    def on_vs_creator_clicked(self, button):
-        self.source = ''
-        self.crop = []
-        self.deband = []
-        self.resize = []
-        vs_creator_window.show()
-
-    def update_script(self):
-        # Tried to set up marks to only replace relevant parts, but left or
-        # right gravity can't cover all user input cases, marks will always end
-        # up in weird places, only choice is to flush the buffer every time.
-        source_text = ''
-        crop_text = ''
-        deband_text = ''
-        resize_text = ''
-        vs_script_buffer.set_text("")
-        vs_script_buffer.insert_at_cursor("import vapoursynth as vs\n")
-        vs_script_buffer.insert_at_cursor("core = vs.get_core()\n")
-        source_text = 'clip = core.ffms2.Source("{}")\n'.format(self.source)
-        if self.crop:
-            crop_text = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
-            crop_text = crop_text.format(self.crop[0], self.crop[1],
-                                         self.crop[2], self.crop[3])
-        if self.deband:
-            deband_text = 'clip = core.f3kdb.Deband(clip, preset="{}", '
-            deband_text = deband_text + 'output_depth=16)\n'
-            preset = self.deband[0]
-            if self.deband[1] in ['luma', 'chroma']:
-                preset = '/'.join([preset, self.deband[1]])
-            if self.deband[2]:
-                preset = '/'.join([preset, 'nograin'])
-            deband_text = deband_text.format(preset)
-        if self.resize:
-            resize_text = 'clip = core.resize.{}(clip, {}, {})\n'
-            resize_text = resize_text.format(self.resize[2].capitalize(),
-                                             self.resize[0], self.resize[1])
-        vs_script_buffer.insert_at_cursor(source_text + crop_text +
-                                          deband_text + resize_text)
-        vs_script_buffer.insert_at_cursor("clip.set_output()")
-
-    def on_vs_source_file_set(self, button):
-        self.source = button.get_filename()
-        vs_crop_check.set_sensitive(True)
-        vs_resize_check.set_sensitive(True)
-        vs_deband_check.set_sensitive(True)
-        self.update_script()
-
-    def on_vs_crop_toggled(self, check):
-        if check.get_active():
-            vs_lcrop_spin.set_sensitive(True)
-            vs_rcrop_spin.set_sensitive(True)
-            vs_tcrop_spin.set_sensitive(True)
-            vs_bcrop_spin.set_sensitive(True)
-            self.crop = [vs_lcrop_spin.get_value_as_int(),
-                         vs_rcrop_spin.get_value_as_int(),
-                         vs_tcrop_spin.get_value_as_int(),
-                         vs_bcrop_spin.get_value_as_int()]
-        else:
-            self.crop = []
-            vs_lcrop_spin.set_sensitive(False)
-            vs_rcrop_spin.set_sensitive(False)
-            vs_tcrop_spin.set_sensitive(False)
-            vs_bcrop_spin.set_sensitive(False)
-        self.update_script()
-
-    def on_vs_lcrop_changed(self, spin):
-        self.crop[0] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_rcrop_changed(self, spin):
-        self.crop[1] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_tcrop_changed(self, spin):
-        self.crop[2] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_bcrop_changed(self, spin):
-        self.crop[3] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_resize_toggled(self, check):
-        if check.get_active():
-            vs_wresize_spin.set_sensitive(True)
-            vs_hresize_spin.set_sensitive(True)
-            vs_resize_filter_cbtext.set_sensitive(True)
-            self.resize = [vs_wresize_spin.get_value_as_int(),
-                           vs_hresize_spin.get_value_as_int(),
-                           vs_resize_filter_cbtext.get_active_text()]
-        else:
-            self.resize = []
-            vs_wresize_spin.set_sensitive(False)
-            vs_hresize_spin.set_sensitive(False)
-            vs_resize_filter_cbtext.set_sensitive(False)
-        self.update_script()
-
-    def on_vs_wresize_changed(self, spin):
-        self.resize[0] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_hresize_changed(self, spin):
-        self.resize[1] = spin.get_value_as_int()
-        self.update_script()
-
-    def on_vs_resize_filter_changed(self, combo):
-        self.resize[2] = combo.get_active_text()
-        self.update_script()
-
-    def on_vs_deband_toggled(self, check):
-        if check.get_active():
-            vs_deband_preset_cbtext.set_sensitive(True)
-            vs_deband_channel_cbtext.set_sensitive(True)
-            vs_deband_nograin_check.set_sensitive(True)
-            self.deband = [vs_deband_preset_cbtext.get_active_text(),
-                           vs_deband_channel_cbtext.get_active_text(),
-                           vs_deband_nograin_check.get_active()]
-        else:
-            self.deband = []
-            vs_deband_preset_cbtext.set_sensitive(False)
-            vs_deband_channel_cbtext.set_sensitive(False)
-            vs_deband_nograin_check.set_sensitive(False)
-        self.update_script()
-
-    def on_vs_deband_preset_changed(self, combo):
-        self.deband[0] = combo.get_active_text()
-        self.update_script()
-
-    def on_vs_deband_channel_changed(self, combo):
-        self.deband[1] = combo.get_active_text()
-        self.update_script()
-
-    def on_vs_deband_nograin_toggled(self, check):
-        self.deband[2] = check.get_active()
-        self.update_script()
-
-    def on_vs_script_changed(self, buffer):
-        vs_save_button.set_sensitive(True)
-        vs_preview_button.set_sensitive(True)
-
-    def update_preview(self, frame):
-        vpy = vs_script_buffer.get_text(vs_script_buffer.get_start_iter(),
-                                        vs_script_buffer.get_end_iter(),
-                                        include_hidden_chars=True)
-        vpy = compile(vpy, '<string>', 'exec')
-        preview_ns = {}
-        exec(vpy, preview_ns)
-        vs = preview_ns['vs']
-        core = preview_ns['core']
-        clip = preview_ns['clip']
-        clip = core.resize.Bicubic(clip, format=vs.COMPATBGR32)
-        data = clip.get_frame(frame)
-        width = data.width
-        height = data.height
-        stride = data.get_stride(0)
-        pixbuf = GdkPixbuf.Pixbuf.new_from_data(data.get_read_ptr(0),
-                                                GdkPixbuf.Colorspace.RGB,
-                                                False, 8, width, height,
-                                                stride, None, True)
-        vs_preview_image.set_from_pixbuf(pixbuf)
-
-    def on_vs_preview_clicked(self, button):
-        self.update_preview(0)
-        vs_preview_dialog.run()
-
-    def on_vs_save_clicked(self, button):
-        vs_save_fcdialog.run()
-
-    def on_vs_save_ok_clicked(self, button):
-        output = vs_save_fcdialog.get_filename()
-        vpy = vs_script_buffer.get_text(vs_script_buffer.get_start_iter(),
-                                        vs_script_buffer.get_end_iter(),
-                                        include_hidden_chars=True)
-        with open(output, 'w') as file:
-            file.write(vpy)
-        vs_save_fcdialog.hide()
-
-    def on_vs_save_cancel_clicked(self, button):
-        vs_save_fcdialog.hide()
-
-    def on_vs_creator_window_delete_event(self, *args):
-        vs_creator_window.hide()
-        return True
-
-    def on_chap_editor_clicked(self, button):
-        self.cwd = ''
-        self.output = 'chapters.xml'
-        self.chapters = [["New Chapter", 0, 0, '']]
-        self.update_entries()
-
-    def on_chap_open_clicked(self, button):
-        chap_open_fcdialog.run()
-
-    def on_chap_open_ok_clicked(self, button):
-        input = chap_open_fcdialog.get_filename()
-        with open(input, 'r') as f:
-            data = f.read()
-        data = yaml.load(data)
-
-        self.cwd, self.output = os.path.split(input)
-        self.output = os.path.splitext(self.output)[0] + '.xml'
-        self.chapters = data['chapters']
-        lang = data.get('lang', 'eng')
-        lang_entry.set_text(lang)
-        fpsnum = data.get('fpsnum', 24000)
-        fpsnum_spin.set_value(fpsnum)
-        fpsden = data.get('fpsden', 1001)
-        fpsden_spin.set_value(fpsden)
-        ordered = data.get('ordered', False)
-        ordered_check.set_active(ordered)
-        self.update_entries()
-        chap_open_fcdialog.hide()
-
-    def on_chap_open_cancel_clicked(self, button):
-        chap_open_fcdialog.hide()
-
-    def on_chap_save_clicked(self, button):
-        chap_save_fcdialog.set_current_folder(self.cwd)
-        chap_save_fcdialog.set_current_name(self.output)
-        chap_save_fcdialog.run()
-
-    def on_chap_save_ok_clicked(self, button):
-        output = chap_save_fcdialog.get_filename()
-        ordered = ordered_check.get_active()
-        lang = lang_entry.get_text()
-        fpsnum = fpsnum_spin.get_value_as_int()
-        fpsden = fpsden_spin.get_value_as_int()
-
-        c = Chapters(lang, fpsnum, fpsden, ordered).chapter(self.chapters)
-        with open(output, 'wb') as f:
-            f.write(c)
-
-        chap_save_fcdialog.hide()
-
-    def on_chap_save_cancel_clicked(self, button):
-        chap_save_fcdialog.hide()
-
-    def on_chap_settings_clicked(self, button):
-        chap_settings_dialog.run()
-
-    def on_chap_settings_ok_clicked(self, button):
-        chap_settings_dialog.hide()
-
-    def on_ordered_toggled(self, check):
-        self.update_entries()
-
-    def update_entries(self):
-        for entry in chap_entries_box.get_children():
-            chap_entries_box.remove(entry)
-
-        for i in range(len(self.chapters)):
-            # A new builder instance needs to be created for each entry,
-            # therefore put the template on its own to avoid loading a large
-            # file every time
-            builder = Gtk.Builder()
-            builder.add_from_file('chapter.glade')
-            grid = builder.get_object('grid')
-            chap_entries_box.pack_start(grid, False, False, 0)
-            ordered = ordered_check.get_active()
-            title = builder.get_object('title-entry')
-            title.connect('changed', handler.on_title_changed, i)
-            start = builder.get_object('start-spin')
-            start.connect('value-changed', handler.on_start_changed, i)
-            end = builder.get_object('end-spin')
-            end.connect('value-changed', handler.on_end_changed, i)
-            end.set_sensitive(ordered)
-            uid = builder.get_object('uid-entry')
-            uid.connect('changed', handler.on_uid_changed, i)
-            uid.set_sensitive(ordered)
-            delete = builder.get_object('delete-button')
-            delete.connect('clicked', handler.on_delete_clicked, i)
-            down = builder.get_object('down-button')
-            down.connect('clicked', handler.on_move_clicked, 'down', i)
-            up = builder.get_object('up-button')
-            up.connect('clicked', handler.on_move_clicked, 'up', i)
-
-            title.set_text(self.chapters[i][0])
-            start.set_value(self.chapters[i][1])
-            if ordered:
-                end.set_value(self.chapters[i][2])
-            if ordered:
-                if len(self.chapters[i]) < 4:
-                    self.chapters[i].append('')
-                uid.set_text(self.chapters[i][3])
-
-            if len(self.chapters) > 1:
-                delete.set_sensitive(True)
-            if i < len(self.chapters) - 1:
-                down.set_sensitive(True)
-            if i > 0:
-                up.set_sensitive(True)
-
-        chap_editor_window.show()
-
-    def on_chap_new_clicked(self, button):
-        self.chapters.append(["New Chapter", 0, 0, ''])
-        self.update_entries()
-
-    def on_title_changed(self, entry, i):
-        self.chapters[i][0] = entry.get_text()
-
-    def on_start_changed(self, button, i):
-        self.chapters[i][1] = button.get_value_as_int()
-
-    def on_end_changed(self, button, i):
-        self.chapters[i][2] = button.get_value_as_int()
-
-    def on_uid_changed(self, entry, i):
-        self.chapters[i][3] = entry.get_text()
-
-    def on_delete_clicked(self, button, i):
-        self.chapters.pop(i)
-        self.update_entries()
-
-    def on_move_clicked(self, button, direction, i):
-        if direction == 'up':
-            self.chapters[i - 1:i + 1] = [self.chapters[i],
-                                          self.chapters[i - 1]]
-        elif direction == 'down':
-            self.chapters[i:i + 2] = [self.chapters[i + 1],
-                                      self.chapters[i]]
-        self.update_entries()
-
-    def on_chap_editor_window_delete_event(self, *args):
-        chap_editor_window.hide()
-        return True
-
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
 
-# Initialize some variables
-vsource = ''
-vencs = [ 'x264', 'x264-10bit' ]
-venc = ''
-vdepth = 0
-vquality = 0
-vcontainer = ''
-vpreset = ''
-vtune = ''
-asource = ''
-aencs = [ 'fdkaac' ]
-aenc = ''
-aquality = 0
-acontainer = ''
+# Some constants and variables
+vencs = ['x264', 'x264-10bit']
+vcontainers = ['avi', 'mkv', 'mp4', 'ogm']
+vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
+aencs = ['fdkaac']
+acontainers= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
+              'wv']
+atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
+          'A_MP3': 'mp3', 'A_TRUEHD': 'thd', 'A_VORBIS': 'ogg',
+          'A_WAVPACK4': 'wv'}
+stypes = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
+          'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
 # Build the GUI
 builder = Gtk.Builder()
-handler = Handler()
-builder.add_from_file('pyanimenc.glade')
-builder.connect_signals(handler)
+builder.add_from_file('/usr/share/pyanimenc/pyanimenc.glade')
 
 window = builder.get_object('window')
 venc_cbtext = builder.get_object('venc-cbtext')
 aenc_cbtext = builder.get_object('aenc-cbtext')
-video_pbar = builder.get_object('video-pbar')
-audio_pbar = builder.get_object('audio-pbar')
+status_pbar = builder.get_object('status-pbar')
 log_buffer = builder.get_object('log-buffer')
 
 batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
 batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
+batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
+track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
+vpy_dialog = builder.get_object('vpy-dialog')
+vpy_crop_check = builder.get_object('vpy_crop-check')
+vpy_lcrop_spin = builder.get_object('vpy_lcrop-spin')
+vpy_rcrop_spin = builder.get_object('vpy_rcrop-spin')
+vpy_tcrop_spin = builder.get_object('vpy_tcrop-spin')
+vpy_bcrop_spin = builder.get_object('vpy_bcrop-spin')
+vpy_resize_check = builder.get_object('vpy_resize-check')
+vpy_wresize_spin = builder.get_object('vpy_wresize-spin')
+vpy_hresize_spin = builder.get_object('vpy_hresize-spin')
+vpy_resize_filter_cbtext = builder.get_object('vpy_resize_filter-cbtext')
+vpy_deband_check = builder.get_object('vpy_deband-check')
+vpy_deband_preset_cbtext = builder.get_object('vpy_deband_preset-cbtext')
+vpy_deband_channel_cbtext = builder.get_object('vpy_deband_channel-cbtext')
+vpy_deband_nograin_check = builder.get_object('vpy_deband_nograin-check')
+vpy_fpsnum_spin = builder.get_object('vpy_fpsnum-spin')
+vpy_fpsden_spin = builder.get_object('vpy_fpsden-spin')
 
-# VS Script Creator
-vs_creator_window = builder.get_object('vs_creator-window')
-vs_crop_check = builder.get_object('vs_crop-check')
-vs_lcrop_spin = builder.get_object('vs_lcrop-spin')
-vs_rcrop_spin = builder.get_object('vs_rcrop-spin')
-vs_tcrop_spin = builder.get_object('vs_tcrop-spin')
-vs_bcrop_spin = builder.get_object('vs_bcrop-spin')
-vs_resize_check = builder.get_object('vs_resize-check')
-vs_wresize_spin = builder.get_object('vs_wresize-spin')
-vs_hresize_spin = builder.get_object('vs_hresize-spin')
-vs_resize_filter_cbtext = builder.get_object('vs_resize_filter-cbtext')
-vs_deband_check = builder.get_object('vs_deband-check')
-vs_deband_preset_cbtext = builder.get_object('vs_deband_preset-cbtext')
-vs_deband_channel_cbtext = builder.get_object('vs_deband_channel-cbtext')
-vs_deband_nograin_check = builder.get_object('vs_deband_nograin-check')
-vs_script_textview = builder.get_object('vs_script-textview')
-vs_script_buffer = builder.get_object('vs_script-buffer')
-vs_preview_button = builder.get_object('vs_preview-button')
-vs_preview_dialog = builder.get_object('vs_preview-dialog')
-vs_preview_image = builder.get_object('vs_preview-image')
-vs_save_button = builder.get_object('vs_save-button')
-vs_save_fcdialog = builder.get_object('vs_save-fcdialog')
-
-# Chapter Editor
-chap_editor_window = builder.get_object('chap_editor-window')
-chap_entries_box = builder.get_object('chap_entries-box')
-chap_open_fcdialog = builder.get_object('chap_open-fcdialog')
-chap_save_fcdialog = builder.get_object('chap_save-fcdialog')
-chap_settings_dialog = builder.get_object('chap_settings-dialog')
-ordered_check = builder.get_object('ordered-check')
-lang_entry = builder.get_object('lang-entry')
-fpsnum_spin = builder.get_object('fpsnum-spin')
-fpsden_spin = builder.get_object('fpsden-spin')
+handler = Handler()
+builder.connect_signals(handler)
 
 # Populate the encoder combos
 for enc in vencs:

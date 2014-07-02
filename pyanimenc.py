@@ -22,24 +22,28 @@ class MatroskaOps:
                                    stdout=subprocess.PIPE)
         line = mkvinfo.stdout.readline().decode()
         while line:
-            if 'Segment UID:' in line:
+            if '+ Segment UID:' in line:
                 uid = self._get_text(line)
                 uid = re.sub(' ?0x', '', uid)
                 data['uid'] = uid
-            if 'Track number:' in line:
+            if '+ Track number:' in line:
                 track = {}
                 num = self._get_text(line)
                 num = num.split(':')[1]
                 num = (num.strip()).strip(')')
-            if 'Codec ID:' in line:
+            if '+ Codec ID:' in line:
                 codec = self._get_text(line)
                 track['codec'] = codec
                 data['track' + num] = track
-            if 'Language:' in line:
+            if '+ Name:' in line:
+                name = self._get_text(line)
+                track['name'] = name
+                data['track' + num] = track
+            if '+ Language:' in line:
                 lang = self._get_text(line)
                 track['lang'] = lang
                 data['track' + num] = track
-            if 'Channels:' in line:
+            if '+ Channels:' in line:
                 channels = self._get_text(line)
                 track['channels'] = channels
                 data['track' + num] = track
@@ -47,36 +51,48 @@ class MatroskaOps:
         return data
 
     def extract(self, tracks):
+        # [[id, filename, extension]...]
         track = tracks[0]
         x = 'mkvextract tracks "{}"'.format(self.source)
-        t = '{}:"{}"'.format(track[0], track[2])
+        t = '{}:"{}.{}"'.format(track[0], track[1], track[2])
         cmd = [x, t]
-        if len(tracks) >= 2:
+        if len(tracks) > 1:
             for track in tracks[1:]:
-                t = '{}:"{}"'.format(track[0], track[2])
+                t = '{}:"{}.{}"'.format(track[0], track[1],
+                                           track[2])
                 cmd.append(t)
-        subprocess.call(' '.join(cmd), shell=True)
+        cmd = ' '.join(cmd)
+        return cmd
 
-    def merge(self, vid_track, aud_tracks, sub_tracks=[], uid=''):
-        if not os.path.isdir('out'):
-            os.mkdir(os.getcwd() + '/out')
-        x = ('mkvmerge -o "out/{}.mkv" '
-             '-D -A -S "{}"').format(self.sname, self.source)
-        v = ('-A -S -M --no-chapters --language '
-             '{}:{} "{}"').format(vid_track[0], vid_track[1], vid_track[2])
+    def merge(self, vtrack, atracks=[], stracks=[], uid=''):
+        # [[id, filename, extension, name, language]...]
+        x = ('mkvmerge --disable-track-statistics-tags -o "out/{}.mkv" -D -A '
+             '-S -T "{}"'
+            ).format(self.sname, self.source)
+        v = ('-A -S -M -T -d {} --no-global-tags --no-chapters '
+             '--track-name {}:"{}" --language {}:"{}" "{}"'
+            ).format(vtrack[0], vtrack[0], vtrack[3], vtrack[0], vtrack[4],
+                     vtrack[1] + '.' + vtrack[2])
         cmd = [x, v]
-        for aud_track in aud_tracks:
-            a = ('--no-chapters --language '
-                 '0:{} "{}"').format(aud_track[1], aud_track[2])
-            cmd.append(a)
-        if sub_tracks:
-            for sub_track in sub_tracks:
-                s = '--language 0:{} "{}"'.format(sub_track[1], sub_track[2])
+        if atracks:
+            for track in atracks:
+                a = ('-D -S -M -T -a {} --no-global-tags --no-chapters '
+                     '--track-name {}:"{}" --language {}:"{}" "{}"'
+                    ).format(track[0], track[0], track[3], track[0], track[4],
+                             track[1] + '.' + track[2])
+                cmd.append(a)
+        if stracks:
+            for track in stracks:
+                s = ('-D -A -M -T -s {} --no-global-tags --no-chapters '
+                     '--track-name {}:"{}" --language {}:"{}" "{}"'
+                    ).format(track[0], track[0], track[3], track[0], track[4],
+                             track[1] + '.' + track[2])
                 cmd.append(s)
         if uid:
             u = '--segment-uid ' + uid
             cmd.append(u)
-        subprocess.call(' '.join(cmd), shell=True)
+        cmd = ' '.join(cmd)
+        return cmd
 
 class Chapters:
     def __init__(self, lang='eng', fpsnum=24000, fpsden=1001, ordered=True):
@@ -132,55 +148,35 @@ class Encode:
         self.source = source
         self.sname = os.path.splitext(self.source)[0]
 
-    def vpy(self, fpsnum=24000, fpsden=1001, trim=[], crop=[], resize=[],
-            deband='', bit_depth=10):
-        import vapoursynth as vs
-        core = vs.get_core()
-        clip = core.ffms2.Source(source=self.source, fpsnum=fpsnum,
-                                 fpsden=fpsden)
-        if trim:
-            part = trim[0]
-            clip = core.std.Trim(clip=clip, first=part[0], last=part[1])
-            if len(trim) >= 2:
-                for part in trim[1:]:
-                    clip = clip + core.std.Trim(clip=clip, first=part[0],
-                                                last=part[1])
-        if len(crop) == 4:
-            clip = core.std.CropRel(clip=clip, left=crop[0], right=crop[1],
-                                    top=crop[2], bottom=crop[3])
-        if deband:
-            clip = core.f3kdb.Deband(clip=clip, preset=deband,
-                                     output_depth=bit_depth)
-        if len(resize) == 2:
-            clip = core.resize.Bicubic(clip=clip, width=resize[0],
-                                       height=resize[1])
-        clip.set_output()
-
     def info(self):
-        cmd = 'vspipe "{}" - -info'.format(self.source)
+        cmd = 'vspipe "{}.vpy" - -info'.format(self.sname)
         return cmd
 
     def preview(self):
-        dec = 'vspipe "{}" - -y4m'.format(self.source)
+        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
         enc = 'mpv -'
         cmd = (dec, enc)
         cmd = '|'.join([ dec, enc ])
         return cmd
 
-    def x264(self, q=15, c='mp4', d=10, p='slow', t='animation'):
-        dec = 'vspipe "{}" - -y4m'.format(self.source)
+    def x264(self, q=15, c='mp4', d=10, p='slow', t='animation', o=''):
+        if not o:
+            o = self.sname
+        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
         if d == 10:
             x = 'x264-10bit'
         elif d == 8:
             x = 'x264'
         enc = ('{} - --crf {} --preset {} --tune {} --demuxer y4m '
-               '--output "{}.{}"').format(x, q, p, t, self.sname, c)
+               '--output "{}.{}"').format(x, q, p, t, o, c)
         cmd = '|'.join([ dec, enc ])
         return cmd
 
-    def fdkaac(self, q=4, c='aac'):
+    def fdkaac(self, q=4, c='aac', o=''):
+        if not o:
+            o = self.sname
         dec = 'ffmpeg -i "{}" -f caf -'.format(self.source)
-        enc = 'fdkaac - -m{} -o "{}.{}"'.format(q, self.sname, c)
+        enc = 'fdkaac - -m{} -o "{}.{}"'.format(q, o, c)
         cmd = '|'.join([ dec, enc ])
         return cmd
 
