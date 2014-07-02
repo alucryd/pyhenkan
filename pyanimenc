@@ -322,7 +322,7 @@ class Handler:
 
         v = 'import vapoursynth as vs\n'
         v = v + 'core = vs.get_core()\n'
-        s = 'clip = core.ffms2.Source("{}", fpsnum={}, fpsden{})\n'
+        s = 'clip = core.ffms2.Source("{}", fpsnum={}, fpsden={})\n'
         s = s.format(source, self.fpsnum, self.fpsden)
         if self.crop:
             c = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
