@@ -69,6 +69,11 @@ class Handler:
         dest = 'out/' + os.path.basename(os.path.splitext(self.asource)[0])
         if self.aenc == 'fdkaac':
             self.queue.submit(self.fdkaac, self.asource, dest)
+        elif self.aenc == 'lame':
+            m = lame_mode_cbtext.get_active_text()
+            b = lame_bitrate_spin.get_value_as_int()
+            q = lame_quality_spin.get_value_as_int()
+            self.queue.submit(self.lame, self.asource, dest, m, b, q)
 
     def on_batch_source_set(self, button):
         self.folder = button.get_filename()
@@ -260,6 +265,11 @@ class Handler:
                     a = track[1] + '.' + track[2]
                     if self.aenc == 'fdkaac':
                         self.queue.submit(self.fdkaac, a, track[1])
+                    elif self.aenc == 'lame':
+                        m = lame_mode_cbtext.get_active_text()
+                        b = lame_bitrate_spin.get_value_as_int()
+                        q = lame_quality_spin.get_value_as_int()
+                        self.queue.submit(self.lame, a, track[1], m, b, q)
 
             # Merge tracks
             self.queue.submit(self.merge, s, vtrack, atracks, stracks, uid)
@@ -403,6 +413,11 @@ class Handler:
         #            status_pbar.set_fraction(1)
         #            break
 
+    def lame(self, source, dest, mode, bitrate, quality):
+        cmd = Encode(source).lame(dest, mode, bitrate, quality)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+
     def on_stop_clicked(self, button):
         self.queue.shutdown()
 
@@ -516,7 +531,7 @@ class Handler:
     def on_venc_changed(self, combo):
         self.venc = combo.get_active_text()
         if self.venc in ['x264', 'x264-10bit']:
-            self.vquality = x264_quality_spin.get_value()
+            self.vquality = x264_quality_spin.get_value_as_int()
             self.vcontainer = x264_container_cbtext.get_active_text()
             self.vpreset = x264_preset_cbtext.get_active_text()
             self.vtune = x264_tune_cbtext.get_active_text()
@@ -528,7 +543,7 @@ class Handler:
     def on_aenc_changed(self, combo):
         self.aenc = combo.get_active_text()
         if self.aenc == 'fdkaac':
-            self.aquality = fdkaac_quality_spin.get_value()
+            self.aquality = fdkaac_quality_spin.get_value_as_int()
             self.acontainer = fdkaac_container_cbtext.get_active_text()
 
     def on_vsettings_clicked(self, button):
@@ -538,9 +553,11 @@ class Handler:
     def on_asettings_clicked(self, button):
         if self.aenc == 'fdkaac':
             fdkaac_dialog.run()
+        elif self.aenc == 'lame':
+            lame_dialog.run()
 
     def on_x264_quality_changed(self, spin):
-        self.vquality = spin.get_value()
+        self.vquality = spin.get_value_as_int()
 
     def on_x264_container_changed(self, combo):
         self.vcontainer = combo.get_active_text()
@@ -555,13 +572,25 @@ class Handler:
         x264_dialog.hide()
 
     def on_fdkaac_quality_changed(self, spin):
-        self.aquality = spin.get_value()
+        self.aquality = spin.get_value_as_int()
 
     def on_fdkaac_container_changed(self, combo):
         self.acontainer = combo.get_active_text()
 
     def on_fdkaac_ok_clicked(self, button):
         fdkaac_dialog.hide()
+
+    def on_lame_mode_changed(self, combo):
+        m = combo.get_active_text()
+        if m == 'CBR' or m == 'ABR':
+            lame_bitrate_spin.set_sensitive(True)
+            lame_quality_spin.set_sensitive(False)
+        elif m == 'VBR':
+            lame_bitrate_spin.set_sensitive(False)
+            lame_quality_spin.set_sensitive(True)
+
+    def on_lame_ok_clicked(self, button):
+        lame_dialog.hide()
 
     def on_log_clear_clicked(self, button):
         log_buffer.set_text('')
@@ -573,7 +602,7 @@ class Handler:
 vencs = ['x264', 'x264-10bit']
 vcontainers = ['avi', 'mkv', 'mp4', 'ogm']
 vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
-aencs = ['fdkaac']
+aencs = ['fdkaac', 'lame']
 acontainers= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
               'wv']
 atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
@@ -621,6 +650,7 @@ for enc in vencs:
     if os.path.isfile('/usr/bin/' + enc):
         venc_cbtext.append_text(enc)
         batch_venc_cbtext.append_text(enc)
+        print('Found ' + enc + '.')
     else:
         vencs.pop(enc)
 
@@ -628,32 +658,38 @@ for enc in aencs:
     if os.path.isfile('/usr/bin/' + enc):
         aenc_cbtext.append_text(enc)
         batch_aenc_cbtext.append_text(enc)
+        print('Found ' + enc + '.')
     else:
         aencs.pop(enc)
 
 # Set the default settings
-if 'x264' in vencs or 'x264-10bit' in vencs:
-    x264_dialog = builder.get_object('x264-dialog')
-    x264_quality_spin = builder.get_object('x264_quality-spin')
-    x264_quality_spin.set_value(15)
-    x264_container_cbtext = builder.get_object('x264_container-cbtext')
-    x264_container_cbtext.set_active(3)
-    x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
-    x264_preset_cbtext.set_active(6)
-    x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
-    x264_tune_cbtext.set_active(1)
+for enc in vencs + aencs:
+    if enc == 'x264' or enc == 'x264-10bit':
+        x264_dialog = builder.get_object('x264-dialog')
+        x264_quality_spin = builder.get_object('x264_quality-spin')
+        x264_quality_spin.set_value(15)
+        x264_container_cbtext = builder.get_object('x264_container-cbtext')
+        x264_container_cbtext.set_active(3)
+        x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
+        x264_preset_cbtext.set_active(6)
+        x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
+        x264_tune_cbtext.set_active(1)
+    elif enc == 'fdkaac':
+        fdkaac_dialog = builder.get_object('fdkaac-dialog')
+        fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
+        fdkaac_quality_spin.set_value(4)
+        fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
+        fdkaac_container_cbtext.set_active(0)
+    elif enc == 'lame':
+        lame_dialog = builder.get_object('lame-dialog')
+        lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
+        lame_bitrate_spin = builder.get_object('lame_bitrate-spin')
+        lame_quality_spin = builder.get_object('lame_quality-spin')
 
-if 'fdkaac' in aencs:
-    fdkaac_dialog = builder.get_object('fdkaac-dialog')
-    fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
-    fdkaac_quality_spin.set_value(4)
-    fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
-    fdkaac_container_cbtext.set_active(0)
-
-venc_cbtext.set_active(0)
-batch_venc_cbtext.set_active(0)
-aenc_cbtext.set_active(0)
-batch_aenc_cbtext.set_active(0)
+venc_cbtext.set_active(False)
+batch_venc_cbtext.set_active(False)
+aenc_cbtext.set_active(False)
+batch_aenc_cbtext.set_active(False)
 
 window.show_all()
 

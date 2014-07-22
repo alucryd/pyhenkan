@@ -180,4 +180,17 @@ class Encode:
         cmd = '|'.join([ dec, enc ])
         return cmd
 
+    def lame(self, o='', m='CBR', b=128, q=4):
+        if not o:
+            o = self.sname
+        dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        if m == 'CBR':
+            enc = 'lame -b {} --cbr - "{}.mp3"'.format(b, o)
+        elif m == 'ABR':
+            enc = 'lame -b {} --abr - "{}.mp3"'.format(b, o)
+        elif m == 'VBR':
+            enc = 'lame -V {} - "{}.mp3"'.format(q, o)
+        cmd = '|'.join([ dec, enc ])
+        return cmd
+
 # vim: ts=4 sw=4 et:
