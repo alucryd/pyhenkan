@@ -172,15 +172,18 @@ class Encode:
         cmd = '|'.join([ dec, enc ])
         return cmd
 
-    def fdkaac(self, q=4, c='aac', o=''):
+    def fdkaac(self, o='', m='CBR', b='192', q=4, c='m4a'):
         if not o:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f caf -'.format(self.source)
-        enc = 'fdkaac - -m{} -o "{}.{}"'.format(q, o, c)
+        if m == 'CBR':
+            enc = 'fdkaac - -b {} -o "{}.{}"'.format(b, o, c)
+        elif m == 'VBR':
+            enc = 'fdkaac - -m {} -o "{}.{}"'.format(q, o, c)
         cmd = '|'.join([ dec, enc ])
         return cmd
 
-    def lame(self, o='', m='CBR', b=128, q=4):
+    def lame(self, o='', m='CBR', b=320, q=4):
         if not o:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)

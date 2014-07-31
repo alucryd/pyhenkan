@@ -58,7 +58,12 @@
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
-  <object class="GtkAdjustment" id="fdkaac-adj">
+  <object class="GtkAdjustment" id="fdkaac_bitrate-adj">
+    <property name="upper">320</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="fdkaac_quality-adj">
     <property name="lower">1</property>
     <property name="upper">5</property>
     <property name="step_increment">1</property>
@@ -114,11 +119,38 @@
             <property name="row_spacing">6</property>
             <property name="column_spacing">6</property>
             <child>
-              <object class="GtkLabel" id="fdkaac-label1">
+              <object class="GtkLabel" id="fdkaac-label3">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
                 <property name="label" translatable="yes">Quality</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="fdkaac_quality-spin">
+                <property name="visible">True</property>
+                <property name="sensitive">False</property>
+                <property name="can_focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="text" translatable="yes">1</property>
+                <property name="adjustment">fdkaac_quality-adj</property>
+                <property name="value">4</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="fdkaac-label1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Mode</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -130,7 +162,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Container</property>
+                <property name="label" translatable="yes">Bit Rate</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -138,12 +170,16 @@
               </packing>
             </child>
             <child>
-              <object class="GtkSpinButton" id="fdkaac_quality-spin">
+              <object class="GtkComboBoxText" id="fdkaac_mode-cbtext">
                 <property name="visible">True</property>
-                <property name="can_focus">True</property>
+                <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
-                <property name="adjustment">fdkaac-adj</property>
-                <signal name="value-changed" handler="on_fdkaac_quality_changed" swapped="no"/>
+                <property name="active">0</property>
+                <items>
+                  <item translatable="yes">CBR</item>
+                  <item translatable="yes">VBR</item>
+                </items>
+                <signal name="changed" handler="on_fdkaac_mode_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -151,19 +187,45 @@
               </packing>
             </child>
             <child>
-              <object class="GtkComboBoxText" id="fdkaac_container-cbtext">
+              <object class="GtkSpinButton" id="fdkaac_bitrate-spin">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
-                <items>
-                  <item translatable="yes">aac</item>
-                  <item translatable="yes">m4a</item>
-                </items>
-                <signal name="changed" handler="on_fdkaac_container_changed" swapped="no"/>
+                <property name="text" translatable="yes">128</property>
+                <property name="adjustment">fdkaac_bitrate-adj</property>
+                <property name="value">192</property>
               </object>
               <packing>
                 <property name="left_attach">1</property>
                 <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="fdkaac_container-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">1</property>
+                <items>
+                  <item translatable="yes">aac</item>
+                  <item translatable="yes">m4a</item>
+                </items>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="fdkaac-label4">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Container</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">3</property>
               </packing>
             </child>
           </object>
@@ -261,7 +323,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="lame-label2">
+              <object class="GtkLabel" id="lame-label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
@@ -291,7 +353,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="lame-label">
+              <object class="GtkLabel" id="lame-label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="label" translatable="yes">Bit Rate</property>
@@ -308,7 +370,7 @@
                 <property name="hexpand">True</property>
                 <property name="text" translatable="yes">1</property>
                 <property name="adjustment">lame_bitrate-adj</property>
-                <property name="value">128</property>
+                <property name="value">320</property>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -681,6 +743,7 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">astart-image</property>
@@ -1459,6 +1522,95 @@
               </packing>
             </child>
             <child>
+              <object class="GtkSpinButton" id="x264_quality-spin">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="text" translatable="yes">1</property>
+                <property name="adjustment">x264-adj</property>
+                <property name="value">15</property>
+                <signal name="value-changed" handler="on_x264_quality_changed" swapped="no"/>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x264-label3">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Preset</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x264_preset-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">6</property>
+                <items>
+                  <item translatable="yes">ultrafast</item>
+                  <item translatable="yes">superfast</item>
+                  <item translatable="yes">veryfast</item>
+                  <item translatable="yes">faster</item>
+                  <item translatable="yes">fast</item>
+                  <item translatable="yes">medium</item>
+                  <item translatable="yes">slow</item>
+                  <item translatable="yes">slower</item>
+                  <item translatable="yes">veryslow</item>
+                  <item translatable="yes">placebo</item>
+                  <item translatable="yes">none</item>
+                </items>
+                <signal name="changed" handler="on_x264_preset_changed" swapped="no"/>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x264-label4">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Tune</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x264_tune-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">1</property>
+                <items>
+                  <item translatable="yes">film</item>
+                  <item translatable="yes">animation</item>
+                  <item translatable="yes">grain</item>
+                  <item translatable="yes">stillimage</item>
+                  <item translatable="yes">psnr</item>
+                  <item translatable="yes">ssim</item>
+                  <item translatable="yes">fastdecode</item>
+                  <item translatable="yes">zerolatency</item>
+                  <item translatable="yes">none</item>
+                </items>
+                <signal name="changed" handler="on_x264_tune_changed" swapped="no"/>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkLabel" id="x264-label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
@@ -1467,22 +1619,7 @@
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkSpinButton" id="x264_quality-spin">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="hexpand">True</property>
-                <property name="text" translatable="yes">1</property>
-                <property name="adjustment">x264-adj</property>
-                <property name="value">1</property>
-                <signal name="value-changed" handler="on_x264_quality_changed" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">0</property>
+                <property name="top_attach">3</property>
               </packing>
             </child>
             <child>
@@ -1497,76 +1634,6 @@
                   <item translatable="yes">mp4</item>
                 </items>
                 <signal name="changed" handler="on_x264_container_changed" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkLabel" id="x264-label3">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="xalign">0</property>
-                <property name="label" translatable="yes">Preset</property>
-              </object>
-              <packing>
-                <property name="left_attach">0</property>
-                <property name="top_attach">2</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkLabel" id="x264-label4">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="xalign">0</property>
-                <property name="label" translatable="yes">Tune</property>
-              </object>
-              <packing>
-                <property name="left_attach">0</property>
-                <property name="top_attach">3</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkComboBoxText" id="x264_preset-cbtext">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="hexpand">True</property>
-                <items>
-                  <item translatable="yes">ultrafast</item>
-                  <item translatable="yes">superfast</item>
-                  <item translatable="yes">veryfast</item>
-                  <item translatable="yes">faster</item>
-                  <item translatable="yes">fast</item>
-                  <item translatable="yes">medium</item>
-                  <item translatable="yes">slow</item>
-                  <item translatable="yes">slower</item>
-                  <item translatable="yes">veryslow</item>
-                  <item translatable="yes">placebo</item>
-                </items>
-                <signal name="changed" handler="on_x264_preset_changed" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">2</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkComboBoxText" id="x264_tune-cbtext">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="hexpand">True</property>
-                <items>
-                  <item translatable="yes">film</item>
-                  <item translatable="yes">animation</item>
-                  <item translatable="yes">grain</item>
-                  <item translatable="yes">stillimage</item>
-                  <item translatable="yes">psnr</item>
-                  <item translatable="yes">ssim</item>
-                  <item translatable="yes">fastdecode</item>
-                  <item translatable="yes">zerolatency</item>
-                </items>
-                <signal name="changed" handler="on_x264_tune_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>

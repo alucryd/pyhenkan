@@ -17,10 +17,6 @@ class Handler:
         self.vcontainer = ''
         self.vpreset = ''
         self.vtune = ''
-        self.asource = ''
-        self.aenc = ''
-        self.aquality = 0
-        self.acontainer = ''
         self.trim = []
         self.crop = []
         self.resize = []
@@ -51,10 +47,7 @@ class Handler:
         status_pbar.set_fraction(0)
 
     def on_asource_file_set(self, button):
-        self.asource = button.get_filename()
-        self.folder = os.path.dirname(self.asource)
-        os.chdir(self.folder)
-        status_pbar.set_fraction(0)
+        astart_button.set_sensitive(True)
 
     def on_vstart_clicked(self, button):
         if not os.path.isdir('out'):
@@ -64,16 +57,22 @@ class Handler:
             self.queue.submit(self.x264, self.vsource, dest)
 
     def on_astart_clicked(self, button):
-        if not os.path.isdir('out'):
-            os.mkdir(self.folder + '/out')
-        dest = 'out/' + os.path.basename(os.path.splitext(self.asource)[0])
+        s = asource_fcbutton.get_filename()
+        f = os.path.dirname(s)
+        if not os.path.isdir(f + '/out'):
+            os.mkdir(f + '/out')
+        d = f + '/out/' + os.path.basename(os.path.splitext(s)[0])
         if self.aenc == 'fdkaac':
-            self.queue.submit(self.fdkaac, self.asource, dest)
+            m = fdkaac_mode_cbtext.get_active_text()
+            b = fdkaac_bitrate_spin.get_value_as_int()
+            q = fdkaac_quality_spin.get_value_as_int()
+            c = fdkaac_container_cbtext.get_active_text()
+            self.queue.submit(self.fdkaac, s, d, m, b, q, c)
         elif self.aenc == 'lame':
             m = lame_mode_cbtext.get_active_text()
             b = lame_bitrate_spin.get_value_as_int()
             q = lame_quality_spin.get_value_as_int()
-            self.queue.submit(self.lame, self.asource, dest, m, b, q)
+            self.queue.submit(self.lame, s, d, m, b, q)
 
     def on_batch_source_set(self, button):
         self.folder = button.get_filename()
@@ -264,7 +263,11 @@ class Handler:
                 if track[5]:
                     a = track[1] + '.' + track[2]
                     if self.aenc == 'fdkaac':
-                        self.queue.submit(self.fdkaac, a, track[1])
+                        m = fdkaac_mode_cbtext.get_active_text()
+                        b = fdkaac_bitrate_spin.get_value_as_int()
+                        q = fdkaac_quality_spin.get_value_as_int()
+                        c = fdkaac_container_cbtext.get_active_text()
+                        self.queue.submit(self.fdkaac, a, track[1], m, b, q, c)
                     elif self.aenc == 'lame':
                         m = lame_mode_cbtext.get_active_text()
                         b = lame_bitrate_spin.get_value_as_int()
@@ -300,7 +303,11 @@ class Handler:
         for i in range(len(atracks)):
             if atracks[i][5]:
                 atracks[i][0] = 0
-                atracks[i][2] = self.acontainer
+                if self.aenc == 'fdkaac':
+                    c = fdkaac_container_cbtext.get_active_text()
+                    atracks[i][2] = c
+                elif self.aenc == 'lame':
+                    atracks[i][2] = 'mp3'
 
         cmd = MatroskaOps(source).merge(vtrack, atracks, stracks, uid)
         print(cmd)
@@ -387,8 +394,8 @@ class Handler:
         #            status_pbar.set_fraction(1)
         #            break
 
-    def fdkaac(self, source, dest):
-        cmd = Encode(source).fdkaac(self.aquality, self.acontainer, dest)
+    def fdkaac(self, source, dest, mode, bitrate, quality, container):
+        cmd = Encode(source).fdkaac(dest, mode, bitrate, quality, container)
         print(cmd)
         subprocess.call(cmd, shell=True)
         #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
@@ -542,9 +549,6 @@ class Handler:
 
     def on_aenc_changed(self, combo):
         self.aenc = combo.get_active_text()
-        if self.aenc == 'fdkaac':
-            self.aquality = fdkaac_quality_spin.get_value_as_int()
-            self.acontainer = fdkaac_container_cbtext.get_active_text()
 
     def on_vsettings_clicked(self, button):
         if self.venc in ['x264', 'x264-10bit']:
@@ -571,11 +575,14 @@ class Handler:
     def on_x264_ok_clicked(self, button):
         x264_dialog.hide()
 
-    def on_fdkaac_quality_changed(self, spin):
-        self.aquality = spin.get_value_as_int()
-
-    def on_fdkaac_container_changed(self, combo):
-        self.acontainer = combo.get_active_text()
+    def on_fdkaac_mode_changed(self, combo):
+        m = combo.get_active_text()
+        if m == 'CBR':
+            fdkaac_bitrate_spin.set_sensitive(True)
+            fdkaac_quality_spin.set_sensitive(False)
+        elif m == 'VBR':
+            fdkaac_bitrate_spin.set_sensitive(False)
+            fdkaac_quality_spin.set_sensitive(True)
 
     def on_fdkaac_ok_clicked(self, button):
         fdkaac_dialog.hide()
@@ -617,6 +624,8 @@ builder.add_from_file('/usr/share/pyanimenc/pyanimenc.glade')
 
 window = builder.get_object('window')
 venc_cbtext = builder.get_object('venc-cbtext')
+asource_fcbutton = builder.get_object('asource-fcbutton')
+astart_button = builder.get_object('astart-button')
 aenc_cbtext = builder.get_object('aenc-cbtext')
 status_pbar = builder.get_object('status-pbar')
 log_buffer = builder.get_object('log-buffer')
@@ -676,10 +685,10 @@ for enc in vencs + aencs:
         x264_tune_cbtext.set_active(1)
     elif enc == 'fdkaac':
         fdkaac_dialog = builder.get_object('fdkaac-dialog')
+        fdkaac_mode_cbtext = builder.get_object('fdkaac_mode-cbtext')
+        fdkaac_bitrate_spin = builder.get_object('fdkaac_bitrate-spin')
         fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
-        fdkaac_quality_spin.set_value(4)
         fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
-        fdkaac_container_cbtext.set_active(0)
     elif enc == 'lame':
         lame_dialog = builder.get_object('lame-dialog')
         lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
