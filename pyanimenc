@@ -295,10 +295,9 @@ class Handler:
                     if t == 'none':
                         t = ''
                     c = x264_container_cbtext.get_active_text()
-                    vtrack[2] = 'mp4'
 
                     self.queue.submit(self.x264, s, vtrack[1], dp, q, p, t, c)
-
+                    vtrack[2] = 'mp4'
 
             # Encode audio
             for i in range(len(atracks)):
@@ -312,17 +311,17 @@ class Handler:
                         b = fdkaac_bitrate_spin.get_value_as_int()
                         q = fdkaac_quality_spin.get_value_as_int()
                         c = fdkaac_container_cbtext.get_active_text()
-                        track[2] = c
 
                         self.queue.submit(self.fdkaac, a, track[1], m, b, q, c)
+                        track[2] = c
 
                     elif x == 'lame':
                         m = lame_mode_cbtext.get_active_text()
                         b = lame_bitrate_spin.get_value_as_int()
                         q = lame_quality_spin.get_value_as_int()
-                        track[2] = 'mp3'
 
                         self.queue.submit(self.lame, a, track[1], m, b, q)
+                        track[2] = 'mp3'
 
             # Merge tracks
             o = wd + '/out/' + os.path.basename(s)
