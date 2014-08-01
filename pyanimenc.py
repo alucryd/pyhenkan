@@ -64,11 +64,9 @@ class MatroskaOps:
         cmd = ' '.join(cmd)
         return cmd
 
-    def merge(self, vtrack, atracks=[], stracks=[], uid=''):
+    def merge(self, output, vtrack, atracks=[], stracks=[], uid=''):
         # [[id, filename, extension, name, language]...]
-        x = ('mkvmerge --disable-track-statistics-tags -o "out/{}.mkv" -D -A '
-             '-S -T "{}"'
-            ).format(self.sname, self.source)
+        x = 'mkvmerge -o "{}" -D -A -S -T "{}"'.format(output, self.source)
         v = ('-A -S -M -T -d {} --no-global-tags --no-chapters '
              '--track-name {}:"{}" --language {}:"{}" "{}"'
             ).format(vtrack[0], vtrack[0], vtrack[3], vtrack[0], vtrack[4],
@@ -155,21 +153,23 @@ class Encode:
     def preview(self):
         dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
         enc = 'mpv -'
-        cmd = (dec, enc)
-        cmd = '|'.join([ dec, enc ])
+        cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x264(self, q=15, c='mp4', d=10, p='slow', t='animation', o=''):
+    def x264(self, o='', d=8, q=18, p='', t='', c='mp4'):
         if not o:
             o = self.sname
         dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
-        if d == 10:
-            x = 'x264-10bit'
-        elif d == 8:
+        if d == 8:
             x = 'x264'
-        enc = ('{} - --crf {} --preset {} --tune {} --demuxer y4m '
-               '--output "{}.{}"').format(x, q, p, t, o, c)
-        cmd = '|'.join([ dec, enc ])
+        elif d == 10:
+            x = 'x264-10bit'
+        enc = '{} - --crf {} --demuxer y4m --output "{}.{}"'.format(x, q, o, c)
+        if p:
+            enc = enc + ' --preset ' + p
+        if t:
+            enc = enc + ' --tune ' + t
+        cmd = ' | '.join([dec, enc])
         return cmd
 
     def fdkaac(self, o='', m='CBR', b='192', q=4, c='m4a'):
@@ -180,7 +180,7 @@ class Encode:
             enc = 'fdkaac - -b {} -o "{}.{}"'.format(b, o, c)
         elif m == 'VBR':
             enc = 'fdkaac - -m {} -o "{}.{}"'.format(q, o, c)
-        cmd = '|'.join([ dec, enc ])
+        cmd = ' | '.join([ dec, enc ])
         return cmd
 
     def lame(self, o='', m='CBR', b=320, q=4):
@@ -193,7 +193,7 @@ class Encode:
             enc = 'lame -b {} --abr - "{}.mp3"'.format(b, o)
         elif m == 'VBR':
             enc = 'lame -V {} - "{}.mp3"'.format(q, o)
-        cmd = '|'.join([ dec, enc ])
+        cmd = ' | '.join([ dec, enc ])
         return cmd
 
 # vim: ts=4 sw=4 et:

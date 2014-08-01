@@ -10,19 +10,6 @@ from pyanimenc import Encode,MatroskaOps
 
 class Handler:
     def __init__(self):
-        self.vsource = ''
-        self.venc = ''
-        self.vdepth = 8
-        self.vquality = 0
-        self.vcontainer = ''
-        self.vpreset = ''
-        self.vtune = ''
-        self.trim = []
-        self.crop = []
-        self.resize = []
-        self.deband = ''
-        self.fpsnum = 24000
-        self.fpsden = 1001
         self.queue = ThreadPoolExecutor(max_workers=1)
         self.tools = ThreadPoolExecutor(max_workers=2)
 
@@ -41,50 +28,60 @@ class Handler:
         subprocess.call(cmd)
 
     def on_vsource_file_set(self, button):
-        self.vsource = button.get_filename()
-        self.folder = os.path.dirname(self.vsource)
-        os.chdir(self.folder)
-        status_pbar.set_fraction(0)
+        vstart_button.set_sensitive(True)
 
     def on_asource_file_set(self, button):
         astart_button.set_sensitive(True)
 
     def on_vstart_clicked(self, button):
-        if not os.path.isdir('out'):
-            os.mkdir(self.folder + '/out')
-        dest = 'out/' + os.path.basename(os.path.splitext(self.vsource)[0])
-        if self.venc == 'x264' or self.venc == 'x264-10bit':
-            self.queue.submit(self.x264, self.vsource, dest)
+        x = venc_cbtext.get_active_text()
+        s = vsource_fcbutton.get_filename()
+        wd = os.path.dirname(s)
+        if not os.path.isdir(wd + '/out'):
+            os.mkdir(wd + '/out')
+        d = wd + '/out/' + os.path.basename(os.path.splitext(s)[0])
+        if x == 'x264':
+            dp = int(x264_depth_cbtext.get_active_text())
+            q = x264_quality_spin.get_value_as_int()
+            p = x264_preset_cbtext.get_active_text()
+            if p == 'none':
+                p = ''
+            t = x264_tune_cbtext.get_active_text()
+            if t == 'none':
+                t = ''
+            c = x264_container_cbtext.get_active_text()
+            self.queue.submit(self.x264, s, d, dp, q, p, t, c)
 
     def on_astart_clicked(self, button):
+        x = aenc_cbtext.get_active_text()
         s = asource_fcbutton.get_filename()
-        f = os.path.dirname(s)
+        wd = os.path.dirname(s)
         if not os.path.isdir(f + '/out'):
-            os.mkdir(f + '/out')
-        d = f + '/out/' + os.path.basename(os.path.splitext(s)[0])
-        if self.aenc == 'fdkaac':
+            os.mkdir(wd + '/out')
+        d = wd + '/out/' + os.path.basename(os.path.splitext(s)[0])
+        if x == 'fdkaac':
             m = fdkaac_mode_cbtext.get_active_text()
             b = fdkaac_bitrate_spin.get_value_as_int()
             q = fdkaac_quality_spin.get_value_as_int()
             c = fdkaac_container_cbtext.get_active_text()
             self.queue.submit(self.fdkaac, s, d, m, b, q, c)
-        elif self.aenc == 'lame':
+        elif x == 'lame':
             m = lame_mode_cbtext.get_active_text()
             b = lame_bitrate_spin.get_value_as_int()
             q = lame_quality_spin.get_value_as_int()
             self.queue.submit(self.lame, s, d, m, b, q)
 
     def on_batch_source_set(self, button):
-        self.folder = button.get_filename()
-        os.chdir(self.folder)
+        wd = button.get_filename()
         self.sources = []
         self.data = []
         self.tracks = []
 
         # Keep videos only
-        for f in os.listdir():
+        for f in os.listdir(wd):
             for cont in vcontainers:
                 if re.search('\.' + cont + '$', f):
+                    f = wd + '/' + f
                     self.sources.append(f)
 
         # Get source infos
@@ -209,8 +206,9 @@ class Handler:
         track_mismatch_dialog.hide()
 
     def on_batch_start_clicked(self, button):
-        if not os.path.isdir('out'):
-            os.mkdir(self.folder + '/out')
+        wd = batch_source_fcbutton.get_filename()
+        if not os.path.isdir(wd + '/out'):
+            os.mkdir(wd + '/out')
 
         for i in range(len(self.sources)):
             vtrack = []
@@ -221,23 +219,27 @@ class Handler:
             for track in self.tracks:
                 # [[id, filename, extension, name, language, transcode?]...]
                 j = track[6]
-                f, e = os.path.splitext(s)
+                f, e = os.path.splitext(os.path.basename(s))
                 e = e.strip('.')
                 n = track[2]
                 l = track[3]
                 t = track[5]
                 if track[0] == 'video' and track[4]:
                     if track[5]:
-                        f = 'out/' + f
+                        f = wd + '/out/' + f
                         e = track[1]
+                    else:
+                        f = wd + '/' + f
                     vtrack = [j, f, e, n, l, t]
                 if track[0] == 'audio' and track[4]:
                     if track[5]:
-                        f = 'out/' + f
+                        f = wd + '/out/' + f + '_' + str(j)
                         e = track[1]
-                        f = f + '_' + str(j)
+                    else:
+                        f = wd + '/' + f
                     atracks.append([j, f, e, n, l, t])
                 if track[0] == 'subtitle' and track[4]:
+                    f = wd + '/' + f
                     stracks.append([j, f, e, n, l, t])
 
             # Extract tracks
@@ -250,35 +252,84 @@ class Handler:
             self.queue.submit(self.extract, s, tracks)
 
             if vtrack[5]:
+                vtrack[0] = 0
                 # Create VapourSynth script
-                self.queue.submit(self.vpy, s)
+                c = []
+                d = ''
+                r = []
+
+                fn = vpy_fpsnum_spin.get_value_as_int()
+                fd = vpy_fpsden_spin.get_value_as_int()
+                if vpy_crop_check.get_active():
+                    cl = vpy_lcrop_spin.get_value_as_int()
+                    cr = vpy_rcrop_spin.get_value_as_int()
+                    ct = vpy_tcrop_spin.get_value_as_int()
+                    cb = vpy_bcrop_spin.get_value_as_int()
+                    c = [cl, cr, ct, cb]
+                if vpy_deband_check.get_active():
+                    pr = vpy_deband_preset_cbtext.get_active_text()
+                    ch = vpy_deband_channel_cbtext.get_active_text()
+                    ng = vpy_deband_nograin_check.get_active()
+                    d = pr
+                    if ch in ['luma', 'chroma']:
+                        d = d + '/' + ch
+                    if ng:
+                        d = d + '/nograin'
+                if vpy_resize_check.get_active():
+                    rw = vpy_wresize_spin.get_value_as_int()
+                    rh = vpy_hresize_spin.get_value_as_int()
+                    rf = vpy_resize_filter_cbtext.get_active_text()
+                    r = [rw, rh, rf]
+
+                self.queue.submit(self.vpy, s, fn, fd, c, d, r)
 
                 # Encode video
-                if self.venc == 'x264' or self.venc == 'x264-10bit':
-                    self.queue.submit(self.x264, s, vtrack[1])
+                x = batch_venc_cbtext.get_active_text()
+                if x == 'x264':
+                    dp = int(x264_depth_cbtext.get_active_text())
+                    q = x264_quality_spin.get_value_as_int()
+                    p = x264_preset_cbtext.get_active_text()
+                    if p == 'none':
+                        p = ''
+                    t = x264_tune_cbtext.get_active_text()
+                    if t == 'none':
+                        t = ''
+                    c = x264_container_cbtext.get_active_text()
+                    vtrack[2] = 'mp4'
+
+                    self.queue.submit(self.x264, s, vtrack[1], dp, q, p, t, c)
+
 
             # Encode audio
             for i in range(len(atracks)):
                 track = atracks[i]
                 if track[5]:
+                    track[0] = 0
+                    x = batch_aenc_cbtext.get_active_text()
                     a = track[1] + '.' + track[2]
-                    if self.aenc == 'fdkaac':
+                    if x == 'fdkaac':
                         m = fdkaac_mode_cbtext.get_active_text()
                         b = fdkaac_bitrate_spin.get_value_as_int()
                         q = fdkaac_quality_spin.get_value_as_int()
                         c = fdkaac_container_cbtext.get_active_text()
+                        track[2] = c
+
                         self.queue.submit(self.fdkaac, a, track[1], m, b, q, c)
-                    elif self.aenc == 'lame':
+
+                    elif x == 'lame':
                         m = lame_mode_cbtext.get_active_text()
                         b = lame_bitrate_spin.get_value_as_int()
                         q = lame_quality_spin.get_value_as_int()
+                        track[2] = 'mp3'
+
                         self.queue.submit(self.lame, a, track[1], m, b, q)
 
             # Merge tracks
-            self.queue.submit(self.merge, s, vtrack, atracks, stracks, uid)
+            o = wd + '/out/' + os.path.basename(s)
+            self.queue.submit(self.merge, s, o, vtrack, atracks, stracks, uid)
 
             # Clean up
-            self.queue.submit(self.clean)
+            self.queue.submit(self.clean, wd)
 
     def extract(self, source, tracks):
         cmd = MatroskaOps(source).extract(tracks)
@@ -294,22 +345,8 @@ class Handler:
         #        else:
         #            break
 
-    def merge(self, source, vtrack, atracks, stracks, uid):
-        # These variables cannot be changed earlier because the
-        # asynchronous mkvextract process will get the wrong values.
-        if vtrack[5]:
-            vtrack[0] = 0
-            vtrack[2] = 'mp4'
-        for i in range(len(atracks)):
-            if atracks[i][5]:
-                atracks[i][0] = 0
-                if self.aenc == 'fdkaac':
-                    c = fdkaac_container_cbtext.get_active_text()
-                    atracks[i][2] = c
-                elif self.aenc == 'lame':
-                    atracks[i][2] = 'mp3'
-
-        cmd = MatroskaOps(source).merge(vtrack, atracks, stracks, uid)
+    def merge(self, source, dest, vtrack, atracks, stracks, uid):
+        cmd = MatroskaOps(source).merge(dest, vtrack, atracks, stracks, uid)
         print(cmd)
         subprocess.call(cmd, shell=True)
         #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
@@ -322,15 +359,15 @@ class Handler:
         #        else:
         #            break
 
-    def clean(self):
-        for f in os.listdir():
+    def clean(self, directory):
+        for f in os.listdir(directory):
             if re.search('\.vpy$', f) or re.search('\.ffindex$', f):
-                os.remove(f)
-        for f in os.listdir('out/'):
+                os.remove(directory + '/' + f)
+        for f in os.listdir(directory + '/out/'):
             if not re.search('\.mkv$', f):
-                os.remove('out/' + f)
+                os.remove(directory + '/out/' + f)
 
-    def vpy(self, source):
+    def vpy(self, source, fpsnum, fpsden, crop, deband, resize):
         v = ''
         s = ''
         c = ''
@@ -340,19 +377,17 @@ class Handler:
         v = 'import vapoursynth as vs\n'
         v = v + 'core = vs.get_core()\n'
         s = 'clip = core.ffms2.Source("{}", fpsnum={}, fpsden={})\n'
-        s = s.format(source, self.fpsnum, self.fpsden)
-        if self.crop:
+        s = s.format(source, fpsnum, fpsden)
+        if crop:
             c = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
-            c = c.format(self.crop[0], self.crop[1], self.crop[2],
-                         self.crop[3])
-        if self.deband:
+            c = c.format(crop[0], crop[1], crop[2], crop[3])
+        if deband:
             d = 'clip = core.f3kdb.Deband(clip, preset="{}", '
             d = d + 'output_depth=16)\n'
-            d = d.format(self.deband)
-        if self.resize:
+            d = d.format(deband)
+        if resize:
             r = 'clip = core.resize.{}(clip, {}, {})\n'
-            r = r.format(self.resize[2].capitalize(), self.resize[0],
-                         self.resize[1])
+            r = r.format(resize[2].capitalize(), resize[0], resize[1])
         v = v + s + c + d + r
         v = v + 'clip.set_output()'
 
@@ -360,7 +395,7 @@ class Handler:
         with open(vpy, 'w') as f:
             f.write(v)
 
-    def x264(self, source, dest):
+    def x264(self, source, dest, depth, quality, preset, tune, container):
         #cmd = Encode(source).info()
         #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
         #                      universal_newlines=True) as proc:
@@ -374,8 +409,8 @@ class Handler:
         #        else:
         #            break
 
-        cmd = Encode(source).x264(self.vquality, self.vcontainer, self.vdepth,
-                                  self.vpreset, self.vtune, dest)
+        cmd = Encode(source).x264(dest, depth, quality, preset, tune,
+                                  container)
         print(cmd)
         subprocess.call(cmd, shell=True)
         #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
@@ -432,93 +467,23 @@ class Handler:
         vpy_dialog.run()
 
     def on_vpy_crop_toggled(self, check):
-        if check.get_active():
-            vpy_lcrop_spin.set_sensitive(True)
-            vpy_rcrop_spin.set_sensitive(True)
-            vpy_tcrop_spin.set_sensitive(True)
-            vpy_bcrop_spin.set_sensitive(True)
-            self.crop = [vpy_lcrop_spin.get_value_as_int(),
-                         vpy_rcrop_spin.get_value_as_int(),
-                         vpy_tcrop_spin.get_value_as_int(),
-                         vpy_bcrop_spin.get_value_as_int()]
-        else:
-            self.crop = []
-            vpy_lcrop_spin.set_sensitive(False)
-            vpy_rcrop_spin.set_sensitive(False)
-            vpy_tcrop_spin.set_sensitive(False)
-            vpy_bcrop_spin.set_sensitive(False)
-
-    def on_vpy_lcrop_changed(self, spin):
-        self.crop[0] = spin.get_value_as_int()
-
-    def on_vpy_rcrop_changed(self, spin):
-        self.crop[1] = spin.get_value_as_int()
-
-    def on_vpy_tcrop_changed(self, spin):
-        self.crop[2] = spin.get_value_as_int()
-
-    def on_vpy_bcrop_changed(self, spin):
-        self.crop[3] = spin.get_value_as_int()
+        state = check.get_active()
+        vpy_lcrop_spin.set_sensitive(state)
+        vpy_rcrop_spin.set_sensitive(state)
+        vpy_tcrop_spin.set_sensitive(state)
+        vpy_bcrop_spin.set_sensitive(state)
 
     def on_vpy_resize_toggled(self, check):
-        if check.get_active():
-            vpy_wresize_spin.set_sensitive(True)
-            vpy_hresize_spin.set_sensitive(True)
-            vpy_resize_filter_cbtext.set_sensitive(True)
-            self.resize = [vpy_wresize_spin.get_value_as_int(),
-                           vpy_hresize_spin.get_value_as_int(),
-                           vpy_resize_filter_cbtext.get_active_text()]
-        else:
-            self.resize = []
-            vpy_wresize_spin.set_sensitive(False)
-            vpy_hresize_spin.set_sensitive(False)
-            vpy_resize_filter_cbtext.set_sensitive(False)
-
-    def on_vpy_wresize_changed(self, spin):
-        self.resize[0] = spin.get_value_as_int()
-
-    def on_vpy_hresize_changed(self, spin):
-        self.resize[1] = spin.get_value_as_int()
-
-    def on_vpy_resize_filter_changed(self, combo):
-        self.resize[2] = combo.get_active_text()
+        state = check.get_active()
+        vpy_wresize_spin.set_sensitive(state)
+        vpy_hresize_spin.set_sensitive(state)
+        vpy_resize_filter_cbtext.set_sensitive(state)
 
     def on_vpy_deband_toggled(self, check):
-        if check.get_active():
-            vpy_deband_preset_cbtext.set_sensitive(True)
-            vpy_deband_channel_cbtext.set_sensitive(True)
-            vpy_deband_nograin_check.set_sensitive(True)
-            self.deband_preset()
-        else:
-            self.deband = ''
-            vpy_deband_preset_cbtext.set_sensitive(False)
-            vpy_deband_channel_cbtext.set_sensitive(False)
-            vpy_deband_nograin_check.set_sensitive(False)
-
-    def on_vpy_deband_preset_changed(self, combo):
-        self.deband_preset()
-
-    def on_vpy_deband_channel_changed(self, combo):
-        self.deband_preset()
-
-    def on_vpy_deband_nograin_toggled(self, check):
-        self.deband_preset()
-
-    def deband_preset(self):
-        p = vpy_deband_preset_cbtext.get_active_text()
-        c = vpy_deband_channel_cbtext.get_active_text()
-        n = vpy_deband_nograin_check.get_active()
-        self.deband = p
-        if c in ['luma', 'chroma']:
-            self.deband = '/'.join([self.deband, c])
-        if n:
-            self.deband = '/'.join([self.deband, 'nograin'])
-
-    def on_vpy_fpsden_changed(self, spin):
-        self.fpsden = spin.get_value_as_int()
-
-    def on_vpy_fpsnum_changed(self, spin):
-        self.fpsnum = spin.get_value_as_int()
+        state = check.get_active()
+        vpy_deband_preset_cbtext.set_sensitive(state)
+        vpy_deband_channel_cbtext.set_sensitive(state)
+        vpy_deband_nograin_check.set_sensitive(state)
 
     def on_vpy_ok_clicked(self, button):
         vpy_dialog.hide()
@@ -535,45 +500,32 @@ class Handler:
     def on_track_encode_toggled(self, check, i):
         self.tracks[i][5] = check.get_active()
 
-    def on_venc_changed(self, combo):
-        self.venc = combo.get_active_text()
-        if self.venc in ['x264', 'x264-10bit']:
-            self.vquality = x264_quality_spin.get_value_as_int()
-            self.vcontainer = x264_container_cbtext.get_active_text()
-            self.vpreset = x264_preset_cbtext.get_active_text()
-            self.vtune = x264_tune_cbtext.get_active_text()
-        if self.venc == 'x264':
-            self.vdepth = 8
-        elif self.venc == 'x264-10bit':
-            self.vdepth = 10
-
-    def on_aenc_changed(self, combo):
-        self.aenc = combo.get_active_text()
-
     def on_vsettings_clicked(self, button):
-        if self.venc in ['x264', 'x264-10bit']:
+        x = venc_cbtext.get_active_text()
+        if x in ['x264', 'x264-10bit']:
             x264_dialog.run()
 
-    def on_asettings_clicked(self, button):
-        if self.aenc == 'fdkaac':
-            fdkaac_dialog.run()
-        elif self.aenc == 'lame':
-            lame_dialog.run()
-
-    def on_x264_quality_changed(self, spin):
-        self.vquality = spin.get_value_as_int()
-
-    def on_x264_container_changed(self, combo):
-        self.vcontainer = combo.get_active_text()
-
-    def on_x264_preset_changed(self, combo):
-        self.vpreset = combo.get_active_text()
-
-    def on_x264_tune_changed(self, combo):
-        self.vtune = combo.get_active_text()
+    def on_batch_vsettings_clicked(self, button):
+        x = batch_venc_cbtext.get_active_text()
+        if x in ['x264', 'x264-10bit']:
+            x264_dialog.run()
 
     def on_x264_ok_clicked(self, button):
         x264_dialog.hide()
+
+    def on_asettings_clicked(self, button):
+        x = aenc_cbtext.get_active_text()
+        if x == 'fdkaac':
+            fdkaac_dialog.run()
+        elif x == 'lame':
+            lame_dialog.run()
+
+    def on_batch_asettings_clicked(self, button):
+        x = batch_aenc_cbtext.get_active_text()
+        if x == 'fdkaac':
+            fdkaac_dialog.run()
+        elif x == 'lame':
+            lame_dialog.run()
 
     def on_fdkaac_mode_changed(self, combo):
         m = combo.get_active_text()
@@ -623,15 +575,22 @@ builder = Gtk.Builder()
 builder.add_from_file('/usr/share/pyanimenc/pyanimenc.glade')
 
 window = builder.get_object('window')
+vsource_fcbutton = builder.get_object('vsource-fcbutton')
+vstart_button = builder.get_object('vstart-button')
 venc_cbtext = builder.get_object('venc-cbtext')
+vsettings_button = builder.get_object('vsettings-button')
 asource_fcbutton = builder.get_object('asource-fcbutton')
 astart_button = builder.get_object('astart-button')
 aenc_cbtext = builder.get_object('aenc-cbtext')
+asettings_button = builder.get_object('asettings-button')
 status_pbar = builder.get_object('status-pbar')
 log_buffer = builder.get_object('log-buffer')
 
+batch_source_fcbutton = builder.get_object('batch_source-fcbutton')
 batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
+batch_vsettings_button = builder.get_object('batch_vsettings-button')
 batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
+batch_asettings_button = builder.get_object('batch_asettings-button')
 batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
 track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
 vpy_dialog = builder.get_object('vpy-dialog')
@@ -655,13 +614,25 @@ handler = Handler()
 builder.connect_signals(handler)
 
 # Populate the encoder combos
+x264_found = False
+x264_depth = []
 for enc in vencs:
     if os.path.isfile('/usr/bin/' + enc):
-        venc_cbtext.append_text(enc)
-        batch_venc_cbtext.append_text(enc)
+        if enc == 'x264':
+            x264_depth.append('8')
+            x264_found = True
+        elif enc == 'x264-10bit':
+            x264_depth.append('10')
+            x264_found = True
+        else:
+            venc_cbtext.append_text(enc)
+            batch_venc_cbtext.append_text(enc)
         print('Found ' + enc + '.')
     else:
         vencs.pop(enc)
+if x264_found:
+    venc_cbtext.append_text('x264')
+    batch_venc_cbtext.append_text('x264')
 
 for enc in aencs:
     if os.path.isfile('/usr/bin/' + enc):
@@ -671,19 +642,31 @@ for enc in aencs:
     else:
         aencs.pop(enc)
 
-# Set the default settings
-for enc in vencs + aencs:
-    if enc == 'x264' or enc == 'x264-10bit':
-        x264_dialog = builder.get_object('x264-dialog')
-        x264_quality_spin = builder.get_object('x264_quality-spin')
-        x264_quality_spin.set_value(15)
-        x264_container_cbtext = builder.get_object('x264_container-cbtext')
-        x264_container_cbtext.set_active(3)
-        x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
-        x264_preset_cbtext.set_active(6)
-        x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
-        x264_tune_cbtext.set_active(1)
-    elif enc == 'fdkaac':
+if vencs:
+    venc_cbtext.set_active(0)
+    vsettings_button.set_sensitive(True)
+    batch_venc_cbtext.set_active(0)
+    batch_vsettings_button.set_sensitive(True)
+if aencs:
+    aenc_cbtext.set_active(0)
+    asettings_button.set_sensitive(True)
+    batch_aenc_cbtext.set_active(0)
+    batch_asettings_button.set_sensitive(True)
+
+# GUI for encoder settings
+if x264_found:
+    x264_dialog = builder.get_object('x264-dialog')
+    x264_depth_cbtext = builder.get_object('x264_depth-cbtext')
+    for dp in x264_depth:
+        x264_depth_cbtext.append_text(dp)
+    x264_depth_cbtext.set_active(0)
+    x264_quality_spin = builder.get_object('x264_quality-spin')
+    x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
+    x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
+    x264_container_cbtext = builder.get_object('x264_container-cbtext')
+
+for enc in aencs:
+    if enc == 'fdkaac':
         fdkaac_dialog = builder.get_object('fdkaac-dialog')
         fdkaac_mode_cbtext = builder.get_object('fdkaac_mode-cbtext')
         fdkaac_bitrate_spin = builder.get_object('fdkaac_bitrate-spin')
@@ -694,11 +677,6 @@ for enc in vencs + aencs:
         lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
         lame_bitrate_spin = builder.get_object('lame_bitrate-spin')
         lame_quality_spin = builder.get_object('lame_quality-spin')
-
-venc_cbtext.set_active(False)
-batch_venc_cbtext.set_active(False)
-aenc_cbtext.set_active(False)
-batch_aenc_cbtext.set_active(False)
 
 window.show_all()
 

@@ -40,22 +40,22 @@
   </object>
   <object class="GtkAdjustment" id="crop_bot-adj">
     <property name="upper">1000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="crop_left-adj">
     <property name="upper">1000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="crop_right-adj">
     <property name="upper">1000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="crop_top-adj">
     <property name="upper">1000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="fdkaac_bitrate-adj">
@@ -250,7 +250,7 @@
   </object>
   <object class="GtkAdjustment" id="hresize-adj">
     <property name="upper">10000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="lame_bitrate-adj">
@@ -596,7 +596,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <signal name="changed" handler="on_venc_changed" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -608,6 +607,7 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">vsettings-image</property>
@@ -623,6 +623,7 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">vstart-image</property>
@@ -715,7 +716,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <signal name="changed" handler="on_aenc_changed" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -727,6 +727,7 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">asettings-image</property>
@@ -806,7 +807,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <signal name="changed" handler="on_aenc_changed" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -818,10 +818,11 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">batch_asettings-image</property>
-                        <signal name="clicked" handler="on_asettings_clicked" swapped="no"/>
+                        <signal name="clicked" handler="on_batch_asettings_clicked" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">2</property>
@@ -871,7 +872,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <signal name="changed" handler="on_venc_changed" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -883,10 +883,11 @@
                         <property name="width_request">32</property>
                         <property name="height_request">32</property>
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">batch_vsettings-image</property>
-                        <signal name="clicked" handler="on_vsettings_clicked" swapped="no"/>
+                        <signal name="clicked" handler="on_batch_vsettings_clicked" swapped="no"/>
                       </object>
                       <packing>
                         <property name="left_attach">2</property>
@@ -1094,7 +1095,7 @@
   </object>
   <object class="GtkAdjustment" id="wresize-adj">
     <property name="upper">10000</property>
-    <property name="step_increment">1</property>
+    <property name="step_increment">2</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkDialog" id="vpy-dialog">
@@ -1144,6 +1145,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_tcrop-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Top</property>
                 <property name="hexpand">True</property>
@@ -1151,7 +1153,6 @@
                 <property name="adjustment">crop_top-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_tcrop_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">2</property>
@@ -1178,6 +1179,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_bcrop-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Bottom</property>
                 <property name="hexpand">True</property>
@@ -1185,7 +1187,6 @@
                 <property name="adjustment">crop_bot-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_bcrop_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">2</property>
@@ -1196,6 +1197,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_lcrop-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Left</property>
                 <property name="hexpand">True</property>
@@ -1203,7 +1205,6 @@
                 <property name="adjustment">crop_left-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_lcrop_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -1214,6 +1215,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_rcrop-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Right</property>
                 <property name="hexpand">True</property>
@@ -1221,7 +1223,6 @@
                 <property name="adjustment">crop_right-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_rcrop_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">3</property>
@@ -1247,6 +1248,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_wresize-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Width</property>
                 <property name="hexpand">True</property>
@@ -1254,7 +1256,6 @@
                 <property name="adjustment">wresize-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_wresize_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -1264,6 +1265,7 @@
             <child>
               <object class="GtkSpinButton" id="vpy_hresize-spin">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="tooltip_text" translatable="yes">Height</property>
                 <property name="hexpand">False</property>
@@ -1271,7 +1273,6 @@
                 <property name="adjustment">hresize-adj</property>
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
-                <signal name="value-changed" handler="on_vpy_hresize_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">2</property>
@@ -1281,6 +1282,7 @@
             <child>
               <object class="GtkComboBoxText" id="vpy_resize_filter-cbtext">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
                 <property name="tooltip_text" translatable="yes">Algorithm</property>
                 <property name="active">1</property>
@@ -1293,7 +1295,6 @@
                   <item translatable="yes">lanczos</item>
                   <item translatable="yes">spline</item>
                 </items>
-                <signal name="changed" handler="on_vpy_resize_filter_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">3</property>
@@ -1303,6 +1304,7 @@
             <child>
               <object class="GtkComboBoxText" id="vpy_deband_channel-cbtext">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
                 <property name="tooltip_text" translatable="yes">Channels</property>
                 <property name="hexpand">True</property>
@@ -1312,7 +1314,6 @@
                   <item translatable="yes">chroma</item>
                   <item translatable="yes">both</item>
                 </items>
-                <signal name="changed" handler="on_vpy_deband_channel_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">2</property>
@@ -1322,6 +1323,7 @@
             <child>
               <object class="GtkComboBoxText" id="vpy_deband_preset-cbtext">
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
                 <property name="tooltip_text" translatable="yes">Preset</property>
                 <property name="hexpand">True</property>
@@ -1333,7 +1335,6 @@
                   <item translatable="yes">high</item>
                   <item translatable="yes">veryhigh</item>
                 </items>
-                <signal name="changed" handler="on_vpy_deband_preset_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -1359,12 +1360,12 @@
               <object class="GtkCheckButton" id="vpy_deband_nograin-check">
                 <property name="label" translatable="yes">No grain</property>
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
                 <property name="hexpand">True</property>
                 <property name="xalign">0</property>
                 <property name="draw_indicator">True</property>
-                <signal name="toggled" handler="on_vpy_deband_nograin_toggled" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">3</property>
@@ -1380,7 +1381,6 @@
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
                 <property name="value">24000</property>
-                <signal name="value-changed" handler="on_vpy_fpsnum_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -1396,7 +1396,6 @@
                 <property name="numeric">True</property>
                 <property name="update_policy">if-valid</property>
                 <property name="value">1001</property>
-                <signal name="value-changed" handler="on_vpy_fpsden_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">3</property>
@@ -1509,31 +1508,68 @@
             <property name="row_spacing">6</property>
             <property name="column_spacing">6</property>
             <child>
-              <object class="GtkLabel" id="x264-label1">
+              <object class="GtkLabel" id="x264-label5">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Quality</property>
-                <property name="ellipsize">start</property>
+                <property name="label" translatable="yes">Container</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">0</property>
+                <property name="top_attach">4</property>
               </packing>
             </child>
             <child>
-              <object class="GtkSpinButton" id="x264_quality-spin">
+              <object class="GtkComboBoxText" id="x264_container-cbtext">
                 <property name="visible">True</property>
-                <property name="can_focus">True</property>
+                <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
-                <property name="text" translatable="yes">1</property>
-                <property name="adjustment">x264-adj</property>
-                <property name="value">15</property>
-                <signal name="value-changed" handler="on_x264_quality_changed" swapped="no"/>
+                <property name="active">3</property>
+                <items>
+                  <item translatable="yes">264</item>
+                  <item translatable="yes">flv</item>
+                  <item translatable="yes">mkv</item>
+                  <item translatable="yes">mp4</item>
+                </items>
               </object>
               <packing>
                 <property name="left_attach">1</property>
-                <property name="top_attach">0</property>
+                <property name="top_attach">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x264-label4">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Tune</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x264_tune-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">1</property>
+                <items>
+                  <item translatable="yes">film</item>
+                  <item translatable="yes">animation</item>
+                  <item translatable="yes">grain</item>
+                  <item translatable="yes">stillimage</item>
+                  <item translatable="yes">psnr</item>
+                  <item translatable="yes">ssim</item>
+                  <item translatable="yes">fastdecode</item>
+                  <item translatable="yes">zerolatency</item>
+                  <item translatable="yes">none</item>
+                </items>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">3</property>
               </packing>
             </child>
             <child>
@@ -1545,7 +1581,7 @@
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">1</property>
+                <property name="top_attach">2</property>
               </packing>
             </child>
             <child>
@@ -1567,43 +1603,6 @@
                   <item translatable="yes">placebo</item>
                   <item translatable="yes">none</item>
                 </items>
-                <signal name="changed" handler="on_x264_preset_changed" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkLabel" id="x264-label4">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="xalign">0</property>
-                <property name="label" translatable="yes">Tune</property>
-              </object>
-              <packing>
-                <property name="left_attach">0</property>
-                <property name="top_attach">2</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkComboBoxText" id="x264_tune-cbtext">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="hexpand">True</property>
-                <property name="active">1</property>
-                <items>
-                  <item translatable="yes">film</item>
-                  <item translatable="yes">animation</item>
-                  <item translatable="yes">grain</item>
-                  <item translatable="yes">stillimage</item>
-                  <item translatable="yes">psnr</item>
-                  <item translatable="yes">ssim</item>
-                  <item translatable="yes">fastdecode</item>
-                  <item translatable="yes">zerolatency</item>
-                  <item translatable="yes">none</item>
-                </items>
-                <signal name="changed" handler="on_x264_tune_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -1615,29 +1614,49 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Container</property>
+                <property name="label" translatable="yes">Quality</property>
+                <property name="ellipsize">start</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">3</property>
+                <property name="top_attach">1</property>
               </packing>
             </child>
             <child>
-              <object class="GtkComboBoxText" id="x264_container-cbtext">
+              <object class="GtkSpinButton" id="x264_quality-spin">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
-                <items>
-                  <item translatable="yes">264</item>
-                  <item translatable="yes">flv</item>
-                  <item translatable="yes">mkv</item>
-                  <item translatable="yes">mp4</item>
-                </items>
-                <signal name="changed" handler="on_x264_container_changed" swapped="no"/>
+                <property name="text" translatable="yes">18</property>
+                <property name="adjustment">x264-adj</property>
+                <property name="value">18</property>
               </object>
               <packing>
                 <property name="left_attach">1</property>
-                <property name="top_attach">3</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x264-label1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Depth</property>
+                <property name="ellipsize">start</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x264_depth-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">0</property>
               </packing>
             </child>
           </object>
