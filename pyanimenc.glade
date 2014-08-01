@@ -1554,7 +1554,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
-                <property name="active">1</property>
+                <property name="active">8</property>
                 <items>
                   <item translatable="yes">film</item>
                   <item translatable="yes">animation</item>
@@ -1589,7 +1589,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
-                <property name="active">6</property>
+                <property name="active">5</property>
                 <items>
                   <item translatable="yes">ultrafast</item>
                   <item translatable="yes">superfast</item>
@@ -1651,6 +1651,214 @@
             </child>
             <child>
               <object class="GtkComboBoxText" id="x264_depth-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+  <object class="GtkAdjustment" id="x265-adj">
+    <property name="lower">1</property>
+    <property name="upper">51</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">5</property>
+  </object>
+  <object class="GtkDialog" id="x265-dialog">
+    <property name="width_request">320</property>
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">x265 settings</property>
+    <property name="destroy_with_parent">True</property>
+    <property name="type_hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="x265-vbox">
+        <property name="can_focus">False</property>
+        <property name="margin_top">6</property>
+        <property name="margin_bottom">6</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">6</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="x265-action_area">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="x265_ok-button">
+                <property name="label" translatable="yes">OK</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <signal name="clicked" handler="on_x265_ok_clicked" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkGrid" id="x265-grid">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="margin_top">6</property>
+            <property name="margin_bottom">6</property>
+            <property name="row_spacing">6</property>
+            <property name="column_spacing">6</property>
+            <child>
+              <object class="GtkLabel" id="x265-label5">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Container</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x265_container-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">0</property>
+                <items>
+                  <item translatable="yes">265</item>
+                </items>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x265-label4">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Tune</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x265_tune-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">4</property>
+                <items>
+                  <item translatable="yes">psnr</item>
+                  <item translatable="yes">ssim</item>
+                  <item translatable="yes">fastdecode</item>
+                  <item translatable="yes">zerolatency</item>
+                  <item translatable="yes">none</item>
+                </items>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x265-label3">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Preset</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x265_preset-cbtext">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="active">5</property>
+                <items>
+                  <item translatable="yes">ultrafast</item>
+                  <item translatable="yes">superfast</item>
+                  <item translatable="yes">veryfast</item>
+                  <item translatable="yes">faster</item>
+                  <item translatable="yes">fast</item>
+                  <item translatable="yes">medium</item>
+                  <item translatable="yes">slow</item>
+                  <item translatable="yes">slower</item>
+                  <item translatable="yes">veryslow</item>
+                  <item translatable="yes">placebo</item>
+                  <item translatable="yes">none</item>
+                </items>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x265-label2">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Quality</property>
+                <property name="ellipsize">start</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="x265_quality-spin">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="text" translatable="yes">18</property>
+                <property name="adjustment">x265-adj</property>
+                <property name="value">18</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="x265-label1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="label" translatable="yes">Depth</property>
+                <property name="ellipsize">start</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="x265_depth-cbtext">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
               </object>

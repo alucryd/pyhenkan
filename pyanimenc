@@ -51,6 +51,17 @@ class Handler:
                 t = ''
             c = x264_container_cbtext.get_active_text()
             self.queue.submit(self.x264, s, d, dp, q, p, t, c)
+        elif x == 'x265':
+            dp = int(x265_depth_cbtext.get_active_text())
+            q = x265_quality_spin.get_value_as_int()
+            p = x265_preset_cbtext.get_active_text()
+            if p == 'none':
+                p = ''
+            t = x265_tune_cbtext.get_active_text()
+            if t == 'none':
+                t = ''
+            c = x265_container_cbtext.get_active_text()
+            self.queue.submit(self.x265, s, d, dp, q, p, t, c)
 
     def on_astart_clicked(self, button):
         x = aenc_cbtext.get_active_text()
@@ -242,15 +253,6 @@ class Handler:
                     f = wd + '/' + f
                     stracks.append([j, f, e, n, l, t])
 
-            # Extract tracks
-            # Only extract audio tracks that need transcoding.
-            tracks = []
-            for track in atracks:
-                if track[5]:
-                    tracks.append(track)
-
-            self.queue.submit(self.extract, s, tracks)
-
             if vtrack[5]:
                 vtrack[0] = 0
                 # Create VapourSynth script
@@ -295,15 +297,34 @@ class Handler:
                     if t == 'none':
                         t = ''
                     c = x264_container_cbtext.get_active_text()
+                    vtrack[2] = c
 
                     self.queue.submit(self.x264, s, vtrack[1], dp, q, p, t, c)
-                    vtrack[2] = 'mp4'
+                if x == 'x265':
+                    dp = int(x265_depth_cbtext.get_active_text())
+                    q = x265_quality_spin.get_value_as_int()
+                    p = x265_preset_cbtext.get_active_text()
+                    if p == 'none':
+                        p = ''
+                    t = x265_tune_cbtext.get_active_text()
+                    if t == 'none':
+                        t = ''
+                    c = x265_container_cbtext.get_active_text()
+                    vtrack[2] = c
+
+                    self.queue.submit(self.x265, s, vtrack[1], dp, q, p, t, c)
+
+            # Extract audio
+            tracks = []
+            for track in atracks:
+                if track[5]:
+                    tracks.append(track)
+
+            self.queue.submit(self.extract, s, tracks)
 
             # Encode audio
-            for i in range(len(atracks)):
-                track = atracks[i]
+            for track in atracks:
                 if track[5]:
-                    track[0] = 0
                     x = batch_aenc_cbtext.get_active_text()
                     a = track[1] + '.' + track[2]
                     if x == 'fdkaac':
@@ -313,7 +334,6 @@ class Handler:
                         c = fdkaac_container_cbtext.get_active_text()
 
                         self.queue.submit(self.fdkaac, a, track[1], m, b, q, c)
-                        track[2] = c
 
                     elif x == 'lame':
                         m = lame_mode_cbtext.get_active_text()
@@ -321,7 +341,6 @@ class Handler:
                         q = lame_quality_spin.get_value_as_int()
 
                         self.queue.submit(self.lame, a, track[1], m, b, q)
-                        track[2] = 'mp3'
 
             # Merge tracks
             o = wd + '/out/' + os.path.basename(s)
@@ -345,6 +364,18 @@ class Handler:
         #            break
 
     def merge(self, source, dest, vtrack, atracks, stracks, uid):
+        # Put that here until I figure out why it screws the extract step when
+        # done above.
+        for track in atracks:
+            if track[5]:
+                track[0] = 0
+                x = batch_aenc_cbtext.get_active_text()
+                if x == 'fdkaac':
+                    c = fdkaac_container_cbtext.get_active_text()
+                    track[2] = c
+                elif x == 'lame':
+                    track[2] = 'mp3'
+
         cmd = MatroskaOps(source).merge(dest, vtrack, atracks, stracks, uid)
         print(cmd)
         subprocess.call(cmd, shell=True)
@@ -428,6 +459,12 @@ class Handler:
         #            status_pbar.set_fraction(1)
         #            break
 
+    def x265(self, source, dest, depth, quality, preset, tune, container):
+        cmd = Encode(source).x265(dest, depth, quality, preset, tune,
+                                  container)
+        print(cmd)
+        subprocess.call(cmd, shell=True)
+
     def fdkaac(self, source, dest, mode, bitrate, quality, container):
         cmd = Encode(source).fdkaac(dest, mode, bitrate, quality, container)
         print(cmd)
@@ -503,14 +540,21 @@ class Handler:
         x = venc_cbtext.get_active_text()
         if x in ['x264', 'x264-10bit']:
             x264_dialog.run()
+        elif x in ['x265', 'x265-10bit']:
+            x265_dialog.run()
 
     def on_batch_vsettings_clicked(self, button):
         x = batch_venc_cbtext.get_active_text()
         if x in ['x264', 'x264-10bit']:
             x264_dialog.run()
+        if x in ['x265', 'x265-10bit']:
+            x265_dialog.run()
 
     def on_x264_ok_clicked(self, button):
         x264_dialog.hide()
+
+    def on_x265_ok_clicked(self, button):
+        x265_dialog.hide()
 
     def on_asettings_clicked(self, button):
         x = aenc_cbtext.get_active_text()
@@ -557,7 +601,7 @@ class Handler:
         Gtk.main_quit(*args)
 
 # Some constants and variables
-vencs = ['x264', 'x264-10bit']
+vencs = ['x264', 'x264-10bit', 'x265', 'x265-10bit']
 vcontainers = ['avi', 'mkv', 'mp4', 'ogm']
 vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
 aencs = ['fdkaac', 'lame']
@@ -615,6 +659,8 @@ builder.connect_signals(handler)
 # Populate the encoder combos
 x264_found = False
 x264_depth = []
+x265_found = False
+x265_depth = []
 for enc in vencs:
     if os.path.isfile('/usr/bin/' + enc):
         if enc == 'x264':
@@ -623,15 +669,24 @@ for enc in vencs:
         elif enc == 'x264-10bit':
             x264_depth.append('10')
             x264_found = True
+        elif enc == 'x265':
+            x265_depth.append('8')
+            x265_found = True
+        elif enc == 'x265-10bit':
+            x265_depth.append('10')
+            x265_found = True
         else:
             venc_cbtext.append_text(enc)
             batch_venc_cbtext.append_text(enc)
         print('Found ' + enc + '.')
     else:
-        vencs.pop(enc)
+        vencs.pop(vencs.index(enc))
 if x264_found:
     venc_cbtext.append_text('x264')
     batch_venc_cbtext.append_text('x264')
+if x265_found:
+    venc_cbtext.append_text('x265')
+    batch_venc_cbtext.append_text('x265')
 
 for enc in aencs:
     if os.path.isfile('/usr/bin/' + enc):
@@ -639,7 +694,7 @@ for enc in aencs:
         batch_aenc_cbtext.append_text(enc)
         print('Found ' + enc + '.')
     else:
-        aencs.pop(enc)
+        aencs.pop(aencs.index(enc))
 
 if vencs:
     venc_cbtext.set_active(0)
@@ -663,6 +718,16 @@ if x264_found:
     x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
     x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
     x264_container_cbtext = builder.get_object('x264_container-cbtext')
+if x265_found:
+    x265_dialog = builder.get_object('x265-dialog')
+    x265_depth_cbtext = builder.get_object('x265_depth-cbtext')
+    for dp in x265_depth:
+        x265_depth_cbtext.append_text(dp)
+    x265_depth_cbtext.set_active(0)
+    x265_quality_spin = builder.get_object('x265_quality-spin')
+    x265_preset_cbtext = builder.get_object('x265_preset-cbtext')
+    x265_tune_cbtext = builder.get_object('x265_tune-cbtext')
+    x265_container_cbtext = builder.get_object('x265_container-cbtext')
 
 for enc in aencs:
     if enc == 'fdkaac':

@@ -156,7 +156,7 @@ class Encode:
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x264(self, o='', d=8, q=18, p='', t='', c='mp4'):
+    def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4'):
         if not o:
             o = self.sname
         dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
@@ -165,6 +165,22 @@ class Encode:
         elif d == 10:
             x = 'x264-10bit'
         enc = '{} - --crf {} --demuxer y4m --output "{}.{}"'.format(x, q, o, c)
+        if p:
+            enc = enc + ' --preset ' + p
+        if t:
+            enc = enc + ' --tune ' + t
+        cmd = ' | '.join([dec, enc])
+        return cmd
+
+    def x265(self, o='', d=8, q=18, p='medium', t='', c='265'):
+        if not o:
+            o = self.sname
+        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
+        if d == 8:
+            x = 'x265'
+        elif d == 10:
+            x = 'x265-10bit'
+        enc = '{} - --crf {} --y4m --output "{}.{}"'.format(x, q, o, c)
         if p:
             enc = enc + ' --preset ' + p
         if t:
