@@ -67,23 +67,23 @@ class MatroskaOps:
     def merge(self, output, vtrack, atracks=[], stracks=[], uid=''):
         # [[id, filename, extension, name, language]...]
         x = 'mkvmerge -o "{}" -D -A -S -T "{}"'.format(output, self.source)
-        v = ('-A -S -M -T -d {} --no-global-tags --no-chapters '
-             '--track-name {}:"{}" --language {}:"{}" "{}"'
-            ).format(vtrack[0], vtrack[0], vtrack[3], vtrack[0], vtrack[4],
+        v = '-A -S -M -T -d {} --no-global-tags --no-chapters '
+        v = v + '--track-name {}:"{}" --language {}:"{}" "{}"'
+        v = v.format(vtrack[0], vtrack[0], vtrack[3], vtrack[0], vtrack[4],
                      vtrack[1] + '.' + vtrack[2])
         cmd = [x, v]
         if atracks:
             for track in atracks:
-                a = ('-D -S -M -T -a {} --no-global-tags --no-chapters '
-                     '--track-name {}:"{}" --language {}:"{}" "{}"'
-                    ).format(track[0], track[0], track[3], track[0], track[4],
+                a = '-D -S -M -T -a {} --no-global-tags --no-chapters '
+                a = a + '--track-name {}:"{}" --language {}:"{}" "{}"'
+                a = a.format(track[0], track[0], track[3], track[0], track[4],
                              track[1] + '.' + track[2])
                 cmd.append(a)
         if stracks:
             for track in stracks:
-                s = ('-D -A -M -T -s {} --no-global-tags --no-chapters '
-                     '--track-name {}:"{}" --language {}:"{}" "{}"'
-                    ).format(track[0], track[0], track[3], track[0], track[4],
+                s = '-D -A -M -T -s {} --no-global-tags --no-chapters '
+                s = s + '--track-name {}:"{}" --language {}:"{}" "{}"'
+                s = s.format(track[0], track[0], track[3], track[0], track[4],
                              track[1] + '.' + track[2])
                 cmd.append(s)
         if uid:
@@ -145,6 +145,47 @@ class Encode:
     def __init__(self, source):
         self.source = source
         self.sname = os.path.splitext(self.source)[0]
+
+    def vpy(self, f=[], c=[], r=[], sd=[], td=[], std=[], d=[]):
+        s = 'import vapoursynth as vs\n'
+        s = s + 'core = vs.get_core()\n'
+        s = s + 'clip = core.ffms2.Source("{}"'.format(self.source)
+        if f:
+            s = s + ', fpsnum={}, fpsden={}'.format(f[0], f[1])
+        s = s + ')\n'
+        if sd:
+            if sd[0] == 'RemoveGrain':
+                s = s + 'clip = core.rgvs.RemoveGrain(clip, mode={})\n'
+                s = s.format(sd[1])
+        if td:
+            if td[0] == 'TemporalSoften':
+                s = s + 'clip = core.focus.TemporalSoften(clip, radius={}, '
+                s = s + 'luma_threshold={}, chroma_threshold={}, '
+                s = s + 'scenechange={})\n'
+                s = s.format(td[1], td[2], td[3], td[4])
+            elif td[0] == 'FluxSmoothT':
+                s = s +'clip = core.flux.SmoothT(clip, temporal_threshold={}, '
+                s = s + 'planes={})\n'
+                s = s.format(td[1], td[2])
+        if std:
+            if std[0] == 'FluxSmoothST':
+                s = s + 'clip = core.flux.SmoothST(clip, '
+                s = s + 'temporal_threshold={}, spatial_threshold={}, '
+                s = s + 'planes={})\n'
+                s = s.format(std[1], std[2], std[3])
+        if d:
+            if d[0] == 'f3kdb':
+                s = s + 'clip = core.f3kdb.Deband(clip, preset="{}", '
+                s = s + 'output_depth={})\n'
+                s = s.format(d[1], d[2])
+        if c:
+            s = s + 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
+            s = s.format(c[0], c[1], c[2], c[3])
+        if r:
+            s = s + 'clip = core.resize.{}(clip, {}, {})\n'
+            s = s.format(r[2].capitalize(), r[0], r[1])
+        s = s + 'clip.set_output()'
+        return s
 
     def info(self):
         cmd = 'vspipe "{}.vpy" - -info'.format(self.sname)

@@ -27,15 +27,15 @@ class Handler:
         cmd = '/usr/lib/python3.4/site-packages/pyanimenc/chapter-editor.py'
         subprocess.call(cmd)
 
-    def on_vsource_file_set(self, button):
-        vstart_button.set_sensitive(True)
+    def on_vsrc_set(self, button):
+        vqueue_button.set_sensitive(True)
 
-    def on_asource_file_set(self, button):
-        astart_button.set_sensitive(True)
+    def on_asrc_set(self, button):
+        aqueue_button.set_sensitive(True)
 
-    def on_vstart_clicked(self, button):
+    def on_vqueue_clicked(self, button):
         x = venc_cbtext.get_active_text()
-        s = vsource_fcbutton.get_filename()
+        s = vsrc_fcbutton.get_filename()
         wd = os.path.dirname(s)
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
@@ -63,9 +63,9 @@ class Handler:
             c = x265_container_cbtext.get_active_text()
             self.queue.submit(self.x265, s, d, dp, q, p, t, c)
 
-    def on_astart_clicked(self, button):
+    def on_aqueue_clicked(self, button):
         x = aenc_cbtext.get_active_text()
-        s = asource_fcbutton.get_filename()
+        s = asrc_fcbutton.get_filename()
         wd = os.path.dirname(s)
         if not os.path.isdir(f + '/out'):
             os.mkdir(wd + '/out')
@@ -82,7 +82,7 @@ class Handler:
             q = lame_quality_spin.get_value_as_int()
             self.queue.submit(self.lame, s, d, m, b, q)
 
-    def on_batch_source_set(self, button):
+    def on_batch_src_set(self, button):
         wd = button.get_filename()
         self.sources = []
         self.data = []
@@ -90,7 +90,7 @@ class Handler:
 
         # Keep videos only
         for f in os.listdir(wd):
-            for cont in vcontainers:
+            for cont in vconts:
                 if re.search('\.' + cont + '$', f):
                     f = wd + '/' + f
                     self.sources.append(f)
@@ -150,6 +150,7 @@ class Handler:
                     error.set_text(t)
                     track_mismatch_dialog.run()
         self.update_tracks()
+        batch_queue_button.set_sensitive(True)
 
     def update_tracks(self):
         # A new builder instance needs to be created for each entry,
@@ -192,6 +193,8 @@ class Handler:
                     channels = '2.0'
                 elif channels == '6':
                     channels = '5.1'
+                elif channels == '7':
+                    channels = '6.1'
                 elif channels == '8':
                     channels = '7.1'
                 codec = atypes[codec]
@@ -216,8 +219,8 @@ class Handler:
     def on_track_mismatch_ok_clicked(self, button):
         track_mismatch_dialog.hide()
 
-    def on_batch_start_clicked(self, button):
-        wd = batch_source_fcbutton.get_filename()
+    def on_batch_queue_clicked(self, button):
+        wd = batch_src_fcbutton.get_filename()
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
 
@@ -256,34 +259,82 @@ class Handler:
             if vtrack[5]:
                 vtrack[0] = 0
                 # Create VapourSynth script
-                c = []
-                d = ''
-                r = []
+                fps = []
+                if fps_check.get_active():
+                    fn = fpsnum_spin.get_value_as_int()
+                    fd = fpsden_spin.get_value_as_int()
+                    fps = [fn, fd]
+                crop = []
+                if crop_check.get_active():
+                    cl = lcrop_spin.get_value_as_int()
+                    cr = rcrop_spin.get_value_as_int()
+                    ct = tcrop_spin.get_value_as_int()
+                    cb = bcrop_spin.get_value_as_int()
+                    crop = [cl, cr, ct, cb]
+                resize = []
+                if resize_check.get_active():
+                    rw = wresize_spin.get_value_as_int()
+                    rh = hresize_spin.get_value_as_int()
+                    rf = resize_algo_cbtext.get_active_text()
+                    resize = [rw, rh, rf]
+                sdenoise = []
+                if sdenoise_check.get_active():
+                    sdf = sdenoise_cbtext.get_active_text()
+                    if sdf == 'RemoveGrain':
+                        rgm = [rgvs_mode_spin.get_value_as_int()]
+                        if rgvs_adv_check.get_active():
+                            rgm.append(rgvs_umode_spin.get_value_as_int())
+                            rgm.append(rgvs_vmode_spin.get_value_as_int())
+                        sdenoise = [sdf, rgm]
+                tdenoise = []
+                if tdenoise_check.get_active():
+                    tdf = tdenoise_cbtext.get_active_text()
+                    if tdf == 'TemporalSoften':
+                        tsr = tsoft_rad_spin.get_value_as_int()
+                        tsl = tsoft_lt_spin.get_value_as_int()
+                        tsc = tsoft_ct_spin.get_value_as_int()
+                        tss = tsoft_sc_spin.get_value_as_int()
+                        tdenoise = [tdf, tsr, tsl, tsc, tss]
+                    elif tdf == 'FluxSmoothT':
+                        fst = fsmooth_tt_spin.get_value_as_int()
+                        fsp = []
+                        if fsmooth_yplane_check.get_active():
+                            fsp.append(0)
+                        if fsmooth_uplane_check.get_active():
+                            fsp.append(1)
+                        if fsmooth_vplane_check.get_active():
+                            fsp.append(2)
+                        tdenoise = [tdf, fst, fsp]
+                stdenoise = []
+                if stdenoise_check.get_active():
+                    stdf = stdenoise_cbtext.get_active_text()
+                    if stdf == 'FluxSmoothST':
+                        fst = fsmooth_tt_spin.get_value_as_int()
+                        fss = fsmooth_st_spin.get_value_as_int()
+                        fsp = []
+                        if fsmooth_yplane_check.get_active():
+                            fsp.append(0)
+                        if fsmooth_uplane_check.get_active():
+                            fsp.append(1)
+                        if fsmooth_vplane_check.get_active():
+                            fsp.append(2)
+                        stdenoise = [stdf, fst, fss, fsp]
+                deband = []
+                if deband_check.get_active():
+                    df = deband_cbtext.get_active_text()
+                    if df == 'f3kdb':
+                        fpr = f3kdb_preset_cbtext.get_active_text()
+                        fpl = f3kdb_planes_cbtext.get_active_text()
+                        fdp = f3kdb_depth_spin.get_value_as_int()
+                        if fpl in ['luma', 'chroma']:
+                            fpr = fpr + '/' + fpl
+                        if not f3kdb_grain_check.get_active():
+                            fpr = fpr + '/nograin'
+                        deband = [df, fpr, fdp]
 
-                fn = vpy_fpsnum_spin.get_value_as_int()
-                fd = vpy_fpsden_spin.get_value_as_int()
-                if vpy_crop_check.get_active():
-                    cl = vpy_lcrop_spin.get_value_as_int()
-                    cr = vpy_rcrop_spin.get_value_as_int()
-                    ct = vpy_tcrop_spin.get_value_as_int()
-                    cb = vpy_bcrop_spin.get_value_as_int()
-                    c = [cl, cr, ct, cb]
-                if vpy_deband_check.get_active():
-                    pr = vpy_deband_preset_cbtext.get_active_text()
-                    ch = vpy_deband_channel_cbtext.get_active_text()
-                    ng = vpy_deband_nograin_check.get_active()
-                    d = pr
-                    if ch in ['luma', 'chroma']:
-                        d = d + '/' + ch
-                    if ng:
-                        d = d + '/nograin'
-                if vpy_resize_check.get_active():
-                    rw = vpy_wresize_spin.get_value_as_int()
-                    rh = vpy_hresize_spin.get_value_as_int()
-                    rf = vpy_resize_filter_cbtext.get_active_text()
-                    r = [rw, rh, rf]
-
-                self.queue.submit(self.vpy, s, fn, fd, c, d, r)
+                #self.queue.submit(self.vpy, s, fps, crop, resize, sdenoise,
+                #                  tdenoise, stdenoise, deband)
+                self.vpy(s, fps, crop, resize, sdenoise, tdenoise, stdenoise, deband)
 
                 # Encode video
                 x = batch_venc_cbtext.get_active_text()
@@ -397,33 +448,15 @@ class Handler:
             if not re.search('\.mkv$', f):
                 os.remove(directory + '/out/' + f)
 
-    def vpy(self, source, fpsnum, fpsden, crop, deband, resize):
-        v = ''
-        s = ''
-        c = ''
-        d = ''
-        r = ''
-
-        v = 'import vapoursynth as vs\n'
-        v = v + 'core = vs.get_core()\n'
-        s = 'clip = core.ffms2.Source("{}", fpsnum={}, fpsden={})\n'
-        s = s.format(source, fpsnum, fpsden)
-        if crop:
-            c = 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
-            c = c.format(crop[0], crop[1], crop[2], crop[3])
-        if deband:
-            d = 'clip = core.f3kdb.Deband(clip, preset="{}", '
-            d = d + 'output_depth=16)\n'
-            d = d.format(deband)
-        if resize:
-            r = 'clip = core.resize.{}(clip, {}, {})\n'
-            r = r.format(resize[2].capitalize(), resize[0], resize[1])
-        v = v + s + c + d + r
-        v = v + 'clip.set_output()'
-
+    def vpy(self, source, fps, crop, resize, sdenoise, tdenoise, stdenoise,
+            deband):
+        s = Encode(source).vpy(fps, crop, resize, sdenoise, tdenoise,
+                               stdenoise, deband)
+        print(s)
         vpy = re.sub('[^.]*$', 'vpy', source)
+        print(vpy)
         with open(vpy, 'w') as f:
-            f.write(v)
+            f.write(s)
 
     def x264(self, source, dest, depth, quality, preset, tune, container):
         #cmd = Encode(source).info()
@@ -499,30 +532,90 @@ class Handler:
     def on_stop_clicked(self, button):
         self.queue.shutdown()
 
-    def on_batch_vpy_clicked(self, button):
+    def on_batch_sconf_clicked(self, button):
         vpy_dialog.run()
-
-    def on_vpy_crop_toggled(self, check):
-        state = check.get_active()
-        vpy_lcrop_spin.set_sensitive(state)
-        vpy_rcrop_spin.set_sensitive(state)
-        vpy_tcrop_spin.set_sensitive(state)
-        vpy_bcrop_spin.set_sensitive(state)
-
-    def on_vpy_resize_toggled(self, check):
-        state = check.get_active()
-        vpy_wresize_spin.set_sensitive(state)
-        vpy_hresize_spin.set_sensitive(state)
-        vpy_resize_filter_cbtext.set_sensitive(state)
-
-    def on_vpy_deband_toggled(self, check):
-        state = check.get_active()
-        vpy_deband_preset_cbtext.set_sensitive(state)
-        vpy_deband_channel_cbtext.set_sensitive(state)
-        vpy_deband_nograin_check.set_sensitive(state)
 
     def on_vpy_ok_clicked(self, button):
         vpy_dialog.hide()
+
+    def on_fps_toggled(self, check):
+        state = check.get_active()
+        fpsnum_spin.set_sensitive(state)
+        fpsden_spin.set_sensitive(state)
+
+    def on_crop_toggled(self, check):
+        state = check.get_active()
+        lcrop_spin.set_sensitive(state)
+        rcrop_spin.set_sensitive(state)
+        tcrop_spin.set_sensitive(state)
+        bcrop_spin.set_sensitive(state)
+
+    def on_resize_toggled(self, check):
+        state = check.get_active()
+        wresize_spin.set_sensitive(state)
+        hresize_spin.set_sensitive(state)
+        resize_algo_cbtext.set_sensitive(state)
+
+    def on_sdenoise_toggled(self, check):
+        state = check.get_active()
+        sdenoise_cbtext.set_sensitive(state)
+        sdenoise_conf_button.set_sensitive(state)
+
+    def on_sdenoise_conf_clicked(self, button):
+        f = sdenoise_cbtext.get_active_text()
+        if f == 'RemoveGrain':
+            rgvs_dialog.run()
+
+    def on_tdenoise_toggled(self, check):
+        state = check.get_active()
+        tdenoise_cbtext.set_sensitive(state)
+        tdenoise_conf_button.set_sensitive(state)
+
+    def on_tdenoise_conf_clicked(self, button):
+        f = tdenoise_cbtext.get_active_text()
+        if f == 'TemporalSoften':
+            tsoft_dialog.run()
+        elif f == 'FluxSmoothT':
+            fsmooth_st_spin.set_sensitive(False)
+            fsmooth_dialog.run()
+
+    def on_stdenoise_toggled(self, check):
+        state = check.get_active()
+        stdenoise_cbtext.set_sensitive(state)
+        stdenoise_conf_button.set_sensitive(state)
+
+    def on_stdenoise_conf_clicked(self, button):
+        f = stdenoise_cbtext.get_active_text()
+        if f == 'FluxSmoothST':
+            fsmooth_st_spin.set_sensitive(True)
+            fsmooth_dialog.run()
+
+    def on_rgvs_adv_toggled(self, check):
+        state = check.get_active()
+        rgvs_umode_spin.set_sensitive(state)
+        rgvs_vmode_spin.set_sensitive(state)
+
+    def on_rgvs_ok_clicked(self, button):
+        rgvs_dialog.hide()
+
+    def on_tsoft_ok_clicked(self, button):
+        tsoft_dialog.hide()
+
+    def on_fsmooth_ok_clicked(self, button):
+        fsmooth_dialog.hide()
+
+    def on_deband_toggled(self, check):
+        state = check.get_active()
+        deband_cbtext.set_sensitive(state)
+        deband_conf_button.set_sensitive(state)
+
+    def on_deband_conf_clicked(self, button):
+        f = deband_cbtext.get_active_text()
+        if f == 'f3kdb':
+            f3kdb_dialog.run()
+
+    def on_f3kdb_ok_clicked(self, button):
+        f3kdb_dialog.hide()
 
     def on_track_name_changed(self, entry, i):
         self.tracks[i][2] = entry.get_text()
@@ -536,14 +629,14 @@ class Handler:
     def on_track_encode_toggled(self, check, i):
         self.tracks[i][5] = check.get_active()
 
-    def on_vsettings_clicked(self, button):
+    def on_vconf_clicked(self, button):
         x = venc_cbtext.get_active_text()
         if x in ['x264', 'x264-10bit']:
             x264_dialog.run()
         elif x in ['x265', 'x265-10bit']:
             x265_dialog.run()
 
-    def on_batch_vsettings_clicked(self, button):
+    def on_batch_vconf_clicked(self, button):
         x = batch_venc_cbtext.get_active_text()
         if x in ['x264', 'x264-10bit']:
             x264_dialog.run()
@@ -556,14 +649,14 @@ class Handler:
     def on_x265_ok_clicked(self, button):
         x265_dialog.hide()
 
-    def on_asettings_clicked(self, button):
+    def on_aconf_clicked(self, button):
         x = aenc_cbtext.get_active_text()
         if x == 'fdkaac':
             fdkaac_dialog.run()
         elif x == 'lame':
             lame_dialog.run()
 
-    def on_batch_asettings_clicked(self, button):
+    def on_batch_aconf_clicked(self, button):
         x = batch_aenc_cbtext.get_active_text()
         if x == 'fdkaac':
             fdkaac_dialog.run()
@@ -602,10 +695,10 @@ class Handler:
 
 # Some constants and variables
 vencs = ['x264', 'x264-10bit', 'x265', 'x265-10bit']
-vcontainers = ['avi', 'mkv', 'mp4', 'ogm']
+vconts = ['avi', 'mkv', 'mp4', 'ogm']
 vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
 aencs = ['fdkaac', 'lame']
-acontainers= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
+aconts= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
               'wv']
 atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
           'A_MP3': 'mp3', 'A_TRUEHD': 'thd', 'A_VORBIS': 'ogg',
@@ -613,54 +706,37 @@ atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
 stypes = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
           'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
-# Build the GUI
+# Main GUI
 builder = Gtk.Builder()
 builder.add_from_file('/usr/share/pyanimenc/pyanimenc.glade')
 
 window = builder.get_object('window')
-vsource_fcbutton = builder.get_object('vsource-fcbutton')
-vstart_button = builder.get_object('vstart-button')
+vsrc_fcbutton = builder.get_object('vsrc-fcbutton')
+vqueue_button = builder.get_object('vqueue-button')
 venc_cbtext = builder.get_object('venc-cbtext')
-vsettings_button = builder.get_object('vsettings-button')
-asource_fcbutton = builder.get_object('asource-fcbutton')
-astart_button = builder.get_object('astart-button')
+vconf_button = builder.get_object('vconf-button')
+asrc_fcbutton = builder.get_object('asrc-fcbutton')
+aqueue_button = builder.get_object('aqueue-button')
 aenc_cbtext = builder.get_object('aenc-cbtext')
-asettings_button = builder.get_object('asettings-button')
+aconf_button = builder.get_object('aconf-button')
 status_pbar = builder.get_object('status-pbar')
 log_buffer = builder.get_object('log-buffer')
 
-batch_source_fcbutton = builder.get_object('batch_source-fcbutton')
+batch_src_fcbutton = builder.get_object('batch_src-fcbutton')
 batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
-batch_vsettings_button = builder.get_object('batch_vsettings-button')
+batch_vconf_button = builder.get_object('batch_vconf-button')
 batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
-batch_asettings_button = builder.get_object('batch_asettings-button')
+batch_aconf_button = builder.get_object('batch_aconf-button')
+batch_queue_button = builder.get_object('batch_queue-button')
 batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
 track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
-vpy_dialog = builder.get_object('vpy-dialog')
-vpy_crop_check = builder.get_object('vpy_crop-check')
-vpy_lcrop_spin = builder.get_object('vpy_lcrop-spin')
-vpy_rcrop_spin = builder.get_object('vpy_rcrop-spin')
-vpy_tcrop_spin = builder.get_object('vpy_tcrop-spin')
-vpy_bcrop_spin = builder.get_object('vpy_bcrop-spin')
-vpy_resize_check = builder.get_object('vpy_resize-check')
-vpy_wresize_spin = builder.get_object('vpy_wresize-spin')
-vpy_hresize_spin = builder.get_object('vpy_hresize-spin')
-vpy_resize_filter_cbtext = builder.get_object('vpy_resize_filter-cbtext')
-vpy_deband_check = builder.get_object('vpy_deband-check')
-vpy_deband_preset_cbtext = builder.get_object('vpy_deband_preset-cbtext')
-vpy_deband_channel_cbtext = builder.get_object('vpy_deband_channel-cbtext')
-vpy_deband_nograin_check = builder.get_object('vpy_deband_nograin-check')
-vpy_fpsnum_spin = builder.get_object('vpy_fpsnum-spin')
-vpy_fpsden_spin = builder.get_object('vpy_fpsden-spin')
 
-handler = Handler()
-builder.connect_signals(handler)
-
-# Populate the encoder combos
+# Encoders settings
 x264_found = False
 x264_depth = []
 x265_found = False
 x265_depth = []
+
 for enc in vencs:
     if os.path.isfile('/usr/bin/' + enc):
         if enc == 'x264':
@@ -681,6 +757,7 @@ for enc in vencs:
         print('Found ' + enc + '.')
     else:
         vencs.pop(vencs.index(enc))
+
 if x264_found:
     venc_cbtext.append_text('x264')
     batch_venc_cbtext.append_text('x264')
@@ -698,16 +775,18 @@ for enc in aencs:
 
 if vencs:
     venc_cbtext.set_active(0)
-    vsettings_button.set_sensitive(True)
+    vconf_button.set_sensitive(True)
     batch_venc_cbtext.set_active(0)
-    batch_vsettings_button.set_sensitive(True)
+    batch_vconf_button.set_sensitive(True)
 if aencs:
     aenc_cbtext.set_active(0)
-    asettings_button.set_sensitive(True)
+    aconf_button.set_sensitive(True)
     batch_aenc_cbtext.set_active(0)
-    batch_asettings_button.set_sensitive(True)
+    batch_aconf_button.set_sensitive(True)
 
-# GUI for encoder settings
+# Encoder settings
+builder.add_from_file('/usr/share/pyanimenc/encoders.glade')
+
 if x264_found:
     x264_dialog = builder.get_object('x264-dialog')
     x264_depth_cbtext = builder.get_object('x264_depth-cbtext')
@@ -718,6 +797,7 @@ if x264_found:
     x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
     x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
     x264_container_cbtext = builder.get_object('x264_container-cbtext')
+
 if x265_found:
     x265_dialog = builder.get_object('x265-dialog')
     x265_depth_cbtext = builder.get_object('x265_depth-cbtext')
@@ -741,6 +821,67 @@ for enc in aencs:
         lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
         lame_bitrate_spin = builder.get_object('lame_bitrate-spin')
         lame_quality_spin = builder.get_object('lame_quality-spin')
+
+# VapourSynth settings
+builder.add_from_file('/usr/share/pyanimenc/filters.glade')
+
+vpy_dialog = builder.get_object('vpy-dialog')
+fps_check = builder.get_object('fps-check')
+fpsnum_spin = builder.get_object('fpsnum-spin')
+fpsden_spin = builder.get_object('fpsden-spin')
+crop_check = builder.get_object('crop-check')
+lcrop_spin = builder.get_object('lcrop-spin')
+rcrop_spin = builder.get_object('rcrop-spin')
+tcrop_spin = builder.get_object('tcrop-spin')
+bcrop_spin = builder.get_object('bcrop-spin')
+resize_check = builder.get_object('resize-check')
+wresize_spin = builder.get_object('wresize-spin')
+hresize_spin = builder.get_object('hresize-spin')
+resize_algo_cbtext = builder.get_object('resize_algo-cbtext')
+
+sdenoise_check = builder.get_object('sdenoise-check')
+sdenoise_cbtext = builder.get_object('sdenoise-cbtext')
+sdenoise_conf_button = builder.get_object('sdenoise_conf-button')
+rgvs_dialog = builder.get_object('rgvs-dialog')
+rgvs_mode_spin = builder.get_object('rgvs_mode-spin')
+rgvs_adv_check = builder.get_object('rgvs_adv-check')
+rgvs_umode_spin = builder.get_object('rgvs_umode-spin')
+rgvs_vmode_spin = builder.get_object('rgvs_vmode-spin')
+rgvs_ok_button = builder.get_object('rgvs_ok-button')
+
+tdenoise_check = builder.get_object('tdenoise-check')
+tdenoise_cbtext = builder.get_object('tdenoise-cbtext')
+tdenoise_conf_button = builder.get_object('tdenoise_conf-button')
+tsoft_dialog = builder.get_object('tsoft-dialog')
+tsoft_rad_spin = builder.get_object('tsoft_rad-spin')
+tsoft_lt_spin = builder.get_object('tsoft_lt-spin')
+tsoft_ct_spin = builder.get_object('tsoft_ct-spin')
+tsoft_sc_spin = builder.get_object('tsoft_sc-spin')
+tsoft_ok_button = builder.get_object('tsoft_ok-button')
+
+stdenoise_check = builder.get_object('stdenoise-check')
+stdenoise_cbtext = builder.get_object('stdenoise-cbtext')
+stdenoise_conf_button = builder.get_object('stdenoise_conf-button')
+fsmooth_dialog = builder.get_object('fsmooth-dialog')
+fsmooth_tt_spin = builder.get_object('fsmooth_tt-spin')
+fsmooth_st_spin = builder.get_object('fsmooth_st-spin')
+fsmooth_yplane_check = builder.get_object('fsmooth_yplane-check')
+fsmooth_uplane_check = builder.get_object('fsmooth_uplane-check')
+fsmooth_vplane_check = builder.get_object('fsmooth_vplane-check')
+fsmooth_ok_button = builder.get_object('fsmooth_ok-button')
+
+deband_check = builder.get_object('deband-check')
+deband_cbtext = builder.get_object('deband-cbtext')
+deband_conf_button = builder.get_object('deband_conf-button')
+f3kdb_dialog = builder.get_object('f3kdb-dialog')
+f3kdb_preset_cbtext = builder.get_object('f3kdb_preset-cbtext')
+f3kdb_planes_cbtext = builder.get_object('f3kdb_planes-cbtext')
+f3kdb_grain_check = builder.get_object('f3kdb_grain-check')
+f3kdb_depth_spin = builder.get_object('f3kdb_depth-spin')
+f3kdb_ok_button = builder.get_object('f3kdb_ok-button')
+
+handler = Handler()
+builder.connect_signals(handler)
 
 window.show_all()
 
