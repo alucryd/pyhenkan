@@ -2,33 +2,75 @@
 <!-- Generated with glade 3.18.3 -->
 <interface>
   <requires lib="gtk+" version="3.12"/>
-  <object class="GtkAdjustment" id="crop_bot-adj">
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+  <object class="GtkTextBuffer" id="script-buffer"/>
+  <object class="GtkFileFilter" id="video-filter">
+    <mime-types>
+      <mime-type>video/avi</mime-type>
+      <mime-type>video/mp4</mime-type>
+      <mime-type>video/mpeg</mime-type>
+      <mime-type>video/ogg</mime-type>
+      <mime-type>video/quicktime</mime-type>
+      <mime-type>video/webm</mime-type>
+      <mime-type>video/x-matroska</mime-type>
+      <mime-type>video/x-ms-wmv</mime-type>
+      <mime-type>video/x-flv</mime-type>
+    </mime-types>
   </object>
-  <object class="GtkAdjustment" id="crop_left-adj">
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="crop_right-adj">
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="crop_top-adj">
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="hresize-adj">
-    <property name="upper">10000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkTextBuffer" id="script-buffer">
-    <signal name="changed" handler="on_script_changed" swapped="no"/>
+  <object class="GtkFileChooserDialog" id="open-fcdialog">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">Select a File</property>
+    <property name="type_hint">normal</property>
+    <property name="filter">video-filter</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="open-vbox">
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="open-action_area">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="open_cancel-button">
+                <property name="label" translatable="yes">Cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <signal name="clicked" handler="on_open_cancel_clicked" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="open_ok-button">
+                <property name="label" translatable="yes">OK</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <signal name="clicked" handler="on_open_ok_clicked" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <placeholder/>
+        </child>
+      </object>
+    </child>
   </object>
   <object class="GtkFileFilter" id="vpy-filter">
     <patterns>
@@ -38,7 +80,7 @@
   <object class="GtkFileChooserDialog" id="save-fcdialog">
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">Select a File</property>
-    <property name="type_hint">dialog</property>
+    <property name="type_hint">normal</property>
     <property name="action">save</property>
     <property name="filter">vpy-filter</property>
     <child internal-child="vbox">
@@ -133,13 +175,9 @@
       </object>
     </child>
   </object>
-  <object class="GtkAdjustment" id="wresize-adj">
-    <property name="upper">10000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
   <object class="GtkWindow" id="window">
     <property name="width_request">640</property>
+    <property name="height_request">320</property>
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">VapourSynth Script Creator</property>
     <property name="destroy_with_parent">True</property>
@@ -154,13 +192,12 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <child>
-              <object class="GtkToolButton" id="preview-button">
+              <object class="GtkToolButton" id="open-button">
                 <property name="visible">True</property>
-                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Preview</property>
+                <property name="label" translatable="yes">Open</property>
                 <property name="use_underline">True</property>
-                <signal name="clicked" handler="on_preview_clicked" swapped="no"/>
+                <signal name="clicked" handler="on_open_clicked" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -181,6 +218,34 @@
                 <property name="homogeneous">True</property>
               </packing>
             </child>
+            <child>
+              <object class="GtkToolButton" id="params-button">
+                <property name="visible">True</property>
+                <property name="sensitive">False</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Parameters</property>
+                <property name="use_underline">True</property>
+                <signal name="clicked" handler="on_params_clicked" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton" id="preview-button">
+                <property name="visible">True</property>
+                <property name="sensitive">False</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Preview</property>
+                <property name="use_underline">True</property>
+                <signal name="clicked" handler="on_preview_clicked" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -189,343 +254,16 @@
           </packing>
         </child>
         <child>
-          <object class="GtkNotebook" id="notebook">
+          <object class="GtkScrolledWindow" id="script-scrwindow">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
+            <property name="shadow_type">in</property>
             <child>
-              <object class="GtkGrid" id="parameters-grid">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="margin_left">6</property>
-                <property name="margin_right">6</property>
-                <property name="margin_top">6</property>
-                <property name="margin_bottom">6</property>
-                <property name="row_spacing">6</property>
-                <property name="column_spacing">6</property>
-                <child>
-                  <object class="GtkLabel" id="source-label">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Source</property>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">0</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="lcrop-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Left</property>
-                    <property name="hexpand">True</property>
-                    <property name="adjustment">crop_left-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_lcrop_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">1</property>
-                    <property name="top_attach">2</property>
-                    <property name="height">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="bcrop-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Bottom</property>
-                    <property name="hexpand">True</property>
-                    <property name="adjustment">crop_bot-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_bcrop_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">2</property>
-                    <property name="top_attach">3</property>
-                    <property name="height">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="tcrop-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Top</property>
-                    <property name="hexpand">True</property>
-                    <property name="adjustment">crop_top-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_tcrop_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">2</property>
-                    <property name="top_attach">1</property>
-                    <property name="height">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="rcrop-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Right</property>
-                    <property name="hexpand">True</property>
-                    <property name="adjustment">crop_right-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_rcrop_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">3</property>
-                    <property name="top_attach">2</property>
-                    <property name="height">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="wresize-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Width</property>
-                    <property name="hexpand">True</property>
-                    <property name="adjustment">wresize-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_wresize_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">1</property>
-                    <property name="top_attach">5</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkSpinButton" id="hresize-spin">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="tooltip_text" translatable="yes">Height</property>
-                    <property name="hexpand">False</property>
-                    <property name="adjustment">hresize-adj</property>
-                    <property name="numeric">True</property>
-                    <property name="update_policy">if-valid</property>
-                    <signal name="value-changed" handler="on_hresize_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">2</property>
-                    <property name="top_attach">5</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkCheckButton" id="crop-check">
-                    <property name="label" translatable="yes">Crop</property>
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">False</property>
-                    <property name="xalign">0</property>
-                    <property name="draw_indicator">True</property>
-                    <signal name="toggled" handler="on_crop_toggled" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">2</property>
-                    <property name="height">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkCheckButton" id="resize-check">
-                    <property name="label" translatable="yes">Resize</property>
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">False</property>
-                    <property name="xalign">0</property>
-                    <property name="draw_indicator">True</property>
-                    <signal name="toggled" handler="on_resize_toggled" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">5</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkComboBoxText" id="resize_filter-cbtext">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">False</property>
-                    <property name="tooltip_text" translatable="yes">Algorithm</property>
-                    <property name="active">1</property>
-                    <items>
-                      <item translatable="yes">bilinear</item>
-                      <item translatable="yes">bicubic</item>
-                      <item translatable="yes">point</item>
-                      <item translatable="yes">gauss</item>
-                      <item translatable="yes">sinc</item>
-                      <item translatable="yes">lanczos</item>
-                      <item translatable="yes">spline</item>
-                    </items>
-                    <signal name="changed" handler="on_resize_filter_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">3</property>
-                    <property name="top_attach">5</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkFileChooserButton" id="source-fcbutton">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <signal name="file-set" handler="on_source_set" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">1</property>
-                    <property name="top_attach">0</property>
-                    <property name="width">3</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkCheckButton" id="deband-check">
-                    <property name="label" translatable="yes">Deband</property>
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">False</property>
-                    <property name="xalign">0</property>
-                    <property name="draw_indicator">True</property>
-                    <signal name="toggled" handler="on_deband_toggled" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">6</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkComboBoxText" id="deband_preset-cbtext">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">False</property>
-                    <property name="tooltip_text" translatable="yes">Preset</property>
-                    <property name="hexpand">True</property>
-                    <property name="active">2</property>
-                    <items>
-                      <item translatable="yes">depth</item>
-                      <item translatable="yes">low</item>
-                      <item translatable="yes">medium</item>
-                      <item translatable="yes">high</item>
-                      <item translatable="yes">veryhigh</item>
-                    </items>
-                    <signal name="changed" handler="on_deband_preset_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">1</property>
-                    <property name="top_attach">6</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkComboBoxText" id="deband_channel-cbtext">
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">False</property>
-                    <property name="tooltip_text" translatable="yes">Channels</property>
-                    <property name="hexpand">True</property>
-                    <property name="active">2</property>
-                    <items>
-                      <item translatable="yes">luma</item>
-                      <item translatable="yes">chroma</item>
-                      <item translatable="yes">both</item>
-                    </items>
-                    <signal name="changed" handler="on_deband_channel_changed" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">2</property>
-                    <property name="top_attach">6</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkCheckButton" id="deband_nograin-check">
-                    <property name="label" translatable="yes">No grain</property>
-                    <property name="visible">True</property>
-                    <property name="sensitive">False</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">False</property>
-                    <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="draw_indicator">True</property>
-                    <signal name="toggled" handler="on_deband_nograin_toggled" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">3</property>
-                    <property name="top_attach">6</property>
-                  </packing>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-              </object>
-            </child>
-            <child type="tab">
-              <object class="GtkLabel" id="parameters-label">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Parameters</property>
-              </object>
-              <packing>
-                <property name="tab_fill">False</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkScrolledWindow" id="script-scrwindow">
+              <object class="GtkTextView" id="script-textview">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="shadow_type">in</property>
-                <child>
-                  <object class="GtkTextView" id="script-textview">
-                    <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="buffer">script-buffer</property>
-                  </object>
-                </child>
+                <property name="buffer">script-buffer</property>
               </object>
-              <packing>
-                <property name="position">1</property>
-              </packing>
-            </child>
-            <child type="tab">
-              <object class="GtkLabel" id="script-label">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Script</property>
-              </object>
-              <packing>
-                <property name="position">1</property>
-                <property name="tab_fill">False</property>
-              </packing>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child type="tab">
-              <placeholder/>
             </child>
           </object>
           <packing>
