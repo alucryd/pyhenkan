@@ -332,9 +332,8 @@ class Handler:
                             fpr = fpr + '/nograin'
                         deband = [df, fpr, fdp]
 
-                #self.queue.submit(self.vpy, s, fps, crop, resize, sdenoise,
-                #                  tdenoise, stdenoise, deband)
-                self.vpy(s, fps, crop, resize, sdenoise, tdenoise, stdenoise, deband)
+                self.queue.submit(self.vpy, s, fps, crop, resize, sdenoise,
+                                  tdenoise, stdenoise, deband)
 
                 # Encode video
                 x = batch_venc_cbtext.get_active_text()
