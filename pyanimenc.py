@@ -188,11 +188,11 @@ class Encode:
         return s
 
     def info(self):
-        cmd = 'vspipe "{}.vpy" - -info'.format(self.sname)
+        cmd = 'vspipe "{}.vpy" - -i'.format(self.sname)
         return cmd
 
     def preview(self):
-        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
+        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
         enc = 'mpv -'
         cmd = ' | '.join([dec, enc])
         return cmd
@@ -200,7 +200,7 @@ class Encode:
     def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4'):
         if not o:
             o = self.sname
-        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
+        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
         if d == 8:
             x = 'x264'
         elif d == 10:
@@ -216,7 +216,7 @@ class Encode:
     def x265(self, o='', d=8, q=18, p='medium', t='', c='265'):
         if not o:
             o = self.sname
-        dec = 'vspipe "{}.vpy" - -y4m'.format(self.sname)
+        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
         if d == 8:
             x = 'x265'
         elif d == 10:
