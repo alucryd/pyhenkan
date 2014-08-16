@@ -163,7 +163,7 @@ class Handler:
         tracks = self.data[0]
         for i in range(len(tracks) - 1):
             builder = Gtk.Builder()
-            builder.add_from_file('/home/alucryd/pyanimenc/track.glade')
+            builder.add_from_file('/usr/share/pyanimenc/track.glade')
             grid = builder.get_object('grid')
             batch_tracks_vbox.pack_start(grid, False, False, 0)
             enable_check = builder.get_object('enable-check')
