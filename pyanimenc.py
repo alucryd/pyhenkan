@@ -234,9 +234,9 @@ class Encode:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f caf -'.format(self.source)
         if m == 'CBR':
-            enc = 'fdkaac - -b {} -o "{}.{}"'.format(b, o, c)
+            enc = 'fdkaac --silent - -b {} -o "{}.{}"'.format(b, o, c)
         elif m == 'VBR':
-            enc = 'fdkaac - -m {} -o "{}.{}"'.format(q, o, c)
+            enc = 'fdkaac --silent - -m {} -o "{}.{}"'.format(q, o, c)
         cmd = ' | '.join([ dec, enc ])
         return cmd
 
@@ -245,11 +245,11 @@ class Encode:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
         if m == 'CBR':
-            enc = 'lame -b {} --cbr - "{}.mp3"'.format(b, o)
+            enc = 'lame --silent -b {} --cbr - "{}.mp3"'.format(b, o)
         elif m == 'ABR':
-            enc = 'lame -b {} --abr - "{}.mp3"'.format(b, o)
+            enc = 'lame --silent -b {} --abr - "{}.mp3"'.format(b, o)
         elif m == 'VBR':
-            enc = 'lame -V {} - "{}.mp3"'.format(q, o)
+            enc = 'lame --silent -V {} - "{}.mp3"'.format(q, o)
         cmd = ' | '.join([ dec, enc ])
         return cmd
 

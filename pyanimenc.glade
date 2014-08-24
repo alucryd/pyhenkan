@@ -13,7 +13,6 @@
       <mime-type>audio/flac</mime-type>
     </mime-types>
   </object>
-  <object class="GtkTextBuffer" id="log-buffer"/>
   <object class="GtkMessageDialog" id="track_mismatch-dialog">
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">Error</property>
@@ -177,7 +176,6 @@
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
                         <property name="filter">vpy-filter</property>
-                        <property name="select_multiple">True</property>
                         <signal name="file-set" handler="on_vsrc_set" swapped="no"/>
                       </object>
                       <packing>
@@ -298,7 +296,6 @@
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
                         <property name="filter">audio-filter</property>
-                        <property name="select_multiple">True</property>
                         <signal name="file-set" handler="on_asrc_set" swapped="no"/>
                       </object>
                       <packing>
@@ -576,7 +573,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkBox" id="log-vbox">
+              <object class="GtkBox" id="queue-vbox">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="margin_left">6</property>
@@ -586,17 +583,13 @@
                 <property name="orientation">vertical</property>
                 <property name="spacing">6</property>
                 <child>
-                  <object class="GtkScrolledWindow" id="log-scrwindow">
+                  <object class="GtkScrolledWindow" id="queue-scrwindow">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
+                    <property name="vscrollbar_policy">always</property>
                     <property name="shadow_type">in</property>
                     <child>
-                      <object class="GtkTextView" id="log-textview">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="wrap_mode">word</property>
-                        <property name="buffer">log-buffer</property>
-                      </object>
+                      <placeholder/>
                     </child>
                   </object>
                   <packing>
@@ -606,12 +599,12 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkButton" id="log_clear-button">
+                  <object class="GtkButton" id="queue_clear-button">
                     <property name="label" translatable="yes">Clear</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
-                    <signal name="clicked" handler="on_log_clear_clicked" swapped="no"/>
+                    <signal name="clicked" handler="on_queue_clear_clicked" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -625,10 +618,10 @@
               </packing>
             </child>
             <child type="tab">
-              <object class="GtkLabel" id="log-label">
+              <object class="GtkLabel" id="queue-label">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Log</property>
+                <property name="label" translatable="yes">Queue</property>
               </object>
               <packing>
                 <property name="position">2</property>
@@ -656,6 +649,8 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
+                <property name="text" translatable="yes">Ready</property>
+                <property name="show_text">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -669,6 +664,7 @@
                 <property name="width_request">32</property>
                 <property name="height_request">32</property>
                 <property name="visible">True</property>
+                <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <signal name="clicked" handler="on_stop_clicked" swapped="no"/>

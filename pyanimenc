@@ -10,18 +10,19 @@ from pyanimenc import Encode,MatroskaOps
 
 class Handler:
     def __init__(self):
-        self.queue = ThreadPoolExecutor(max_workers=1)
-        self.tools = ThreadPoolExecutor(max_workers=2)
+        self.queue = []
+        self.worker = ThreadPoolExecutor(max_workers=1)
+        self.tools_worker = ThreadPoolExecutor(max_workers=2)
 
     def on_vs_creator_clicked(self, button):
-        self.tools.submit(self.vs_creator)
+        self.tools_worker.submit(self.vs_creator)
 
     def vs_creator(self):
         cmd = '/usr/lib/python3.4/site-packages/pyanimenc/vs-script-creator.py'
         subprocess.call(cmd)
 
     def on_chap_editor_clicked(self, button):
-        self.tools.submit(self.chapter_editor)
+        self.tools_worker.submit(self.chapter_editor)
 
     def chapter_editor(self):
         cmd = '/usr/lib/python3.4/site-packages/pyanimenc/chapter-editor.py'
@@ -50,7 +51,7 @@ class Handler:
             if t == 'none':
                 t = ''
             c = x264_container_cbtext.get_active_text()
-            self.queue.submit(self.x264, s, d, dp, q, p, t, c)
+            self.worker.submit(self._x264, s, d, dp, q, p, t, c)
         elif x == 'x265':
             dp = int(x265_depth_cbtext.get_active_text())
             q = x265_quality_spin.get_value_as_int()
@@ -61,13 +62,13 @@ class Handler:
             if t == 'none':
                 t = ''
             c = x265_container_cbtext.get_active_text()
-            self.queue.submit(self.x265, s, d, dp, q, p, t, c)
+            self.worker.submit(self._x265, s, d, dp, q, p, t, c)
 
     def on_aqueue_clicked(self, button):
         x = aenc_cbtext.get_active_text()
         s = asrc_fcbutton.get_filename()
         wd = os.path.dirname(s)
-        if not os.path.isdir(f + '/out'):
+        if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
         d = wd + '/out/' + os.path.basename(os.path.splitext(s)[0])
         if x == 'fdkaac':
@@ -75,12 +76,12 @@ class Handler:
             b = fdkaac_bitrate_spin.get_value_as_int()
             q = fdkaac_quality_spin.get_value_as_int()
             c = fdkaac_container_cbtext.get_active_text()
-            self.queue.submit(self.fdkaac, s, d, m, b, q, c)
+            self.worker.submit(self._fdkaac, s, d, m, b, q, c)
         elif x == 'lame':
             m = lame_mode_cbtext.get_active_text()
             b = lame_bitrate_spin.get_value_as_int()
             q = lame_quality_spin.get_value_as_int()
-            self.queue.submit(self.lame, s, d, m, b, q)
+            self.worker.submit(self._lame, s, d, m, b, q)
 
     def on_batch_src_set(self, button):
         wd = button.get_filename()
@@ -149,10 +150,10 @@ class Handler:
                                  self.sources[i], str(j), channels)
                     error.set_text(t)
                     track_mismatch_dialog.run()
-        self.update_tracks()
+        self._update_tracks()
         batch_queue_button.set_sensitive(True)
 
-    def update_tracks(self):
+    def _update_tracks(self):
         # A new builder instance needs to be created for each entry,
         # therefore put the template on its own to avoid loading a large
         # file every time
@@ -332,7 +333,7 @@ class Handler:
                             fpr = fpr + '/nograin'
                         deband = [df, fpr, fdp]
 
-                self.queue.submit(self.vpy, s, fps, crop, resize, sdenoise,
+                self.worker.submit(self._vpy, s, fps, crop, resize, sdenoise,
                                   tdenoise, stdenoise, deband)
 
                 # Encode video
@@ -349,7 +350,8 @@ class Handler:
                     c = x264_container_cbtext.get_active_text()
                     vtrack[2] = c
 
-                    self.queue.submit(self.x264, s, vtrack[1], dp, q, p, t, c)
+                    self.worker.submit(self._x264, s, vtrack[1], dp, q, p, t,
+                                       c)
                 if x == 'x265':
                     dp = int(x265_depth_cbtext.get_active_text())
                     q = x265_quality_spin.get_value_as_int()
@@ -362,7 +364,8 @@ class Handler:
                     c = x265_container_cbtext.get_active_text()
                     vtrack[2] = c
 
-                    self.queue.submit(self.x265, s, vtrack[1], dp, q, p, t, c)
+                    self.worker.submit(self._x265, s, vtrack[1], dp, q, p, t,
+                                       c)
 
             # Extract audio
             tracks = []
@@ -370,7 +373,7 @@ class Handler:
                 if track[5]:
                     tracks.append(track)
 
-            self.queue.submit(self.extract, s, tracks)
+            self.worker.submit(self._extract, s, tracks)
 
             # Encode audio
             for track in atracks:
@@ -383,37 +386,31 @@ class Handler:
                         q = fdkaac_quality_spin.get_value_as_int()
                         c = fdkaac_container_cbtext.get_active_text()
 
-                        self.queue.submit(self.fdkaac, a, track[1], m, b, q, c)
+                        self.worker.submit(self._fdkaac, a, track[1], m, b, q,
+                                          c)
 
                     elif x == 'lame':
                         m = lame_mode_cbtext.get_active_text()
                         b = lame_bitrate_spin.get_value_as_int()
                         q = lame_quality_spin.get_value_as_int()
 
-                        self.queue.submit(self.lame, a, track[1], m, b, q)
+                        self.worker.submit(self._lame, a, track[1], m, b, q)
 
             # Merge tracks
             o = wd + '/out/' + os.path.basename(s)
-            self.queue.submit(self.merge, s, o, vtrack, atracks, stracks, uid)
+            self.worker.submit(self._merge, s, o, vtrack, atracks, stracks,
+                               uid)
 
             # Clean up
-            self.queue.submit(self.clean, wd)
+            self.worker.submit(self._clean, wd)
 
-    def extract(self, source, tracks):
+    def _extract(self, source, tracks):
         cmd = MatroskaOps(source).extract(tracks)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
-        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-        #                      universal_newlines=True) as proc:
-        #    while True:
-        #        line = proc.stdout.readline()
-        #        log_buffer.insert(log_buffer.get_end_iter(), line)
-        #        if line:
-        #            print(line)
-        #        else:
-        #            break
+        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._mkvtoolnix_progress('x')
 
-    def merge(self, source, dest, vtrack, atracks, stracks, uid):
+    def _merge(self, source, dest, vtrack, atracks, stracks, uid):
         # Put that here until I figure out why it screws the extract step when
         # done above.
         for track in atracks:
@@ -427,19 +424,11 @@ class Handler:
                     track[2] = 'mp3'
 
         cmd = MatroskaOps(source).merge(dest, vtrack, atracks, stracks, uid)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
-        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-        #                      universal_newlines=True) as proc:
-        #    while True:
-        #        line = proc.stdout.readline()
-        #        log_buffer.insert(log_buffer.get_end_iter(), line)
-        #        if line:
-        #            print(line)
-        #        else:
-        #            break
+        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._mkvtoolnix_progress('m')
 
-    def clean(self, directory):
+    def _clean(self, directory):
         for f in os.listdir(directory):
             if re.search('\.vpy$', f) or re.search('\.ffindex$', f):
                 os.remove(directory + '/' + f)
@@ -447,7 +436,7 @@ class Handler:
             if not re.search('\.mkv$', f):
                 os.remove(directory + '/out/' + f)
 
-    def vpy(self, source, fps, crop, resize, sdenoise, tdenoise, stdenoise,
+    def _vpy(self, source, fps, crop, resize, sdenoise, tdenoise, stdenoise,
             deband):
         s = Encode(source).vpy(fps, crop, resize, sdenoise, tdenoise,
                                stdenoise, deband)
@@ -457,79 +446,108 @@ class Handler:
         with open(vpy, 'w') as f:
             f.write(s)
 
-    def x264(self, source, dest, depth, quality, preset, tune, container):
-        #cmd = Encode(source).info()
-        #with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-        #                      universal_newlines=True) as proc:
-        #    while True:
-        #        line = proc.stdout.readline()
-        #        if line:
-        #            # Get the frame total
-        #            if 'Frames' in line:
-        #                dur = line.split(' ')[1]
-        #                dur = int(dur)
-        #        else:
-        #            break
+    def _info(self, source):
+        cmd = Encode(source).info()
+        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                     universal_newlines=True)
+        status_pbar.set_text('Encoding video...')
+        while self.proc.poll() == None:
+            line = self.proc.stdout.readline()
+            # Get the frame total
+            if 'Frames:' in line:
+                d = int(line.split(' ')[1])
+        print(d)
+        return d
 
+    def _x264(self, source, dest, depth, quality, preset, tune, container):
+        d = self._info(source)
         cmd = Encode(source).x264(dest, depth, quality, preset, tune,
                                   container)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
-        #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-        #                      universal_newlines=True) as proc:
-        #    while True:
-        #        line = proc.stderr.readline()
-        #        log_buffer.insert(log_buffer.get_end_iter(), line)
-        #        if line:
-        #            # Get the current frame
-        #            if re.match('^[0-9]+ ', line):
-        #                pos = line.split(' ')[0]
-        #                pos = int(pos)
-        #                progress = round(pos / dur, 2)
-        #                status_pbar.set_fraction(progress)
-        #        else:
-        #            status_pbar.set_fraction(1)
-        #            break
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._video_progress(d)
 
-    def x265(self, source, dest, depth, quality, preset, tune, container):
+    def _x265(self, source, dest, depth, quality, preset, tune, container):
+        d = self._info(source)
         cmd = Encode(source).x265(dest, depth, quality, preset, tune,
                                   container)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._video_progress(d)
 
-    def fdkaac(self, source, dest, mode, bitrate, quality, container):
+    def _fdkaac(self, source, dest, mode, bitrate, quality, container):
         cmd = Encode(source).fdkaac(dest, mode, bitrate, quality, container)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
-        #with subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-        #                      universal_newlines=True) as proc:
-        #    while True:
-        #        line = proc.stderr.readline()
-        #        log_buffer.insert(log_buffer.get_end_iter(), line)
-        #        if line:
-        #            # Get the clip duration
-        #            if 'Duration' in line:
-        #                dur = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
-        #                h, m, s = dur.split(':')
-        #                dur = int(h) * 3600 + int(m) * 60 + int(s)
-        #            # Get the current timestamp
-        #            if re.match('[0-9]{2}:[0-9]{2}\.[0-9]{3}', line):
-        #                pos = re.findall('^[0-9]{2}:[0-9]{2}', line)[0]
-        #                m, s = pos.split(':')
-        #                pos = int(m) * 60 + int(s)
-        #                progress = round(pos / dur, 2)
-        #                status_pbar.set_fraction(progress)
-        #        else:
-        #            status_pbar.set_fraction(1)
-        #            break
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
 
-    def lame(self, source, dest, mode, bitrate, quality):
+    def _lame(self, source, dest, mode, bitrate, quality):
         cmd = Encode(source).lame(dest, mode, bitrate, quality)
-        print(cmd)
-        subprocess.call(cmd, shell=True)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _mkvtoolnix_progress(self, mode):
+        status_pbar.set_fraction(0)
+        if mode == 'x':
+            status_pbar.set_text('Extracting tracks...')
+        elif mode == 'm':
+            status_pbar.set_text('Merging tracks...')
+        while self.proc.poll() == None:
+            line = self.proc.stdout.readline()
+            if 'Progress:' in line:
+                f = int(re.findall('[0-9]+', line)[0]) / 100
+                status_pbar.set_fraction(f)
+        if self.proc.poll() < 0:
+            status_pbar.set_fraction(0)
+        else:
+            status_pbar.set_fraction(1)
+        status_pbar.set_text('Ready')
+
+    def _video_progress(self, duration):
+        status_pbar.set_fraction(0)
+        status_pbar.set_text('Encoding video...')
+        while self.proc.poll() == None:
+            line = self.proc.stderr.readline()
+            # Get the current frame
+            if re.match('^[0-9]+ ', line):
+                position = int(line.split(' ')[0])
+                f = round(position / duration, 2)
+                status_pbar.set_fraction(f)
+        if self.proc.poll() < 0:
+            status_pbar.set_fraction(0)
+        else:
+            status_pbar.set_fraction(1)
+        status_pbar.set_text('Ready')
+
+    def _audio_progress(self):
+        status_pbar.set_fraction(0)
+        status_pbar.set_text('Encoding audio...')
+        while self.proc.poll() == None:
+            line = self.proc.stderr.readline()
+            # Get the clip duration
+            if 'Duration:' in line:
+                d = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
+                h, m, s = d.split(':')
+                d = int(h) * 3600 + int(m) * 60 + int(s)
+            # Get the current timestamp
+            if 'time=' in line:
+                p = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
+                h, m, s = p.split(':')
+                p = int(h) * 3600 + int(m) * 60 + int(s)
+                f = round(p / d, 2)
+                status_pbar.set_fraction(f)
+        if self.proc.poll() < 0:
+            status_pbar.set_fraction(0)
+        else:
+            status_pbar.set_fraction(1)
+        status_pbar.set_text('Ready')
 
     def on_stop_clicked(self, button):
-        self.queue.shutdown()
+        while self.proc.poll() == None:
+            self.proc.terminate()
+        status_pbar.set_fraction(0)
+        status_pbar.set_text('Ready')
 
     def on_batch_sconf_clicked(self, button):
         vpy_dialog.run()
@@ -686,8 +704,8 @@ class Handler:
     def on_lame_ok_clicked(self, button):
         lame_dialog.hide()
 
-    def on_log_clear_clicked(self, button):
-        log_buffer.set_text('')
+    def on_queue_clear_clicked(self, button):
+        queue_buffer.set_text('')
 
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
@@ -719,7 +737,6 @@ aqueue_button = builder.get_object('aqueue-button')
 aenc_cbtext = builder.get_object('aenc-cbtext')
 aconf_button = builder.get_object('aconf-button')
 status_pbar = builder.get_object('status-pbar')
-log_buffer = builder.get_object('log-buffer')
 
 batch_src_fcbutton = builder.get_object('batch_src-fcbutton')
 batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
