@@ -5,14 +5,66 @@ import re
 import subprocess
 import yaml
 from concurrent.futures import ThreadPoolExecutor
-from gi.repository import Gtk,GdkPixbuf
+from threading import Lock
+from gi.repository import GLib,GObject,Gtk
 from pyanimenc import Encode,MatroskaOps
 
 class Handler:
     def __init__(self):
-        self.queue = []
+        self.queue = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
+        queue_treeview.set_model(self.queue)
+        self.idle = True
+        self.lock = Lock()
+        self.lock.acquire()
         self.worker = ThreadPoolExecutor(max_workers=1)
         self.tools_worker = ThreadPoolExecutor(max_workers=2)
+
+    def _wait(self):
+        if self.idle:
+            self.lock.acquire()
+        else:
+            self.lock.release()
+
+    def _update_treeview(self):
+        njobs = len(self.queue)
+        for i in range(njobs):
+            path = Gtk.TreePath(i)
+            job = self.queue.get_iter(path)
+            future = self.queue.get_value(job, 0)
+            status = self.queue.get_value(job, 3)
+            if self.queue.iter_has_child(job):
+                nsteps = self.queue.iter_n_children(job)
+                for j in range(nsteps):
+                    path = Gtk.TreePath([i, j])
+                    step = self.queue.get_iter(path)
+                    future = self.queue.get_value(step, 0)
+                    status = self.queue.get_value(step, 3)
+                    # Mark done children as such
+                    if future.done() and status != 'Failed':
+                        GLib.idle_add(self.queue.set_value, step, 3, 'Done')
+                        # Mark parent as done if all children are
+                        if j == nsteps - 1:
+                            GLib.idle_add(self.queue.set_value, job, 3, 'Done')
+                            # Mark as idle if child was the last job
+                            if i == njobs - 1:
+                                self.idle = True
+                                self.lock.acquire()
+                    # Mark running child as such
+                    elif future.running():
+                        GLib.idle_add(self.queue.set_value, step, 3, 'Running')
+                        # Mark parent as running if a child is
+                        GLib.idle_add(self.queue.set_value, job, 3, 'Running')
+            else:
+                # Mark done jobs as such
+                if future.done() and status != 'Failed':
+                    GLib.idle_add(self.queue.set_value, job, 3, 'Done')
+                    # Mark as idle if job was the last
+                    if i == njobs - 1:
+                        self.idle = True
+                        self.lock.acquire()
+                # Mark running job as such
+                elif future.running():
+                    GLib.idle_add(self.queue.set_value, job, 3, 'Running')
 
     def on_vs_creator_clicked(self, button):
         self.tools_worker.submit(self.vs_creator)
@@ -35,12 +87,13 @@ class Handler:
         aqueue_button.set_sensitive(True)
 
     def on_vqueue_clicked(self, button):
+        self.worker.submit(self._wait)
         x = venc_cbtext.get_active_text()
         s = vsrc_fcbutton.get_filename()
-        wd = os.path.dirname(s)
+        wd, f = os.path.split(s)
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
-        d = wd + '/out/' + os.path.basename(os.path.splitext(s)[0])
+        d = wd + '/out/' + os.path.splitext(f)[0]
         if x == 'x264':
             dp = int(x264_depth_cbtext.get_active_text())
             q = x264_quality_spin.get_value_as_int()
@@ -51,7 +104,7 @@ class Handler:
             if t == 'none':
                 t = ''
             c = x264_container_cbtext.get_active_text()
-            self.worker.submit(self._x264, s, d, dp, q, p, t, c)
+            future = self.worker.submit(self._x264, s, d, dp, q, p, t, c)
         elif x == 'x265':
             dp = int(x265_depth_cbtext.get_active_text())
             q = x265_quality_spin.get_value_as_int()
@@ -62,26 +115,31 @@ class Handler:
             if t == 'none':
                 t = ''
             c = x265_container_cbtext.get_active_text()
-            self.worker.submit(self._x265, s, d, dp, q, p, t, c)
+            future = self.worker.submit(self._x265, s, d, dp, q, p, t, c)
+        self.queue.append(None, [future, f, x, 'Waiting'])
+        self.worker.submit(self._update_treeview)
 
     def on_aqueue_clicked(self, button):
+        self.worker.submit(self._wait)
         x = aenc_cbtext.get_active_text()
         s = asrc_fcbutton.get_filename()
-        wd = os.path.dirname(s)
+        wd, f = os.path.split(s)
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
-        d = wd + '/out/' + os.path.basename(os.path.splitext(s)[0])
+        d = wd + '/out/' + os.path.splitext(f)[0]
         if x == 'fdkaac':
             m = fdkaac_mode_cbtext.get_active_text()
             b = fdkaac_bitrate_spin.get_value_as_int()
             q = fdkaac_quality_spin.get_value_as_int()
             c = fdkaac_container_cbtext.get_active_text()
-            self.worker.submit(self._fdkaac, s, d, m, b, q, c)
+            future = self.worker.submit(self._fdkaac, s, d, m, b, q, c)
         elif x == 'lame':
             m = lame_mode_cbtext.get_active_text()
             b = lame_bitrate_spin.get_value_as_int()
             q = lame_quality_spin.get_value_as_int()
-            self.worker.submit(self._lame, s, d, m, b, q)
+            future = self.worker.submit(self._lame, s, d, m, b, q)
+        self.queue.append(None, [future, f, x, 'Waiting'])
+        self.worker.submit(self._update_treeview)
 
     def on_batch_src_set(self, button):
         wd = button.get_filename()
@@ -109,12 +167,13 @@ class Handler:
         for i in range(1, len(self.data)):
             tracks_orig = self.data[0]
             tracks = self.data[i]
+            o = os.path.basename(self.sources[0])
+            f = os.path.basename(self.sources[i])
             if len(tracks) != len(tracks_orig):
                 t = ('{} ({} tracks) and {} ({} tracks) differ from each '
                      'other. Please make sure all files share the same '
                      'layout.'
-                    ).format(self.sources[0], str(len(tracks_orig)),
-                             self.sources[i], str(len(tracks)))
+                    ).format(o, str(len(tracks_orig)), f, str(len(tracks)))
                 error.set_text(t)
                 track_mismatch_dialog.run()
             # -1 because there is a 'uid' entry
@@ -130,24 +189,21 @@ class Handler:
                     t = ('{} (track {}: {}) and {} (track {}: {}) have '
                          'different codecs. Please make sure all files '
                          'share the same layout.'
-                        ).format(self.sources[0], str(j), codec_orig,
-                                 self.sources[i], str(j), codec)
+                        ).format(o, str(j), codec_orig, f, str(j), codec)
                     error.set_text(t)
                     track_mismatch_dialog.run()
                 elif lang != lang_orig:
                     t = ('{} (track {}: {}) and {} (track {}: {}) have '
                          'different languages. Please make sure all files '
                          'share the same layout.'
-                        ).format(self.sources[0], str(j), lang_orig,
-                                 self.sources[i], str(j), lang)
+                        ).format(o, str(j), lang_orig, f, str(j), lang)
                     error.set_text(t)
                     track_mismatch_dialog.run()
                 elif channels != channels_orig:
                     t = ('{} (track {}: {}) and {} (track {}: {}) have '
                          'different channels. Please make sure all files '
                          'share the same layout.'
-                        ).format(self.sources[0], str(j), channels_orig,
-                                 self.sources[i], str(j), channels)
+                        ).format(o, str(j), channels_orig, f, str(j), channels)
                     error.set_text(t)
                     track_mismatch_dialog.run()
         self._update_tracks()
@@ -226,40 +282,43 @@ class Handler:
             os.mkdir(wd + '/out')
 
         for i in range(len(self.sources)):
+            self.worker.submit(self._wait)
             vtrack = []
             atracks = []
             stracks = []
             s = self.sources[i]
+            f = os.path.basename(s)
             uid = self.data[i]['uid']
+            job = self.queue.append(None, [None, f, '', 'Waiting'])
             for track in self.tracks:
-                # [[id, filename, extension, name, language, transcode?]...]
+                # track = [id, filename, extension, name, language, transcode?]
                 j = track[6]
-                f, e = os.path.splitext(os.path.basename(s))
-                e = e.strip('.')
+                fn, ex = os.path.splitext(f)
+                ex = ex.strip('.')
                 n = track[2]
                 l = track[3]
                 t = track[5]
                 if track[0] == 'video' and track[4]:
                     if track[5]:
-                        f = wd + '/out/' + f
-                        e = track[1]
+                        fn = wd + '/out/' + fn
+                        ex = track[1]
                     else:
-                        f = wd + '/' + f
-                    vtrack = [j, f, e, n, l, t]
+                        fn = wd + '/' + fn
+                    vtrack = [j, fn, ex, n, l, t]
                 if track[0] == 'audio' and track[4]:
                     if track[5]:
-                        f = wd + '/out/' + f + '_' + str(j)
-                        e = track[1]
+                        fn = wd + '/out/' + fn + '_' + str(j)
+                        ex = track[1]
                     else:
-                        f = wd + '/' + f
-                    atracks.append([j, f, e, n, l, t])
+                        fn = wd + '/' + fn
+                    atracks.append([j, fn, ex, n, l, t])
                 if track[0] == 'subtitle' and track[4]:
-                    f = wd + '/' + f
-                    stracks.append([j, f, e, n, l, t])
+                    fn = wd + '/' + fn
+                    stracks.append([j, fn, ex, n, l, t])
 
+            # Create VapourSynth script
             if vtrack[5]:
                 vtrack[0] = 0
-                # Create VapourSynth script
                 fps = []
                 if fps_check.get_active():
                     fn = fpsnum_spin.get_value_as_int()
@@ -350,8 +409,8 @@ class Handler:
                     c = x264_container_cbtext.get_active_text()
                     vtrack[2] = c
 
-                    self.worker.submit(self._x264, s, vtrack[1], dp, q, p, t,
-                                       c)
+                    future = self.worker.submit(self._x264, s, vtrack[1], dp,
+                                                q, p, t, c)
                 if x == 'x265':
                     dp = int(x265_depth_cbtext.get_active_text())
                     q = x265_quality_spin.get_value_as_int()
@@ -364,8 +423,10 @@ class Handler:
                     c = x265_container_cbtext.get_active_text()
                     vtrack[2] = c
 
-                    self.worker.submit(self._x265, s, vtrack[1], dp, q, p, t,
-                                       c)
+                    future = self.worker.submit(self._x265, s, vtrack[1], dp,
+                                                q, p, t, c)
+
+                self.queue.append(job, [future, '', x, 'Waiting'])
 
             # Extract audio
             tracks = []
@@ -373,7 +434,8 @@ class Handler:
                 if track[5]:
                     tracks.append(track)
 
-            self.worker.submit(self._extract, s, tracks)
+                    future = self.worker.submit(self._extract, s, tracks)
+                    self.queue.append(job, [future, '', 'extract', 'Waiting'])
 
             # Encode audio
             for track in atracks:
@@ -386,31 +448,39 @@ class Handler:
                         q = fdkaac_quality_spin.get_value_as_int()
                         c = fdkaac_container_cbtext.get_active_text()
 
-                        self.worker.submit(self._fdkaac, a, track[1], m, b, q,
-                                          c)
+                        future = self.worker.submit(self._fdkaac, a, track[1],
+                                                    m, b, q, c)
 
                     elif x == 'lame':
                         m = lame_mode_cbtext.get_active_text()
                         b = lame_bitrate_spin.get_value_as_int()
                         q = lame_quality_spin.get_value_as_int()
 
-                        self.worker.submit(self._lame, a, track[1], m, b, q)
+                        future = self.worker.submit(self._lame, a, track[1], m,
+                                                    b, q)
+
+                    self.queue.append(job, [future, '', x, 'Waiting'])
 
             # Merge tracks
-            o = wd + '/out/' + os.path.basename(s)
-            self.worker.submit(self._merge, s, o, vtrack, atracks, stracks,
-                               uid)
+            o = wd + '/out/' + f
+            future = self.worker.submit(self._merge, s, o, vtrack, atracks,
+                                        stracks, uid)
+            self.queue.append(job, [future, '', 'merge', 'Waiting'])
 
             # Clean up
             self.worker.submit(self._clean, wd)
 
+            self.worker.submit(self._update_treeview)
+
     def _extract(self, source, tracks):
+        self._update_treeview()
         cmd = MatroskaOps(source).extract(tracks)
         self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                      universal_newlines=True)
         self._mkvtoolnix_progress('x')
 
     def _merge(self, source, dest, vtrack, atracks, stracks, uid):
+        self._update_treeview()
         # Put that here until I figure out why it screws the extract step when
         # done above.
         for track in atracks:
@@ -450,7 +520,8 @@ class Handler:
         cmd = Encode(source).info()
         self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                      universal_newlines=True)
-        status_pbar.set_text('Encoding video...')
+        GLib.idle_add(status_pbar.set_fraction, 0)
+        GLib.idle_add(status_pbar.set_text, 'Encoding video...')
         while self.proc.poll() == None:
             line = self.proc.stdout.readline()
             # Get the frame total
@@ -460,6 +531,7 @@ class Handler:
         return d
 
     def _x264(self, source, dest, depth, quality, preset, tune, container):
+        self._update_treeview()
         d = self._info(source)
         cmd = Encode(source).x264(dest, depth, quality, preset, tune,
                                   container)
@@ -468,6 +540,7 @@ class Handler:
         self._video_progress(d)
 
     def _x265(self, source, dest, depth, quality, preset, tune, container):
+        self._update_treeview()
         d = self._info(source)
         cmd = Encode(source).x265(dest, depth, quality, preset, tune,
                                   container)
@@ -476,53 +549,53 @@ class Handler:
         self._video_progress(d)
 
     def _fdkaac(self, source, dest, mode, bitrate, quality, container):
+        self._update_treeview()
         cmd = Encode(source).fdkaac(dest, mode, bitrate, quality, container)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
     def _lame(self, source, dest, mode, bitrate, quality):
+        self._update_treeview()
         cmd = Encode(source).lame(dest, mode, bitrate, quality)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
     def _mkvtoolnix_progress(self, mode):
-        status_pbar.set_fraction(0)
+        GLib.idle_add(status_pbar.set_fraction, 0)
         if mode == 'x':
-            status_pbar.set_text('Extracting tracks...')
+            GLib.idle_add(status_pbar.set_text, 'Extracting tracks...')
         elif mode == 'm':
-            status_pbar.set_text('Merging tracks...')
+            GLib.idle_add(status_pbar.set_text, 'Merging tracks...')
         while self.proc.poll() == None:
             line = self.proc.stdout.readline()
             if 'Progress:' in line:
                 f = int(re.findall('[0-9]+', line)[0]) / 100
-                status_pbar.set_fraction(f)
+                GLib.idle_add(status_pbar.set_fraction, f)
         if self.proc.poll() < 0:
-            status_pbar.set_fraction(0)
+            GLib.idle_add(status_pbar.set_fraction, 0)
         else:
-            status_pbar.set_fraction(1)
-        status_pbar.set_text('Ready')
+            GLib.idle_add(status_pbar.set_fraction, 1)
+        GLib.idle_add(status_pbar.set_text, 'Ready')
 
     def _video_progress(self, duration):
-        status_pbar.set_fraction(0)
-        status_pbar.set_text('Encoding video...')
         while self.proc.poll() == None:
             line = self.proc.stderr.readline()
             # Get the current frame
             if re.match('^[0-9]+ ', line):
                 position = int(line.split(' ')[0])
                 f = round(position / duration, 2)
-                status_pbar.set_fraction(f)
+                GLib.idle_add(status_pbar.set_fraction, f)
         if self.proc.poll() < 0:
-            status_pbar.set_fraction(0)
+            GLib.idle_add(status_pbar.set_fraction, 0)
         else:
-            status_pbar.set_fraction(1)
-        status_pbar.set_text('Ready')
+            GLib.idle_add(status_pbar.set_fraction, 1)
+        GLib.idle_add(status_pbar.set_text, 'Ready')
 
     def _audio_progress(self):
-        status_pbar.set_fraction(0)
-        status_pbar.set_text('Encoding audio...')
+        GLib.idle_add(status_pbar.set_fraction, 0)
+        GLib.idle_add(status_pbar.set_text, 'Encoding audio...')
         while self.proc.poll() == None:
             line = self.proc.stderr.readline()
             # Get the clip duration
@@ -536,18 +609,12 @@ class Handler:
                 h, m, s = p.split(':')
                 p = int(h) * 3600 + int(m) * 60 + int(s)
                 f = round(p / d, 2)
-                status_pbar.set_fraction(f)
+                GLib.idle_add(status_pbar.set_fraction, f)
         if self.proc.poll() < 0:
-            status_pbar.set_fraction(0)
+            GLib.idle_add(status_pbar.set_fraction, 0)
         else:
-            status_pbar.set_fraction(1)
-        status_pbar.set_text('Ready')
-
-    def on_stop_clicked(self, button):
-        while self.proc.poll() == None:
-            self.proc.terminate()
-        status_pbar.set_fraction(0)
-        status_pbar.set_text('Ready')
+            GLib.idle_add(status_pbar.set_fraction, 1)
+        GLib.idle_add(status_pbar.set_text, 'Ready')
 
     def on_batch_sconf_clicked(self, button):
         vpy_dialog.run()
@@ -704,8 +771,91 @@ class Handler:
     def on_lame_ok_clicked(self, button):
         lame_dialog.hide()
 
-    def on_queue_clear_clicked(self, button):
-        queue_buffer.set_text('')
+    def on_start_clicked(self, button):
+        if len(self.queue):
+            self.idle = False
+            self.lock.release()
+
+    def on_delete_clicked(self, button):
+        job = queue_selection.get_selected()[1]
+        if job != None:
+            # If child, select parent instead
+            if self.queue.iter_depth(job) == 1:
+                job = self.queue.iter_parent(job)
+            # If parent, delete all children
+            if self.queue.iter_has_child(job):
+                nsteps = self.queue.iter_n_children(job)
+                for i in range(nsteps):
+                    step = self.queue.iter_nth_child(job, 0)
+                    future = self.queue.get_value(step, 0)
+                    # Cancel and delete child only if not running
+                    if not future.running():
+                        future.cancel()
+                        self.queue.remove(step)
+                # Delete parent only when all children are
+                if not self.queue.iter_has_child(job):
+                    self.queue.remove(job)
+            else:
+                future = self.queue.get_value(job, 0)
+                # Cancel and delete job only if not running
+                if not future.running():
+                    future.cancel()
+                    self.queue.remove(job)
+
+    def on_clear_clicked(self, button):
+        # Don't clear when jobs are running
+        if self.idle:
+            njobs = len(self.queue)
+            for i in range(njobs):
+                path = Gtk.TreePath(i)
+                job = self.queue.get_iter(path)
+                # Clear children before parents
+                if self.queue.iter_has_child(job):
+                    nsteps = self.queue.iter_n_children(job)
+                    for j in range(nsteps):
+                        path = Gtk.TreePath([i, j])
+                        step = self.queue.get_iter(path)
+                        future = self.queue.get_value(step, 0)
+                        # Cancel pending children before deleting them
+                        if not future.done():
+                            future.cancel()
+                else:
+                    future = self.queue.get_value(job, 0)
+                    # Cancel pending jobs before deleting them
+                    if not future.done():
+                        future.cancel()
+            # Clear queue
+            self.queue.clear()
+
+    def on_stop_clicked(self, button):
+        if not self.idle:
+            self.idle = True
+            # Wait for the process to terminate
+            while self.proc.poll() == None:
+                self.proc.terminate()
+
+            njobs = len(self.queue)
+            for i in range(njobs):
+                path = Gtk.TreePath(i)
+                job = self.queue.get_iter(path)
+                status = self.queue.get_value(job, 3)
+                if status == 'Running':
+                    if self.queue.iter_has_child(job):
+                        nsteps = self.queue.iter_n_children(job)
+                        for j in range(nsteps):
+                            path = Gtk.TreePath([i, j])
+                            step = self.queue.get_iter(path)
+                            future = self.queue.get_value(step, 0)
+                            # Mark children as failed
+                            self.queue.set_value(step, 3, 'Failed')
+                            # Cancel pending children
+                            if not future.done():
+                                future.cancel()
+                    # Mark job as failed
+                    self.queue.set_value(job, 3, 'Failed')
+
+            status_pbar.set_fraction(0)
+            status_pbar.set_text('Ready')
 
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
@@ -736,7 +886,6 @@ asrc_fcbutton = builder.get_object('asrc-fcbutton')
 aqueue_button = builder.get_object('aqueue-button')
 aenc_cbtext = builder.get_object('aenc-cbtext')
 aconf_button = builder.get_object('aconf-button')
-status_pbar = builder.get_object('status-pbar')
 
 batch_src_fcbutton = builder.get_object('batch_src-fcbutton')
 batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
@@ -746,6 +895,10 @@ batch_aconf_button = builder.get_object('batch_aconf-button')
 batch_queue_button = builder.get_object('batch_queue-button')
 batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
 track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
+
+queue_treeview = builder.get_object('queue-treeview')
+queue_selection = builder.get_object('queue-selection')
+status_pbar = builder.get_object('status-pbar')
 
 # Encoders settings
 x264_found = False
@@ -901,6 +1054,7 @@ builder.connect_signals(handler)
 
 window.show_all()
 
+GLib.threads_init()
 Gtk.main()
 
 # vim: ts=4 sw=4 et:
