@@ -5,9 +5,206 @@ import re
 import subprocess
 import yaml
 from concurrent.futures import ThreadPoolExecutor
+from gi.repository import GLib, GObject, Gtk
+from pyanimenc.helpers import Encode, MatroskaOps
+from pkg_resources import resource_string
 from threading import Lock
-from gi.repository import GLib,GObject,Gtk
-from pyanimenc import Encode,MatroskaOps
+
+# Constants
+vencs = ['x264', 'x264-10bit', 'x265', 'x265-10bit']
+vconts = ['avi', 'mkv', 'mp4', 'ogm']
+vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
+aencs = ['fdkaac', 'lame']
+aconts= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
+         'wv']
+atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
+          'A_MP3': 'mp3', 'A_TRUEHD': 'thd', 'A_VORBIS': 'ogg',
+          'A_WAVPACK4': 'wv'}
+stypes = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
+          'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
+
+# Main UI
+
+builder = Gtk.Builder()
+pyanimenc_glade = resource_string(__name__, 'glade/pyanimenc.glade')
+pyanimenc_glade = pyanimenc_glade.decode('utf8')
+builder.add_from_string(pyanimenc_glade)
+
+window = builder.get_object('window')
+vsrc_fcbutton = builder.get_object('vsrc-fcbutton')
+vqueue_button = builder.get_object('vqueue-button')
+venc_cbtext = builder.get_object('venc-cbtext')
+vconf_button = builder.get_object('vconf-button')
+asrc_fcbutton = builder.get_object('asrc-fcbutton')
+aqueue_button = builder.get_object('aqueue-button')
+aenc_cbtext = builder.get_object('aenc-cbtext')
+aconf_button = builder.get_object('aconf-button')
+
+batch_src_fcbutton = builder.get_object('batch_src-fcbutton')
+batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
+batch_vconf_button = builder.get_object('batch_vconf-button')
+batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
+batch_aconf_button = builder.get_object('batch_aconf-button')
+batch_queue_button = builder.get_object('batch_queue-button')
+batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
+track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
+
+queue_treeview = builder.get_object('queue-treeview')
+queue_selection = builder.get_object('queue-selection')
+status_pbar = builder.get_object('status-pbar')
+
+# Available encoders
+x264_found = False
+x264_depth = []
+x265_found = False
+x265_depth = []
+
+for enc in vencs:
+    if os.path.isfile('/usr/bin/' + enc):
+        if enc == 'x264':
+            x264_depth.append('8')
+            x264_found = True
+        elif enc == 'x264-10bit':
+            x264_depth.append('10')
+            x264_found = True
+        elif enc == 'x265':
+            x265_depth.append('8')
+            x265_found = True
+        elif enc == 'x265-10bit':
+            x265_depth.append('10')
+            x265_found = True
+        else:
+            venc_cbtext.append_text(enc)
+            batch_venc_cbtext.append_text(enc)
+        print('Found ' + enc + '.')
+    else:
+        vencs.pop(vencs.index(enc))
+
+if x264_found:
+    venc_cbtext.append_text('x264')
+    batch_venc_cbtext.append_text('x264')
+if x265_found:
+    venc_cbtext.append_text('x265')
+    batch_venc_cbtext.append_text('x265')
+
+for enc in aencs:
+    if os.path.isfile('/usr/bin/' + enc):
+        aenc_cbtext.append_text(enc)
+        batch_aenc_cbtext.append_text(enc)
+        print('Found ' + enc + '.')
+    else:
+        aencs.pop(aencs.index(enc))
+
+if vencs:
+    venc_cbtext.set_active(0)
+    vconf_button.set_sensitive(True)
+    batch_venc_cbtext.set_active(0)
+    batch_vconf_button.set_sensitive(True)
+if aencs:
+    aenc_cbtext.set_active(0)
+    aconf_button.set_sensitive(True)
+    batch_aenc_cbtext.set_active(0)
+    batch_aconf_button.set_sensitive(True)
+
+# Encoders UI
+encoders_glade = resource_string(__name__, 'glade/encoders.glade')
+encoders_glade = encoders_glade.decode('utf8')
+builder.add_from_string(encoders_glade)
+
+if x264_found:
+    x264_dialog = builder.get_object('x264-dialog')
+    x264_depth_cbtext = builder.get_object('x264_depth-cbtext')
+    for dp in x264_depth:
+        x264_depth_cbtext.append_text(dp)
+    x264_depth_cbtext.set_active(0)
+    x264_quality_spin = builder.get_object('x264_quality-spin')
+    x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
+    x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
+    x264_container_cbtext = builder.get_object('x264_container-cbtext')
+
+if x265_found:
+    x265_dialog = builder.get_object('x265-dialog')
+    x265_depth_cbtext = builder.get_object('x265_depth-cbtext')
+    for dp in x265_depth:
+        x265_depth_cbtext.append_text(dp)
+    x265_depth_cbtext.set_active(0)
+    x265_quality_spin = builder.get_object('x265_quality-spin')
+    x265_preset_cbtext = builder.get_object('x265_preset-cbtext')
+    x265_tune_cbtext = builder.get_object('x265_tune-cbtext')
+    x265_container_cbtext = builder.get_object('x265_container-cbtext')
+
+for enc in aencs:
+    if enc == 'fdkaac':
+        fdkaac_dialog = builder.get_object('fdkaac-dialog')
+        fdkaac_mode_cbtext = builder.get_object('fdkaac_mode-cbtext')
+        fdkaac_bitrate_spin = builder.get_object('fdkaac_bitrate-spin')
+        fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
+        fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
+    elif enc == 'lame':
+        lame_dialog = builder.get_object('lame-dialog')
+        lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
+        lame_bitrate_spin = builder.get_object('lame_bitrate-spin')
+        lame_quality_spin = builder.get_object('lame_quality-spin')
+
+# VapourSynth UI
+filters_glade = resource_string(__name__, 'glade/filters.glade')
+filters_glade = filters_glade.decode('utf8')
+builder.add_from_string(filters_glade)
+
+vpy_dialog = builder.get_object('vpy-dialog')
+fps_check = builder.get_object('fps-check')
+fpsnum_spin = builder.get_object('fpsnum-spin')
+fpsden_spin = builder.get_object('fpsden-spin')
+crop_check = builder.get_object('crop-check')
+lcrop_spin = builder.get_object('lcrop-spin')
+rcrop_spin = builder.get_object('rcrop-spin')
+tcrop_spin = builder.get_object('tcrop-spin')
+bcrop_spin = builder.get_object('bcrop-spin')
+resize_check = builder.get_object('resize-check')
+wresize_spin = builder.get_object('wresize-spin')
+hresize_spin = builder.get_object('hresize-spin')
+resize_algo_cbtext = builder.get_object('resize_algo-cbtext')
+
+sdenoise_check = builder.get_object('sdenoise-check')
+sdenoise_cbtext = builder.get_object('sdenoise-cbtext')
+sdenoise_conf_button = builder.get_object('sdenoise_conf-button')
+rgvs_dialog = builder.get_object('rgvs-dialog')
+rgvs_mode_spin = builder.get_object('rgvs_mode-spin')
+rgvs_adv_check = builder.get_object('rgvs_adv-check')
+rgvs_umode_spin = builder.get_object('rgvs_umode-spin')
+rgvs_vmode_spin = builder.get_object('rgvs_vmode-spin')
+rgvs_ok_button = builder.get_object('rgvs_ok-button')
+
+tdenoise_check = builder.get_object('tdenoise-check')
+tdenoise_cbtext = builder.get_object('tdenoise-cbtext')
+tdenoise_conf_button = builder.get_object('tdenoise_conf-button')
+tsoft_dialog = builder.get_object('tsoft-dialog')
+tsoft_rad_spin = builder.get_object('tsoft_rad-spin')
+tsoft_lt_spin = builder.get_object('tsoft_lt-spin')
+tsoft_ct_spin = builder.get_object('tsoft_ct-spin')
+tsoft_sc_spin = builder.get_object('tsoft_sc-spin')
+tsoft_ok_button = builder.get_object('tsoft_ok-button')
+
+stdenoise_check = builder.get_object('stdenoise-check')
+stdenoise_cbtext = builder.get_object('stdenoise-cbtext')
+stdenoise_conf_button = builder.get_object('stdenoise_conf-button')
+fsmooth_dialog = builder.get_object('fsmooth-dialog')
+fsmooth_tt_spin = builder.get_object('fsmooth_tt-spin')
+fsmooth_st_spin = builder.get_object('fsmooth_st-spin')
+fsmooth_yplane_check = builder.get_object('fsmooth_yplane-check')
+fsmooth_uplane_check = builder.get_object('fsmooth_uplane-check')
+fsmooth_vplane_check = builder.get_object('fsmooth_vplane-check')
+fsmooth_ok_button = builder.get_object('fsmooth_ok-button')
+
+deband_check = builder.get_object('deband-check')
+deband_cbtext = builder.get_object('deband-cbtext')
+deband_conf_button = builder.get_object('deband_conf-button')
+f3kdb_dialog = builder.get_object('f3kdb-dialog')
+f3kdb_preset_cbtext = builder.get_object('f3kdb_preset-cbtext')
+f3kdb_planes_cbtext = builder.get_object('f3kdb_planes-cbtext')
+f3kdb_grain_check = builder.get_object('f3kdb_grain-check')
+f3kdb_depth_spin = builder.get_object('f3kdb_depth-spin')
+f3kdb_ok_button = builder.get_object('f3kdb_ok-button')
 
 class Handler:
     def __init__(self):
@@ -66,19 +263,17 @@ class Handler:
                 elif future.running():
                     GLib.idle_add(self.queue.set_value, job, 3, 'Running')
 
-    def on_vs_creator_clicked(self, button):
-        self.tools_worker.submit(self.vs_creator)
+    def on_script_creator_clicked(self, button):
+        self.tools_worker.submit(self._script_creator)
 
-    def vs_creator(self):
-        cmd = '/usr/lib/python3.4/site-packages/pyanimenc/vs-script-creator.py'
-        subprocess.call(cmd)
+    def _script_creator(self):
+        subprocess.call('pyae-script')
 
     def on_chap_editor_clicked(self, button):
-        self.tools_worker.submit(self.chapter_editor)
+        self.tools_worker.submit(self._chapter_editor)
 
-    def chapter_editor(self):
-        cmd = '/usr/lib/python3.4/site-packages/pyanimenc/chapter-editor.py'
-        subprocess.call(cmd)
+    def _chapter_editor(self):
+        subprocess.call('pyae-chapter')
 
     def on_vsrc_set(self, button):
         vqueue_button.set_sensitive(True)
@@ -220,7 +415,9 @@ class Handler:
         tracks = self.data[0]
         for i in range(len(tracks) - 1):
             builder = Gtk.Builder()
-            builder.add_from_file('/usr/share/pyanimenc/track.glade')
+            track_glade = resource_string(__name__, 'glade/track.glade')
+            track_glade = track_glade.decode('utf8')
+            builder.add_from_string(track_glade)
             grid = builder.get_object('grid')
             batch_tracks_vbox.pack_start(grid, False, False, 0)
             enable_check = builder.get_object('enable-check')
@@ -860,201 +1057,11 @@ class Handler:
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
 
-# Some constants and variables
-vencs = ['x264', 'x264-10bit', 'x265', 'x265-10bit']
-vconts = ['avi', 'mkv', 'mp4', 'ogm']
-vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
-aencs = ['fdkaac', 'lame']
-aconts= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
-              'wv']
-atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
-          'A_MP3': 'mp3', 'A_TRUEHD': 'thd', 'A_VORBIS': 'ogg',
-          'A_WAVPACK4': 'wv'}
-stypes = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
-          'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
-
-# Main GUI
-builder = Gtk.Builder()
-builder.add_from_file('/usr/share/pyanimenc/pyanimenc.glade')
-
-window = builder.get_object('window')
-vsrc_fcbutton = builder.get_object('vsrc-fcbutton')
-vqueue_button = builder.get_object('vqueue-button')
-venc_cbtext = builder.get_object('venc-cbtext')
-vconf_button = builder.get_object('vconf-button')
-asrc_fcbutton = builder.get_object('asrc-fcbutton')
-aqueue_button = builder.get_object('aqueue-button')
-aenc_cbtext = builder.get_object('aenc-cbtext')
-aconf_button = builder.get_object('aconf-button')
-
-batch_src_fcbutton = builder.get_object('batch_src-fcbutton')
-batch_venc_cbtext = builder.get_object('batch_venc-cbtext')
-batch_vconf_button = builder.get_object('batch_vconf-button')
-batch_aenc_cbtext = builder.get_object('batch_aenc-cbtext')
-batch_aconf_button = builder.get_object('batch_aconf-button')
-batch_queue_button = builder.get_object('batch_queue-button')
-batch_tracks_vbox = builder.get_object('batch_tracks-vbox')
-track_mismatch_dialog = builder.get_object('track_mismatch-dialog')
-
-queue_treeview = builder.get_object('queue-treeview')
-queue_selection = builder.get_object('queue-selection')
-status_pbar = builder.get_object('status-pbar')
-
-# Encoders settings
-x264_found = False
-x264_depth = []
-x265_found = False
-x265_depth = []
-
-for enc in vencs:
-    if os.path.isfile('/usr/bin/' + enc):
-        if enc == 'x264':
-            x264_depth.append('8')
-            x264_found = True
-        elif enc == 'x264-10bit':
-            x264_depth.append('10')
-            x264_found = True
-        elif enc == 'x265':
-            x265_depth.append('8')
-            x265_found = True
-        elif enc == 'x265-10bit':
-            x265_depth.append('10')
-            x265_found = True
-        else:
-            venc_cbtext.append_text(enc)
-            batch_venc_cbtext.append_text(enc)
-        print('Found ' + enc + '.')
-    else:
-        vencs.pop(vencs.index(enc))
-
-if x264_found:
-    venc_cbtext.append_text('x264')
-    batch_venc_cbtext.append_text('x264')
-if x265_found:
-    venc_cbtext.append_text('x265')
-    batch_venc_cbtext.append_text('x265')
-
-for enc in aencs:
-    if os.path.isfile('/usr/bin/' + enc):
-        aenc_cbtext.append_text(enc)
-        batch_aenc_cbtext.append_text(enc)
-        print('Found ' + enc + '.')
-    else:
-        aencs.pop(aencs.index(enc))
-
-if vencs:
-    venc_cbtext.set_active(0)
-    vconf_button.set_sensitive(True)
-    batch_venc_cbtext.set_active(0)
-    batch_vconf_button.set_sensitive(True)
-if aencs:
-    aenc_cbtext.set_active(0)
-    aconf_button.set_sensitive(True)
-    batch_aenc_cbtext.set_active(0)
-    batch_aconf_button.set_sensitive(True)
-
-# Encoder settings
-builder.add_from_file('/usr/share/pyanimenc/encoders.glade')
-
-if x264_found:
-    x264_dialog = builder.get_object('x264-dialog')
-    x264_depth_cbtext = builder.get_object('x264_depth-cbtext')
-    for dp in x264_depth:
-        x264_depth_cbtext.append_text(dp)
-    x264_depth_cbtext.set_active(0)
-    x264_quality_spin = builder.get_object('x264_quality-spin')
-    x264_preset_cbtext = builder.get_object('x264_preset-cbtext')
-    x264_tune_cbtext = builder.get_object('x264_tune-cbtext')
-    x264_container_cbtext = builder.get_object('x264_container-cbtext')
-
-if x265_found:
-    x265_dialog = builder.get_object('x265-dialog')
-    x265_depth_cbtext = builder.get_object('x265_depth-cbtext')
-    for dp in x265_depth:
-        x265_depth_cbtext.append_text(dp)
-    x265_depth_cbtext.set_active(0)
-    x265_quality_spin = builder.get_object('x265_quality-spin')
-    x265_preset_cbtext = builder.get_object('x265_preset-cbtext')
-    x265_tune_cbtext = builder.get_object('x265_tune-cbtext')
-    x265_container_cbtext = builder.get_object('x265_container-cbtext')
-
-for enc in aencs:
-    if enc == 'fdkaac':
-        fdkaac_dialog = builder.get_object('fdkaac-dialog')
-        fdkaac_mode_cbtext = builder.get_object('fdkaac_mode-cbtext')
-        fdkaac_bitrate_spin = builder.get_object('fdkaac_bitrate-spin')
-        fdkaac_quality_spin = builder.get_object('fdkaac_quality-spin')
-        fdkaac_container_cbtext = builder.get_object('fdkaac_container-cbtext')
-    elif enc == 'lame':
-        lame_dialog = builder.get_object('lame-dialog')
-        lame_mode_cbtext = builder.get_object('lame_mode-cbtext')
-        lame_bitrate_spin = builder.get_object('lame_bitrate-spin')
-        lame_quality_spin = builder.get_object('lame_quality-spin')
-
-# VapourSynth settings
-builder.add_from_file('/usr/share/pyanimenc/filters.glade')
-
-vpy_dialog = builder.get_object('vpy-dialog')
-fps_check = builder.get_object('fps-check')
-fpsnum_spin = builder.get_object('fpsnum-spin')
-fpsden_spin = builder.get_object('fpsden-spin')
-crop_check = builder.get_object('crop-check')
-lcrop_spin = builder.get_object('lcrop-spin')
-rcrop_spin = builder.get_object('rcrop-spin')
-tcrop_spin = builder.get_object('tcrop-spin')
-bcrop_spin = builder.get_object('bcrop-spin')
-resize_check = builder.get_object('resize-check')
-wresize_spin = builder.get_object('wresize-spin')
-hresize_spin = builder.get_object('hresize-spin')
-resize_algo_cbtext = builder.get_object('resize_algo-cbtext')
-
-sdenoise_check = builder.get_object('sdenoise-check')
-sdenoise_cbtext = builder.get_object('sdenoise-cbtext')
-sdenoise_conf_button = builder.get_object('sdenoise_conf-button')
-rgvs_dialog = builder.get_object('rgvs-dialog')
-rgvs_mode_spin = builder.get_object('rgvs_mode-spin')
-rgvs_adv_check = builder.get_object('rgvs_adv-check')
-rgvs_umode_spin = builder.get_object('rgvs_umode-spin')
-rgvs_vmode_spin = builder.get_object('rgvs_vmode-spin')
-rgvs_ok_button = builder.get_object('rgvs_ok-button')
-
-tdenoise_check = builder.get_object('tdenoise-check')
-tdenoise_cbtext = builder.get_object('tdenoise-cbtext')
-tdenoise_conf_button = builder.get_object('tdenoise_conf-button')
-tsoft_dialog = builder.get_object('tsoft-dialog')
-tsoft_rad_spin = builder.get_object('tsoft_rad-spin')
-tsoft_lt_spin = builder.get_object('tsoft_lt-spin')
-tsoft_ct_spin = builder.get_object('tsoft_ct-spin')
-tsoft_sc_spin = builder.get_object('tsoft_sc-spin')
-tsoft_ok_button = builder.get_object('tsoft_ok-button')
-
-stdenoise_check = builder.get_object('stdenoise-check')
-stdenoise_cbtext = builder.get_object('stdenoise-cbtext')
-stdenoise_conf_button = builder.get_object('stdenoise_conf-button')
-fsmooth_dialog = builder.get_object('fsmooth-dialog')
-fsmooth_tt_spin = builder.get_object('fsmooth_tt-spin')
-fsmooth_st_spin = builder.get_object('fsmooth_st-spin')
-fsmooth_yplane_check = builder.get_object('fsmooth_yplane-check')
-fsmooth_uplane_check = builder.get_object('fsmooth_uplane-check')
-fsmooth_vplane_check = builder.get_object('fsmooth_vplane-check')
-fsmooth_ok_button = builder.get_object('fsmooth_ok-button')
-
-deband_check = builder.get_object('deband-check')
-deband_cbtext = builder.get_object('deband-cbtext')
-deband_conf_button = builder.get_object('deband_conf-button')
-f3kdb_dialog = builder.get_object('f3kdb-dialog')
-f3kdb_preset_cbtext = builder.get_object('f3kdb_preset-cbtext')
-f3kdb_planes_cbtext = builder.get_object('f3kdb_planes-cbtext')
-f3kdb_grain_check = builder.get_object('f3kdb_grain-check')
-f3kdb_depth_spin = builder.get_object('f3kdb_depth-spin')
-f3kdb_ok_button = builder.get_object('f3kdb_ok-button')
-
 handler = Handler()
 builder.connect_signals(handler)
 
 window.show_all()
 
-GLib.threads_init()
 Gtk.main()
 
 # vim: ts=4 sw=4 et:

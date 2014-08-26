@@ -1,4 +1,4 @@
 pyanimenc
 =========
 
-Python Transcoding Tools
+Audio/Video Transcoding Frontend

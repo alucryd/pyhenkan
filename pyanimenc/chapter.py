@@ -2,8 +2,25 @@
 
 import os
 import yaml
-from gi.repository import Gtk,GdkPixbuf
-from pyanimenc import Chapters
+from gi.repository import Gtk
+from pkg_resources import resource_string
+from pyanimenc.helpers import Chapters
+
+# Main UI
+builder = Gtk.Builder()
+chapter_glade = resource_string(__name__, 'glade/chapter.glade')
+chapter_glade = chapter_glade.decode('utf8')
+builder.add_from_string(chapter_glade)
+
+window = builder.get_object('window')
+entries_box = builder.get_object('entries-box')
+open_fcdialog = builder.get_object('open-fcdialog')
+save_fcdialog = builder.get_object('save-fcdialog')
+settings_dialog = builder.get_object('settings-dialog')
+ordered_check = builder.get_object('ordered-check')
+lang_entry = builder.get_object('lang-entry')
+fpsnum_spin = builder.get_object('fpsnum-spin')
+fpsden_spin = builder.get_object('fpsden-spin')
 
 class Handler:
     def __init__(self):
@@ -88,7 +105,9 @@ class Handler:
 
         for i in range(len(self.chapters)):
             builder = Gtk.Builder()
-            builder.add_from_file('/home/alucryd/pyanimenc/chapter.glade')
+            entry_glade = resource_string(__name__, 'glade/entry.glade')
+            entry_glade = entry_glade.decode('utf8')
+            builder.add_from_string(entry_glade)
             grid = builder.get_object('grid')
             entries_box.pack_start(grid, False, False, 0)
             title = builder.get_object('title-entry')
@@ -157,20 +176,6 @@ class Handler:
 
     def on_window_delete_event(self, *args):
         Gtk.main_quit(*args)
-
-# Build the GUI
-builder = Gtk.Builder()
-builder.add_from_file('/home/alucryd/pyanimenc/chapter-editor.glade')
-
-window = builder.get_object('window')
-entries_box = builder.get_object('entries-box')
-open_fcdialog = builder.get_object('open-fcdialog')
-save_fcdialog = builder.get_object('save-fcdialog')
-settings_dialog = builder.get_object('settings-dialog')
-ordered_check = builder.get_object('ordered-check')
-lang_entry = builder.get_object('lang-entry')
-fpsnum_spin = builder.get_object('fpsnum-spin')
-fpsden_spin = builder.get_object('fpsden-spin')
 
 handler = Handler()
 builder.connect_signals(handler)

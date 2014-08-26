@@ -76,12 +76,12 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <child>
-              <object class="GtkToolButton" id="vs_creator-button">
+              <object class="GtkToolButton" id="script_creator-button">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="label" translatable="yes">VapourSynth Script Creator</property>
                 <property name="use_underline">True</property>
-                <signal name="clicked" handler="on_vs_creator_clicked" swapped="no"/>
+                <signal name="clicked" handler="on_script_creator_clicked" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>
