@@ -76,7 +76,6 @@ for enc in vencs:
         else:
             venc_cbtext.append_text(enc)
             batch_venc_cbtext.append_text(enc)
-        print('Found ' + enc + '.')
     else:
         vencs.pop(vencs.index(enc))
 
@@ -91,7 +90,6 @@ for enc in aencs:
     if os.path.isfile('/usr/bin/' + enc):
         aenc_cbtext.append_text(enc)
         batch_aenc_cbtext.append_text(enc)
-        print('Found ' + enc + '.')
     else:
         aencs.pop(aencs.index(enc))
 
@@ -442,9 +440,11 @@ class Handler:
             elif codec in atypes:
                 type = 'audio'
                 enable_check.set_label('Audio')
-                channels = track['channels']
+                channels = track.get('channels', '')
                 if channels == '2':
                     channels = '2.0'
+                elif channels == '5':
+                    channels = '5.0'
                 elif channels == '6':
                     channels = '5.1'
                 elif channels == '7':
@@ -707,9 +707,7 @@ class Handler:
             deband):
         s = Encode(source).vpy(fps, crop, resize, sdenoise, tdenoise,
                                stdenoise, deband)
-        print(s)
         vpy = re.sub('[^.]*$', 'vpy', source)
-        print(vpy)
         with open(vpy, 'w') as f:
             f.write(s)
 
@@ -724,7 +722,6 @@ class Handler:
             # Get the frame total
             if 'Frames:' in line:
                 d = int(line.split(' ')[1])
-        print(d)
         return d
 
     def _x264(self, source, dest, depth, quality, preset, tune, container):
