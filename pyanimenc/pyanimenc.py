@@ -17,9 +17,9 @@ vtypes = {'V_MPEG4/ISO/AVC': 'h264', 'V_MS/VFW/FOURCC': 'xvid'}
 aencs = ['fdkaac', 'lame']
 aconts= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
          'wv']
-atypes = {'A_AAC': 'aac', 'A_AC3': 'ac3', 'A_DTS': 'dts', 'A_FLAC': 'flac',
-          'A_MP3': 'mp3', 'A_TRUEHD': 'thd', 'A_VORBIS': 'ogg',
-          'A_WAVPACK4': 'wv'}
+atypes = {'A_AAC': 'aac', 'A_AAC/MPEG2/LC/SBR': 'aac', 'A_AC3': 'ac3',
+          'A_DTS': 'dts', 'A_FLAC': 'flac', 'A_MP3': 'mp3', 'A_TRUEHD': 'thd',
+          'A_VORBIS': 'ogg', 'A_WAVPACK4': 'wv'}
 stypes = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
           'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
