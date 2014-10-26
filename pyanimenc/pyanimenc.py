@@ -13,7 +13,7 @@ from threading import Lock
 # Constants
 vencs = ['x264', 'x264-10bit', 'x265', 'x265-10bit']
 vconts = ['avi', 'mkv', 'mp4', 'ogm']
-vtypes = {'V_MPEG4/ISO/AVC': 'h264'}
+vtypes = {'V_MPEG4/ISO/AVC': 'h264', 'V_MS/VFW/FOURCC': 'xvid'}
 aencs = ['fdkaac', 'lame']
 aconts= ['aac', 'ac3', 'dts', 'flac', 'mka', 'mp3', 'mp4', 'thd', 'ogg',
          'wv']
