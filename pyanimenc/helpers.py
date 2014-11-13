@@ -93,18 +93,25 @@ class MatroskaOps:
         return cmd
 
 class Chapters:
-    def __init__(self, lang='eng', fpsnum=24000, fpsden=1001, ordered=True):
+    def __init__(self, ordered=False, frame=False, fpsnum=24000, fpsden=1001):
         self.ordered = ordered
-        self.lang = lang
+        self.frame = frame
         self.fpsnum = fpsnum
         self.fpsden = fpsden
 
-    def timecode(self, frames):
+    def frame_to_time(self, frames):
         time = Decimal(frames) * Decimal(self.fpsden) / Decimal(self.fpsnum)
         hours = int(time // 3600)
         minutes = int((time - hours * 3600) // 60)
         seconds = round(time - hours * 3600 - minutes * 60, 3)
         return '{:0>2d}:{:0>2d}:{:0>12.9f}'.format(hours, minutes, seconds)
+
+    def time_to_frame(self, time):
+        hours, minutes, seconds = time.split(':')
+        s = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        f = round(Decimal(s) * Decimal(self.fpsnum) / Decimal(self.fpsden))
+
+        return f
 
     def _atom(self, chapter):
         atom = etree.Element('ChapterAtom')
@@ -112,20 +119,26 @@ class Chapters:
         uid.text = str(randrange(1000000000))
         if self.ordered:
             seg_uid = etree.SubElement(atom, 'ChapterSegmentUID', format='hex')
-            seg_uid.text = chapter[3]
+            seg_uid.text = chapter[4]
         display = etree.SubElement(atom, 'ChapterDisplay')
         string = etree.SubElement(display, 'ChapterString')
         string.text = chapter[0]
         lang = etree.SubElement(display, 'ChapterLanguage')
-        lang.text = self.lang
+        lang.text = chapter[1]
         start = etree.SubElement(atom, 'ChapterTimeStart')
-        start.text = self.timecode(chapter[1])
+        if self.frame:
+            start.text = self.frame_to_time(chapter[2])
+        else:
+            start.text = chapter[2]
         if self.ordered:
             end = etree.SubElement(atom, 'ChapterTimeEnd')
-            end.text = self.timecode(chapter[2])
+            if self.frame:
+                end.text = self.frame_to_time(chapter[3])
+            else:
+                end.text = chapter[3]
         return atom
 
-    def chapter(self, chapters):
+    def build(self, chapters):
         chaps = etree.Element('Chapters')
         edit = etree.SubElement(chaps, 'EditionEntry')
         edit_uid = etree.SubElement(edit, 'EditionUID')
@@ -140,6 +153,38 @@ class Chapters:
         xml = etree.tostring(chaps, encoding='UTF-8', pretty_print=True,
                              xml_declaration=True, doctype=doctype)
         return xml
+
+    def parse(self, xml):
+        ordered = False
+        chapters = []
+        root = etree.fromstring(xml)
+
+        for child in root[0]:
+            if child.tag == 'EditionFlagOrdered' and child.text == '1':
+                ordered = True
+            elif child.tag == 'ChapterAtom':
+                title = ''
+                lang = 'und'
+                start = '00:00:00.000000000'
+                end = '00:00:00.000000000'
+                uid = ''
+                for gchild in child:
+                    if gchild.tag == 'ChapterSegmentUID' and gchild.text:
+                        uid = gchild.text
+                    elif gchild.tag == 'ChapterTimeStart':
+                        start = gchild.text
+                    elif gchild.tag == 'ChapterTimeEnd':
+                        end = gchild.text
+                    elif gchild.tag == 'ChapterDisplay':
+                        for ggchild in gchild:
+                            if ggchild.tag == 'ChapterString':
+                                title = ggchild.text
+                            elif ggchild.tag == 'ChapterLanguage':
+                                lang = ggchild.text
+
+                chapters.append([title, lang, start, end, uid])
+
+        return (ordered, chapters)
 
 class Encode:
     def __init__(self, source):
@@ -188,11 +233,11 @@ class Encode:
         return s
 
     def info(self):
-        cmd = 'vspipe "{}.vpy" - -i'.format(self.sname)
+        cmd = 'vspipe "{}" - -i'.format(self.source)
         return cmd
 
     def preview(self):
-        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
+        dec = 'vspipe "{}" - -y'.format(self.source)
         enc = 'mpv -'
         cmd = ' | '.join([dec, enc])
         return cmd
@@ -200,7 +245,7 @@ class Encode:
     def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4'):
         if not o:
             o = self.sname
-        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
+        dec = 'vspipe "{}" - -y'.format(self.source)
         if d == 8:
             x = 'x264'
         elif d == 10:
@@ -216,7 +261,7 @@ class Encode:
     def x265(self, o='', d=8, q=18, p='medium', t='', c='265'):
         if not o:
             o = self.sname
-        dec = 'vspipe "{}.vpy" - -y'.format(self.sname)
+        dec = 'vspipe "{}" - -y'.format(self.source)
         if d == 8:
             x = 'x265'
         elif d == 10:
