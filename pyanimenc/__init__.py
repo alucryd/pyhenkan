@@ -1727,8 +1727,7 @@ class ChapterEditorWindow(Gtk.Window):
         else:
             self.frame = False
 
-        c = Chapters(self.lang, self.fpsnum, self.fpsden, self.ordered,
-                     self.frame)
+        c = Chapters(self.ordered, self.frame, self.fpsnum, self.fpsden)
         for chapter in self.chapters:
             if self.frame:
                 chapter[2] = c.time_to_frame(chapter[2])
