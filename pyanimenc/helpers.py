@@ -262,11 +262,8 @@ class Encode:
         if not o:
             o = self.sname
         dec = 'vspipe "{}" - -y'.format(self.source)
-        if d == 8:
-            x = 'x265'
-        elif d == 10:
-            x = 'x265-10bit'
-        enc = '{} - --crf {} --y4m --output "{}.{}"'.format(x, q, o, c)
+        enc = 'x265 - --output-depth {} --crf {} --y4m --output "{}.{}"'
+        enc = enc.format(d, q, o, c)
         if p:
             enc = enc + ' --preset ' + p
         if t:

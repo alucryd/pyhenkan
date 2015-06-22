@@ -42,19 +42,64 @@ class Config:
 
     def __init__(self):
         # Initialize all codecs and filters configuration
-        if self.find('fdkaac'):
+        if self._find_enc('fdkaac'):
             self.fdkaac()
-        if self.find('lame'):
+        else:
+            AENCS.remove('fdkaac')
+        if self._find_enc('lame'):
             self.lame()
-        if self.find('x264'):
-            self.x264()
-        if self.find('x265'):
-            self.x265()
+        else:
+            AENCS.remove('lame')
+        self._find_x264()
+        self._find_x265()
         self.vs()
         self.rgvs()
         self.tsoft()
         self.fsmooth()
         self.f3kdb()
+
+    def _find_enc(self, x):
+        if os.path.isfile('/usr/bin/' + x):
+            return True
+        else:
+            return False
+
+    def _find_x264(self):
+        self.x264_depths = []
+        if self._find_enc('x264'):
+            self.x264_depths.append('8')
+        if self._find_enc('x264-10bit'):
+            self.x264_depths.append('10')
+        if self.x264_depths:
+            #self.x264_depths.sort()
+            self.x264()
+        else:
+            VENCS.remove('x264')
+
+    def _find_x265(self):
+        self.x265_depths = []
+        if self._find_enc('x265'):
+            for d in ['8', '10']:
+                cmd = ['x265', '--output-depth', d, '--version']
+                cmd = ' '.join(cmd)
+                self.proc = subprocess.Popen(cmd,
+                                             shell=True,
+                                             stderr=subprocess.PIPE,
+                                             universal_newlines=True)
+                line = self.proc.stderr.readline()
+                while line:
+                    depth = re.findall('[0-9]*bpp', line)
+                    if depth:
+                        depth = depth[0].strip('bpp')
+                        if depth == '16':
+                            depth = '10'
+                        if not depth in self.x265_depths:
+                            self.x265_depths.append(depth)
+                    line = self.proc.stderr.readline()
+        if self.x265_depths:
+            self.x265()
+        else:
+            VENCS.remove('x265')
 
     def fdkaac(self):
         fdkaac_modes = ['CBR', 'VBR']
@@ -107,8 +152,6 @@ class Config:
 
     def x264(self):
         x264_depths = ['8']
-        if self.find('x264-10bit'):
-            x264_depths.append('10')
         x264_quality = Gtk.Adjustment(18, 1, 51, 1, 10)
         x264_presets = ['none', 'ultrafast', 'superfast', 'veryfast', 'faster',
                         'fast', 'medium', 'slow', 'slower', 'veryslow',
@@ -119,7 +162,7 @@ class Config:
 
         self.x264_depth_cbtext = Gtk.ComboBoxText()
         self.x264_depth_cbtext.set_property('hexpand', True)
-        for d in x264_depths:
+        for d in self.x264_depths:
             self.x264_depth_cbtext.append_text(d)
         self.x264_depth_cbtext.set_active(0)
 
@@ -147,9 +190,6 @@ class Config:
         self.x264_cont_cbtext.set_active(0)
 
     def x265(self):
-        x265_depths = ['8']
-        if self.find('x265-10bit'):
-            x265_depths.append('10')
         x265_quality = Gtk.Adjustment(18, 1, 51, 1, 10)
         x265_presets = ['none', 'ultrafast', 'superfast', 'veryfast', 'faster',
                         'fast', 'medium', 'slow', 'slower', 'veryslow',
@@ -159,7 +199,7 @@ class Config:
 
         self.x265_depth_cbtext = Gtk.ComboBoxText()
         self.x265_depth_cbtext.set_property('hexpand', True)
-        for d in x265_depths:
+        for d in self.x265_depths:
             self.x265_depth_cbtext.append_text(d)
         self.x265_depth_cbtext.set_active(0)
 
@@ -354,12 +394,6 @@ class Config:
         self.f3kdb_depth_spin = Gtk.SpinButton()
         self.f3kdb_depth_spin.set_adjustment(f3kdb_depths)
         self.f3kdb_depth_spin.set_property('hexpand', True)
-
-    def find(self, x):
-        if os.path.isfile('/usr/bin/' + x):
-            return True
-        else:
-            return False
 
 class MainWindow(Gtk.Window):
 
@@ -656,27 +690,29 @@ class MainWindow(Gtk.Window):
 
         #--Encoders--#
         for x in VENCS:
-            if conf.find(x):
-                self.venc_cbtext.append_text(x)
-                self.venc_cbtext.set_active(0)
-                self.auto_venc_cbtext.append_text(x)
-                self.auto_venc_cbtext.set_active(0)
+            self.venc_cbtext.append_text(x)
+            self.venc_cbtext.set_active(0)
+            self.auto_venc_cbtext.append_text(x)
+            self.auto_venc_cbtext.set_active(0)
         for x in AENCS:
-            if conf.find(x):
-                self.aenc_cbtext.append_text(x)
-                self.aenc_cbtext.set_active(0)
-                self.auto_aenc_cbtext.append_text(x)
-                self.auto_aenc_cbtext.set_active(0)
+            self.aenc_cbtext.append_text(x)
+            self.aenc_cbtext.set_active(0)
+            self.auto_aenc_cbtext.append_text(x)
+            self.auto_aenc_cbtext.set_active(0)
 
         #--Dialogs--#
-        self.fdkaac_dlg = EncoderDialog(self, 'fdkaac')
-        self.fdkaac_dlg.hide()
-        self.lame_dlg = EncoderDialog(self, 'lame')
-        self.lame_dlg.hide()
-        self.x264_dlg = EncoderDialog(self, 'x264')
-        self.x264_dlg.hide()
-        self.x265_dlg = EncoderDialog(self, 'x265')
-        self.x265_dlg.hide()
+        if 'fdkaac' in AENCS:
+            self.fdkaac_dlg = EncoderDialog(self, 'fdkaac')
+            self.fdkaac_dlg.hide()
+        if 'lame' in AENCS:
+            self.lame_dlg = EncoderDialog(self, 'lame')
+            self.lame_dlg.hide()
+        if 'x264' in VENCS:
+            self.x264_dlg = EncoderDialog(self, 'x264')
+            self.x264_dlg.hide()
+        if 'x265' in VENCS:
+            self.x265_dlg = EncoderDialog(self, 'x265')
+            self.x265_dlg.hide()
 
         self.about_dlg = AboutDialog(self)
         self.about_dlg.set_transient_for(self)
