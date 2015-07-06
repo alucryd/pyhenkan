@@ -79,7 +79,7 @@ class Config:
     def _find_x265(self):
         self.x265_depths = []
         if self._find_enc('x265'):
-            for d in ['8', '10']:
+            for d in ['8', '10', '12']:
                 cmd = ['x265', '--output-depth', d, '--version']
                 cmd = ' '.join(cmd)
                 self.proc = subprocess.Popen(cmd,
@@ -88,11 +88,9 @@ class Config:
                                              universal_newlines=True)
                 line = self.proc.stderr.readline()
                 while line:
-                    depth = re.findall('[0-9]*bpp', line)
+                    depth = re.findall('(8|10|12)bit', line)
                     if depth:
-                        depth = depth[0].strip('bpp')
-                        if depth == '16':
-                            depth = '10'
+                        depth = depth[0].strip('bit')
                         if not depth in self.x265_depths:
                             self.x265_depths.append(depth)
                     line = self.proc.stderr.readline()
