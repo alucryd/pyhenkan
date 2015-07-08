@@ -191,45 +191,41 @@ class Encode:
         self.source = source
         self.sname = os.path.splitext(self.source)[0]
 
-    def vpy(self, f=[], c=[], r=[], sd=[], td=[], std=[], d=[]):
-        s = 'import vapoursynth as vs\n'
-        s = s + 'core = vs.get_core()\n'
-        s = s + 'clip = core.ffms2.Source("{}"'.format(self.source)
-        if f:
-            s = s + ', fpsnum={}, fpsden={}'.format(f[0], f[1])
-        s = s + ')\n'
-        if sd:
-            if sd[0] == 'RemoveGrain':
-                s = s + 'clip = core.rgvs.RemoveGrain(clip, mode={})\n'
-                s = s.format(sd[1])
-        if td:
-            if td[0] == 'TemporalSoften':
-                s = s + 'clip = core.focus.TemporalSoften(clip, radius={}, '
-                s = s + 'luma_threshold={}, chroma_threshold={}, '
-                s = s + 'scenechange={})\n'
-                s = s.format(td[1], td[2], td[3], td[4])
-            elif td[0] == 'FluxSmoothT':
-                s = s +'clip = core.flux.SmoothT(clip, temporal_threshold={}, '
-                s = s + 'planes={})\n'
-                s = s.format(td[1], td[2])
-        if std:
-            if std[0] == 'FluxSmoothST':
-                s = s + 'clip = core.flux.SmoothST(clip, '
-                s = s + 'temporal_threshold={}, spatial_threshold={}, '
-                s = s + 'planes={})\n'
-                s = s.format(std[1], std[2], std[3])
-        if d:
-            if d[0] == 'f3kdb':
-                s = s + 'clip = core.f3kdb.Deband(clip, preset="{}", '
-                s = s + 'output_depth={})\n'
-                s = s.format(d[1], d[2])
-        if c:
-            s = s + 'clip = core.std.CropRel(clip, {}, {}, {}, {})\n'
-            s = s.format(c[0], c[1], c[2], c[3])
-        if r:
-            s = s + 'clip = core.resize.{}(clip, {}, {})\n'
-            s = s.format(r[2].capitalize(), r[0], r[1])
-        s = s + 'clip.set_output()'
+    def vpy(self, filters):
+        s = []
+        s.append('import vapoursynth as vs')
+        s.append('core = vs.get_core()')
+        for f in filters:
+            line = 'clip = core.'
+            args = ['clip']
+            if f[0] == 'Source':
+                if f[1] == 'FFMpegSource':
+                    line = line + 'ffms2.Source'
+                elif f[1] in ['LibavSMASHSource', 'LWLibavSource']:
+                    line = line + 'lsmas.' + f[1]
+                args = ['"{}"'.format(self.source)]
+            elif f[0] == 'Crop':
+                line = line + 'std.' + f[1]
+            elif f[0] == 'Resize':
+                line = line + 'resize.' + f[1]
+            elif f[0] == 'Denoise':
+                if f[1] == 'FluxSmoothT':
+                    line = line + 'flux.SmoothT'
+                elif f[1] == 'FluxSmoothST':
+                    line = line + 'flux.SmoothST'
+                elif f[1] == 'RemoveGrain':
+                    line = line + 'rgvs.' + f[1]
+                elif f[1] == 'TemporalSoften':
+                    line = line + 'focus.' + f[1]
+            elif f[0] == 'Deband':
+                if f[1] == 'f3kdb':
+                    line = line + '.'.join([f[1], f[0]])
+            line = line + '({})'
+            if f[2]:
+                args = args + ['='.join([key, str(f[2][key])]) for key in f[2]]
+            s.append(line.format(', '.join(args)))
+        s.append('clip.set_output()')
+        s = '\n'.join(s)
         return s
 
     def info(self):
@@ -242,7 +238,7 @@ class Encode:
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4'):
+    def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4', args=''):
         if not o:
             o = self.sname
         dec = 'vspipe "{}" - -y'.format(self.source)
@@ -250,24 +246,30 @@ class Encode:
             x = 'x264'
         elif d == 10:
             x = 'x264-10bit'
-        enc = '{} - --crf {} --demuxer y4m --output "{}.{}"'.format(x, q, o, c)
+        enc = [x, '-', '--crf', str(q),  '--demuxer', 'y4m', '--output',
+               '"' + o + '.' + c + '"']
         if p:
-            enc = enc + ' --preset ' + p
+            enc = enc + ['--preset', p]
         if t:
-            enc = enc + ' --tune ' + t
+            enc = enc + ['--tune', t]
+        if args:
+            enc.append(args)
+        enc = ' '.join(enc)
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x265(self, o='', d=8, q=18, p='medium', t='', c='265'):
+    def x265(self, o='', d=8, q=18, p='medium', t='', c='265', args=''):
         if not o:
             o = self.sname
         dec = 'vspipe "{}" - -y'.format(self.source)
-        enc = 'x265 - --output-depth {} --crf {} --y4m --output "{}.{}"'
-        enc = enc.format(d, q, o, c)
+        enc = ['x265', '-', '--output-depth', str(d), '--crf', str(q), '--y4m',
+               '--output', '"' + o + '.' + c + '"']
         if p:
-            enc = enc + ' --preset ' + p
+            enc = enc + ['--preset', p]
         if t:
-            enc = enc + ' --tune ' + t
+            enc = enc + ['--tune', t]
+        if args:
+            enc.append(args)
         cmd = ' | '.join([dec, enc])
         return cmd
 

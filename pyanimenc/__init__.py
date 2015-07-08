@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import yaml
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from gi.repository import Gio, GLib, GObject, Gtk
 from pyanimenc.helpers import Chapters, Encode, MatroskaOps
@@ -22,7 +23,62 @@ ATYPES = {'A_AAC': 'aac', 'A_AAC/MPEG2/LC/SBR': 'aac', 'A_AC3': 'ac3',
 STYPES = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
           'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
 
-# Filters
+SOURCE_FLTS = OrderedDict()
+SOURCE_FLTS['FFMpegSource'] = OrderedDict()
+SOURCE_FLTS['LibavSMASHSource'] = OrderedDict()
+SOURCE_FLTS['LWLibavSource'] = OrderedDict()
+
+CROP_FLTS = OrderedDict()
+CROP_FLTS['CropAbs'] = OrderedDict()
+CROP_FLTS['CropAbs']['width'] = 0
+CROP_FLTS['CropAbs']['height'] = 0
+CROP_FLTS['CropRel'] = OrderedDict()
+
+RESIZE_FLTS = OrderedDict()
+RESIZE_FLTS['Bilinear'] = OrderedDict()
+RESIZE_FLTS['Bilinear']['width'] = 0
+RESIZE_FLTS['Bilinear']['height'] = 0
+RESIZE_FLTS['Bicubic'] = OrderedDict()
+RESIZE_FLTS['Bicubic']['width'] = 0
+RESIZE_FLTS['Bicubic']['height'] = 0
+RESIZE_FLTS['Gauss'] = OrderedDict()
+RESIZE_FLTS['Gauss']['width'] = 0
+RESIZE_FLTS['Gauss']['height'] = 0
+RESIZE_FLTS['Lanczos'] = OrderedDict()
+RESIZE_FLTS['Lanczos']['width'] = 0
+RESIZE_FLTS['Lanczos']['height'] = 0
+RESIZE_FLTS['Point'] = OrderedDict()
+RESIZE_FLTS['Point']['width'] = 0
+RESIZE_FLTS['Point']['height'] = 0
+RESIZE_FLTS['Sinc'] = OrderedDict()
+RESIZE_FLTS['Sinc']['width'] = 0
+RESIZE_FLTS['Sinc']['height'] = 0
+RESIZE_FLTS['Spline'] = OrderedDict()
+RESIZE_FLTS['Spline']['width'] = 0
+RESIZE_FLTS['Spline']['height'] = 0
+
+DENOISE_FLTS = OrderedDict()
+DENOISE_FLTS['FluxSmoothT'] = OrderedDict()
+DENOISE_FLTS['FluxSmoothST'] = OrderedDict()
+DENOISE_FLTS['RemoveGrain'] = OrderedDict()
+DENOISE_FLTS['RemoveGrain']['mode'] = [2]
+DENOISE_FLTS['TemporalSoften'] = OrderedDict()
+
+DEBAND_FLTS = OrderedDict()
+DEBAND_FLTS['f3kdb'] = OrderedDict()
+
+MISC_FLTS = OrderedDict()
+MISC_FLTS['Trim'] = [0, 0]
+
+FILTERS = OrderedDict()
+FILTERS['Source'] = SOURCE_FLTS
+FILTERS['Crop'] = CROP_FLTS
+FILTERS['Resize'] = RESIZE_FLTS
+FILTERS['Denoise'] = DENOISE_FLTS
+FILTERS['Deband'] = DEBAND_FLTS
+FILTERS['Misc'] = MISC_FLTS
+
+# File Filters
 sflt = Gtk.FileFilter()
 sflt.set_name('VapourSynth scripts')
 sflt.add_pattern('*.vpy')
@@ -52,11 +108,9 @@ class Config:
             AENCS.remove('lame')
         self._find_x264()
         self._find_x265()
-        self.vs()
-        self.rgvs()
-        self.tsoft()
-        self.fsmooth()
-        self.f3kdb()
+
+        # list [str type, str name, list [args]]
+        self.filters = [['Source', 'FFMpegSource', OrderedDict()]]
 
     def _find_enc(self, x):
         if os.path.isfile('/usr/bin/' + x):
@@ -187,6 +241,9 @@ class Config:
             self.x264_cont_cbtext.append_text(c)
         self.x264_cont_cbtext.set_active(0)
 
+        self.x264_arg_entry = Gtk.Entry()
+        self.x264_arg_entry.set_property('hexpand', True)
+
     def x265(self):
         x265_quality = Gtk.Adjustment(18, 1, 51, 1, 10)
         x265_presets = ['none', 'ultrafast', 'superfast', 'veryfast', 'faster',
@@ -224,174 +281,8 @@ class Config:
             self.x265_cont_cbtext.append_text(c)
         self.x265_cont_cbtext.set_active(0)
 
-    def vs(self):
-        fpsnums = Gtk.Adjustment(24000, 0, 256000, 1, 100)
-        fpsdens = Gtk.Adjustment(1001, 0, 256000, 1, 100)
-        tcrops = Gtk.Adjustment(0, 0, 2160, 1, 10)
-        bcrops = Gtk.Adjustment(0, 0, 2160, 1, 10)
-        lcrops = Gtk.Adjustment(0, 0, 3840, 1, 10)
-        rcrops = Gtk.Adjustment(0, 0, 3840, 1, 10)
-        hsizes = Gtk.Adjustment(0, 0, 2160, 1, 10)
-        wsizes = Gtk.Adjustment(0, 0, 3840, 1, 10)
-        resize_flts = ['bilinear', 'bicubic', 'point', 'gauss', 'sinc',
-                       'lanczos', 'spline']
-        sdenoise_flts = ['RemoveGrain']
-        tdenoise_flts = ['FluxSmoothT', 'TemporalSoften']
-        stdenoise_flts = ['FluxSmoothST']
-        deband_flts = ['f3kdb']
-
-        #--Basic--#
-        self.fps_check = Gtk.CheckButton()
-        self.fps_check.set_label('FPS')
-        self.crop_check = Gtk.CheckButton()
-        self.crop_check.set_label('Crop')
-        self.resize_check = Gtk.CheckButton()
-        self.resize_check.set_label('Resize')
-
-        self.fpsnum_spin = Gtk.SpinButton()
-        self.fpsnum_spin.set_adjustment(fpsnums)
-        self.fpsnum_spin.set_numeric(True)
-        self.fpsnum_spin.set_property('hexpand', True)
-        self.fpsden_spin = Gtk.SpinButton()
-        self.fpsden_spin.set_adjustment(fpsdens)
-        self.fpsden_spin.set_numeric(True)
-        self.fpsden_spin.set_property('hexpand', True)
-
-        self.tcrop_spin = Gtk.SpinButton()
-        self.tcrop_spin.set_adjustment(tcrops)
-        self.tcrop_spin.set_numeric(True)
-        self.tcrop_spin.set_property('hexpand', True)
-        self.bcrop_spin = Gtk.SpinButton()
-        self.bcrop_spin.set_adjustment(bcrops)
-        self.bcrop_spin.set_numeric(True)
-        self.bcrop_spin.set_property('hexpand', True)
-        self.lcrop_spin = Gtk.SpinButton()
-        self.lcrop_spin.set_adjustment(lcrops)
-        self.lcrop_spin.set_numeric(True)
-        self.lcrop_spin.set_property('hexpand', True)
-        self.rcrop_spin = Gtk.SpinButton()
-        self.rcrop_spin.set_adjustment(rcrops)
-        self.rcrop_spin.set_numeric(True)
-        self.rcrop_spin.set_property('hexpand', True)
-
-        self.wresize_spin = Gtk.SpinButton()
-        self.wresize_spin.set_adjustment(wsizes)
-        self.wresize_spin.set_numeric(True)
-        self.wresize_spin.set_property('hexpand', True)
-        self.hresize_spin = Gtk.SpinButton()
-        self.hresize_spin.set_adjustment(hsizes)
-        self.hresize_spin.set_numeric(True)
-        self.hresize_spin.set_property('hexpand', True)
-        self.resize_cbtext = Gtk.ComboBoxText()
-        for f in resize_flts:
-            self.resize_cbtext.append_text(f)
-        self.resize_cbtext.set_active(1)
-        self.resize_cbtext.set_property('hexpand', True)
-
-        #--Filters--#
-        self.sdenoise_check = Gtk.CheckButton()
-        self.sdenoise_check.set_label('Spatial')
-        self.sdenoise_cbtext = Gtk.ComboBoxText()
-        for f in sdenoise_flts:
-            self.sdenoise_cbtext.append_text(f)
-        self.sdenoise_cbtext.set_active(0)
-
-        self.tdenoise_check = Gtk.CheckButton()
-        self.tdenoise_check.set_label('Temporal')
-        self.tdenoise_cbtext = Gtk.ComboBoxText()
-        for f in tdenoise_flts:
-            self.tdenoise_cbtext.append_text(f)
-        self.tdenoise_cbtext.set_active(0)
-
-        self.stdenoise_check = Gtk.CheckButton()
-        self.stdenoise_check.set_label('Spatio-Temporal')
-        self.stdenoise_cbtext = Gtk.ComboBoxText()
-        for f in stdenoise_flts:
-            self.stdenoise_cbtext.append_text(f)
-        self.stdenoise_cbtext.set_active(0)
-
-        self.deband_check = Gtk.CheckButton()
-        self.deband_check.set_label('Deband')
-        self.deband_cbtext = Gtk.ComboBoxText()
-        for f in deband_flts:
-            self.deband_cbtext.append_text(f)
-        self.deband_cbtext.set_active(0)
-
-    def rgvs(self):
-        rgvs_mode = Gtk.Adjustment(2, 0, 18, 1, 10)
-        rgvs_modeu = Gtk.Adjustment(2, 0, 18, 1, 10)
-        rgvs_modev = Gtk.Adjustment(2, 0, 18, 1, 10)
-
-        self.rgvs_adv_check = Gtk.CheckButton()
-        self.rgvs_mode_spin = Gtk.SpinButton()
-        self.rgvs_mode_spin.set_adjustment(rgvs_mode)
-        self.rgvs_mode_spin.set_property('hexpand', True)
-        self.rgvs_modeu_spin = Gtk.SpinButton()
-        self.rgvs_modeu_spin.set_adjustment(rgvs_modeu)
-        self.rgvs_modeu_spin.set_property('hexpand', True)
-        self.rgvs_modev_spin = Gtk.SpinButton()
-        self.rgvs_modev_spin.set_adjustment(rgvs_modev)
-        self.rgvs_modev_spin.set_property('hexpand', True)
-
-    def tsoft(self):
-        tsoft_rad = Gtk.Adjustment(4, 1, 7, 1, 1)
-        tsoft_lt = Gtk.Adjustment(2, 0, 255, 1, 10)
-        tsoft_ct = Gtk.Adjustment(4, 0, 255, 1, 10)
-        tsoft_sc = Gtk.Adjustment(12, 0, 254, 1, 10)
-
-        self.tsoft_rad_spin = Gtk.SpinButton()
-        self.tsoft_rad_spin.set_adjustment(tsoft_rad)
-        self.tsoft_rad_spin.set_property('hexpand', True)
-        self.tsoft_lt_spin = Gtk.SpinButton()
-        self.tsoft_lt_spin.set_adjustment(tsoft_lt)
-        self.tsoft_lt_spin.set_property('hexpand', True)
-        self.tsoft_ct_spin = Gtk.SpinButton()
-        self.tsoft_ct_spin.set_adjustment(tsoft_ct)
-        self.tsoft_ct_spin.set_property('hexpand', True)
-        self.tsoft_sc_spin = Gtk.SpinButton()
-        self.tsoft_sc_spin.set_adjustment(tsoft_sc)
-        self.tsoft_sc_spin.set_property('hexpand', True)
-
-    def fsmooth(self):
-        fsmooth_st = Gtk.Adjustment(7, -1, 255, 1, 10)
-        fsmooth_tt = Gtk.Adjustment(7, -1, 255, 1, 10)
-
-        self.fsmooth_st_spin = Gtk.SpinButton()
-        self.fsmooth_st_spin.set_adjustment(fsmooth_st)
-        self.fsmooth_st_spin.set_property('hexpand', True)
-        self.fsmooth_tt_spin = Gtk.SpinButton()
-        self.fsmooth_tt_spin.set_adjustment(fsmooth_tt)
-        self.fsmooth_tt_spin.set_property('hexpand', True)
-        self.fsmooth_y_check = Gtk.CheckButton()
-        self.fsmooth_y_check.set_label('Y')
-        self.fsmooth_y_check.set_active(True)
-        self.fsmooth_u_check = Gtk.CheckButton()
-        self.fsmooth_u_check.set_label('U')
-        self.fsmooth_u_check.set_active(True)
-        self.fsmooth_v_check = Gtk.CheckButton()
-        self.fsmooth_v_check.set_label('V')
-        self.fsmooth_v_check.set_active(True)
-
-    def f3kdb(self):
-        f3kdb_presets = ['depth', 'low', 'medium', 'high', 'veryhigh']
-        f3kdb_planes = ['all', 'luma', 'chroma']
-        f3kdb_depths = Gtk.Adjustment(16, 8, 16, 1, 1)
-
-        self.f3kdb_preset_cbtext = Gtk.ComboBoxText()
-        self.f3kdb_preset_cbtext.set_property('hexpand', True)
-        for p in f3kdb_presets:
-            self.f3kdb_preset_cbtext.append_text(p)
-        self.f3kdb_preset_cbtext.set_active(2)
-        self.f3kdb_plane_cbtext = Gtk.ComboBoxText()
-        self.f3kdb_plane_cbtext.set_property('hexpand', True)
-        for p in f3kdb_planes:
-            self.f3kdb_plane_cbtext.append_text(p)
-        self.f3kdb_plane_cbtext.set_active(0)
-        self.f3kdb_grain_check = Gtk.CheckButton()
-        self.f3kdb_grain_check.set_active(True)
-        self.f3kdb_depth_spin = Gtk.SpinButton()
-        self.f3kdb_depth_spin.set_adjustment(f3kdb_depths)
-        self.f3kdb_depth_spin.set_property('hexpand', True)
+        self.x265_arg_entry = Gtk.Entry()
+        self.x265_arg_entry.set_property('hexpand', True)
 
 class MainWindow(Gtk.Window):
 
@@ -756,7 +647,8 @@ class MainWindow(Gtk.Window):
             if t == 'none':
                 t = ''
             c = conf.x264_cont_cbtext.get_active_text()
-            future = self.worker.submit(self._x264, s, d, dp, q, p, t, c)
+            args = conf.x264_arg_entry.get_text()
+            future = self.worker.submit(self._x264, s, d, dp, q, p, t, c, args)
         elif x == 'x265':
             dp = int(conf.x265_depth_cbtext.get_active_text())
             q = conf.x265_quality_spin.get_value_as_int()
@@ -767,7 +659,8 @@ class MainWindow(Gtk.Window):
             if t == 'none':
                 t = ''
             c = conf.x265_cont_cbtext.get_active_text()
-            future = self.worker.submit(self._x265, s, d, dp, q, p, t, c)
+            args = conf.x265_arg_entry.get_text()
+            future = self.worker.submit(self._x265, s, d, dp, q, p, t, c, args)
         self.queue_tstore.append(None, [future, f, x, 'Waiting'])
         self.worker.submit(self._update_queue)
 
@@ -971,83 +864,10 @@ class MainWindow(Gtk.Window):
             # Create VapourSynth script
             if vtrack[5]:
                 vtrack[0] = 0
-                fps = []
-                if conf.fps_check.get_active():
-                    fn = conf.fpsnum_spin.get_value_as_int()
-                    fd = conf.fpsden_spin.get_value_as_int()
-                    fps = [fn, fd]
-                crop = []
-                if conf.crop_check.get_active():
-                    cl = conf.lcrop_spin.get_value_as_int()
-                    cr = conf.rcrop_spin.get_value_as_int()
-                    ct = conf.tcrop_spin.get_value_as_int()
-                    cb = conf.bcrop_spin.get_value_as_int()
-                    crop = [cl, cr, ct, cb]
-                resize = []
-                if conf.resize_check.get_active():
-                    rw = conf.wresize_spin.get_value_as_int()
-                    rh = conf.hresize_spin.get_value_as_int()
-                    rf = conf.resize_cbtext.get_active_text()
-                    resize = [rw, rh, rf]
-                sdenoise = []
-                if conf.sdenoise_check.get_active():
-                    sdf = conf.sdenoise_cbtext.get_active_text()
-                    if sdf == 'RemoveGrain':
-                        rgm = [conf.rgvs_mode_spin.get_value_as_int()]
-                        if conf.rgvs_adv_check.get_active():
-                            rgm.append(rgvs_umode_spin.get_value_as_int())
-                            rgm.append(rgvs_vmode_spin.get_value_as_int())
-                        sdenoise = [sdf, rgm]
-                tdenoise = []
-                if conf.tdenoise_check.get_active():
-                    tdf = conf.tdenoise_cbtext.get_active_text()
-                    if tdf == 'TemporalSoften':
-                        tsr = conf.tsoft_rad_spin.get_value_as_int()
-                        tsl = conf.tsoft_lt_spin.get_value_as_int()
-                        tsc = conf.tsoft_ct_spin.get_value_as_int()
-                        tss = conf.tsoft_sc_spin.get_value_as_int()
-                        tdenoise = [tdf, tsr, tsl, tsc, tss]
-                    elif tdf == 'FluxSmoothT':
-                        fst = conf.fsmooth_tt_spin.get_value_as_int()
-                        fsp = []
-                        if conf.fsmooth_y_check.get_active():
-                            fsp.append(0)
-                        if conf.fsmooth_u_check.get_active():
-                            fsp.append(1)
-                        if conf.fsmooth_v_check.get_active():
-                            fsp.append(2)
-                        tdenoise = [tdf, fst, fsp]
-                stdenoise = []
-                if conf.stdenoise_check.get_active():
-                    stdf = conf.stdenoise_cbtext.get_active_text()
-                    if stdf == 'FluxSmoothST':
-                        fst = conf.fsmooth_tt_spin.get_value_as_int()
-                        fss = conf.fsmooth_st_spin.get_value_as_int()
-                        fsp = []
-                        if conf.fsmooth_y_check.get_active():
-                            fsp.append(0)
-                        if conf.fsmooth_u_check.get_active():
-                            fsp.append(1)
-                        if conf.fsmooth_v_check.get_active():
-                            fsp.append(2)
-                        stdenoise = [stdf, fst, fss, fsp]
-                deband = []
-                if conf.deband_check.get_active():
-                    df = conf.deband_cbtext.get_active_text()
-                    if df == 'f3kdb':
-                        fpr = conf.f3kdb_preset_cbtext.get_active_text()
-                        fpl = conf.f3kdb_plane_cbtext.get_active_text()
-                        fdp = conf.f3kdb_depth_spin.get_value_as_int()
-                        if fpl in ['luma', 'chroma']:
-                            fpr = fpr + '/' + fpl
-                        if not conf.f3kdb_grain_check.get_active():
-                            fpr = fpr + '/nograin'
-                        deband = [df, fpr, fdp]
 
                 vpy = wd + '/out/' + basename + '.vpy'
 
-                self.worker.submit(self._vpy, source, vpy, fps, crop, resize,
-                                   sdenoise, tdenoise, stdenoise, deband)
+                self.worker.submit(self._vpy, source, vpy)
 
                 # Encode video
                 x = self.auto_venc_cbtext.get_active_text()
@@ -1062,9 +882,10 @@ class MainWindow(Gtk.Window):
                         t = ''
                     c = conf.x264_cont_cbtext.get_active_text()
                     vtrack[2] = c
+                    args = conf.x264_arg_entry.get_text()
 
                     future = self.worker.submit(self._x264, vpy, vtrack[1], dp,
-                                                q, p, t, c)
+                                                q, p, t, c, args)
                 if x == 'x265':
                     dp = int(conf.x265_depth_cbtext.get_active_text())
                     q = conf.x265_quality_spin.get_value_as_int()
@@ -1076,9 +897,10 @@ class MainWindow(Gtk.Window):
                         t = ''
                     c = conf.x265_cont_cbtext.get_active_text()
                     vtrack[2] = c
+                    args = conf.x265_arg_entry.get_text()
 
                     future = self.worker.submit(self._x265, vpy, vtrack[1], dp,
-                                                q, p, t, c)
+                                                q, p, t, c, args)
 
                 self.queue_tstore.append(job, [future, '', x, 'Waiting'])
 
@@ -1341,11 +1163,9 @@ class MainWindow(Gtk.Window):
         Glid.add(self.pbar.set_fraction, 0)
         Glib.add(self.pbar.set_text, 'Ready')
 
-    def _vpy(self, source, destination, fps, crop, resize, sdenoise, tdenoise,
-             stdenoise, deband):
+    def _vpy(self, source, destination):
         print('Create VapourSynth script...')
-        v = Encode(source).vpy(fps, crop, resize, sdenoise, tdenoise,
-                               stdenoise, deband)
+        v = Encode(source).vpy(conf.filters)
 
         print('Write ' + destination)
         with open(destination, 'w') as f:
@@ -1364,23 +1184,25 @@ class MainWindow(Gtk.Window):
                 d = int(line.split(' ')[1])
         return d
 
-    def _x264(self, source, dest, depth, quality, preset, tune, container):
+    def _x264(self, source, dest, depth, quality, preset, tune, container,
+              arguments):
         print('Encode video...')
         self._update_queue()
         d = self._info(source)
         cmd = Encode(source).x264(dest, depth, quality, preset, tune,
-                                  container)
+                                  container, arguments)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._video_progress(d)
 
-    def _x265(self, source, dest, depth, quality, preset, tune, container):
+    def _x265(self, source, dest, depth, quality, preset, tune, container,
+              arguments):
         print('Encode video...')
         self._update_queue()
         d = self._info(source)
         cmd = Encode(source).x265(dest, depth, quality, preset, tune,
-                                  container)
+                                  container, arguments)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
@@ -1563,13 +1385,13 @@ class ChapterEditorWindow(Gtk.Window):
         input_cbtext.connect('changed', self.on_input_changed)
 
         fps_label = Gtk.Label('FPS')
-        fpsnum_adj = Gtk.Adjustment(0, 0, 120000, 1, 10)
+        fpsnum_adj = Gtk.Adjustment(24000, 1, 300000, 1, 10)
         fpsnum_spin = Gtk.SpinButton()
         fpsnum_spin.set_numeric(True)
         fpsnum_spin.set_adjustment(fpsnum_adj)
         fpsnum_spin.set_property('hexpand', True)
         fpsnum_spin.set_value(self.fpsnum)
-        fpsden_adj = Gtk.Adjustment(0, 1000, 1001, 1, 1)
+        fpsden_adj = Gtk.Adjustment(1001, 1, 1001, 1, 1)
         fpsden_spin = Gtk.SpinButton()
         fpsden_spin.set_numeric(True)
         fpsden_spin.set_adjustment(fpsden_adj)
@@ -1868,81 +1690,7 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        fps = []
-        if conf.fps_check.get_active():
-            fn = conf.fpsnum_spin.get_value_as_int()
-            fd = conf.fpsden_spin.get_value_as_int()
-            fps = [fn, fd]
-        crop = []
-        if conf.crop_check.get_active():
-            cl = conf.lcrop_spin.get_value_as_int()
-            cr = conf.rcrop_spin.get_value_as_int()
-            ct = conf.tcrop_spin.get_value_as_int()
-            cb = conf.bcrop_spin.get_value_as_int()
-            crop = [cl, cr, ct, cb]
-        resize = []
-        if conf.resize_check.get_active():
-            rw = conf.wresize_spin.get_value_as_int()
-            rh = conf.hresize_spin.get_value_as_int()
-            rf = conf.resize_cbtext.get_active_text()
-            resize = [rw, rh, rf]
-        sdenoise = []
-        if conf.sdenoise_check.get_active():
-            sdf = conf.sdenoise_cbtext.get_active_text()
-            if sdf == 'RemoveGrain':
-                rgm = [conf.rgvs_mode_spin.get_value_as_int()]
-                if conf.rgvs_adv_check.get_active():
-                    rgm.append(rgvs_umode_spin.get_value_as_int())
-                    rgm.append(rgvs_vmode_spin.get_value_as_int())
-                sdenoise = [sdf, rgm]
-        tdenoise = []
-        if conf.tdenoise_check.get_active():
-            tdf = conf.tdenoise_cbtext.get_active_text()
-            if tdf == 'TemporalSoften':
-                tsr = conf.tsoft_rad_spin.get_value_as_int()
-                tsl = conf.tsoft_lt_spin.get_value_as_int()
-                tsc = conf.tsoft_ct_spin.get_value_as_int()
-                tss = conf.tsoft_sc_spin.get_value_as_int()
-                tdenoise = [tdf, tsr, tsl, tsc, tss]
-            elif tdf == 'FluxSmoothT':
-                fst = conf.fsmooth_tt_spin.get_value_as_int()
-                fsp = []
-                if conf.fsmooth_y_check.get_active():
-                    fsp.append(0)
-                if conf.fsmooth_u_check.get_active():
-                    fsp.append(1)
-                if conf.fsmooth_v_check.get_active():
-                    fsp.append(2)
-                tdenoise = [tdf, fst, fsp]
-        stdenoise = []
-        if conf.stdenoise_check.get_active():
-            stdf = conf.stdenoise_cbtext.get_active_text()
-            if stdf == 'FluxSmoothST':
-                fst = conf.fsmooth_tt_spin.get_value_as_int()
-                fss = conf.fsmooth_st_spin.get_value_as_int()
-                fsp = []
-                if conf.fsmooth_y_check.get_active():
-                    fsp.append(0)
-                if conf.fsmooth_u_check.get_active():
-                    fsp.append(1)
-                if conf.fsmooth_v_check.get_active():
-                    fsp.append(2)
-                stdenoise = [stdf, fst, fss, fsp]
-        deband = []
-        if conf.deband_check.get_active():
-            df = conf.deband_cbtext.get_active_text()
-            if df == 'f3kdb':
-                fpr = conf.f3kdb_preset_cbtext.get_active_text()
-                fpl = conf.f3kdb_plane_cbtext.get_active_text()
-                fdp = conf.f3kdb_depth_spin.get_value_as_int()
-                if fpl in ['luma', 'chroma']:
-                    fpr = fpr + '/' + fpl
-                if not conf.f3kdb_grain_check.get_active():
-                    fpr = fpr + '/nograin'
-                deband = [df, fpr, fdp]
-
-        s = Encode(self.source).vpy(fps, crop, resize, sdenoise, tdenoise,
-                                    stdenoise, deband)
+        s = Encode(self.source).vpy(conf.filters)
         self.tbuffer.set_text(s)
 
     def on_open_clicked(self, button):
@@ -2067,6 +1815,8 @@ class EncoderDialog(Gtk.Dialog):
         tune_label.set_halign(Gtk.Align.START)
         cont_label = Gtk.Label('Container')
         cont_label.set_halign(Gtk.Align.START)
+        arg_label = Gtk.Label('Custom arguments')
+        arg_label.set_halign(Gtk.Align.CENTER)
 
         self.grid.attach(depth_label, 0, 0, 1, 1)
         self.grid.attach_next_to(conf.x264_depth_cbtext, depth_label,
@@ -2083,6 +1833,8 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach(cont_label, 0, 4, 1, 1)
         self.grid.attach_next_to(conf.x264_cont_cbtext, cont_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(arg_label, 0, 5, 2, 1)
+        self.grid.attach(conf.x264_arg_entry, 0, 6, 2, 1)
 
     def x265(self):
         depth_label = Gtk.Label('Depth')
@@ -2095,6 +1847,8 @@ class EncoderDialog(Gtk.Dialog):
         tune_label.set_halign(Gtk.Align.START)
         cont_label = Gtk.Label('Container')
         cont_label.set_halign(Gtk.Align.START)
+        arg_label = Gtk.Label('Custom arguments')
+        arg_label.set_halign(Gtk.Align.CENTER)
 
         self.grid.attach(depth_label, 0, 0, 1, 1)
         self.grid.attach_next_to(conf.x265_depth_cbtext, depth_label,
@@ -2111,6 +1865,8 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach(cont_label, 0, 4, 1, 1)
         self.grid.attach_next_to(conf.x265_cont_cbtext, cont_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(arg_label, 0, 5, 2, 1)
+        self.grid.attach(conf.x265_arg_entry, 0, 6, 2, 1)
 
     def on_fdkaac_mode_changed(self, combo):
         m = combo.get_active_text()
@@ -2133,218 +1889,166 @@ class EncoderDialog(Gtk.Dialog):
 class VapourSynthDialog(Gtk.Dialog):
 
     def __init__(self, parent):
-        Gtk.Dialog.__init__(self, 'VapourSynth settings', parent, 0)
+        Gtk.Dialog.__init__(self, 'VapourSynth settings', parent, 0,
+                            use_header_bar=1)
 
-        #--Notebook--#
-        basic_grid = Gtk.Grid()
-        basic_grid.set_column_spacing(6)
-        basic_grid.set_row_spacing(6)
-        basic_grid.set_property('margin', 6)
-        filter_grid = Gtk.Grid()
-        filter_grid.set_column_spacing(6)
-        filter_grid.set_row_spacing(6)
-        filter_grid.set_property('margin', 6)
+        add_button = Gtk.Button()
+        add_icon = Gio.ThemedIcon(name='list-add-symbolic')
+        add_image = Gtk.Image.new_from_gicon(add_icon, Gtk.IconSize.BUTTON)
+        add_button.set_image(add_image)
+        add_button.connect('clicked', self.on_add_clicked)
 
-        notebook = Gtk.Notebook()
-        basic_label = Gtk.Label('Basic')
-        notebook.append_page(basic_grid, basic_label)
-        filter_label = Gtk.Label('Filters')
-        notebook.append_page(filter_grid, filter_label)
+        hbar = self.get_header_bar()
+        hbar.pack_start(add_button)
 
-        for tab in notebook.get_children():
-            notebook.child_set_property(tab, 'tab-expand', True)
+        self.box = self.get_content_area()
 
-        box = self.get_content_area()
-        box.add(notebook)
+        self._update_filters()
 
-        #--Basic--#
-        basic_grid.attach(conf.fps_check, 0, 0, 2, 2)
-        basic_grid.attach(conf.fpsnum_spin, 2, 0, 3, 2)
-        basic_grid.attach(conf.fpsden_spin, 5, 0, 3, 2)
-        basic_grid.attach(conf.crop_check, 0, 2, 1, 4)
-        basic_grid.attach(conf.tcrop_spin, 4, 2, 2, 2)
-        basic_grid.attach(conf.bcrop_spin, 4, 4, 2, 2)
-        basic_grid.attach(conf.lcrop_spin, 2, 3, 2, 2)
-        basic_grid.attach(conf.rcrop_spin, 6, 3, 2, 2)
-        basic_grid.attach(conf.resize_check, 0, 6, 2, 2)
-        basic_grid.attach(conf.wresize_spin, 2, 6, 2, 2)
-        basic_grid.attach(conf.hresize_spin, 4, 6, 2, 2)
-        basic_grid.attach(conf.resize_cbtext, 6, 6, 2, 2)
+    def _update_filters(self):
+        for child in self.box.get_children():
+            self.box.remove(child)
 
-        conf.fpsnum_spin.set_sensitive(False)
-        conf.fpsden_spin.set_sensitive(False)
-        conf.fps_check.connect('toggled', self.on_fps_toggled)
-        conf.tcrop_spin.set_sensitive(False)
-        conf.bcrop_spin.set_sensitive(False)
-        conf.lcrop_spin.set_sensitive(False)
-        conf.rcrop_spin.set_sensitive(False)
-        conf.crop_check.connect('toggled', self.on_crop_toggled)
-        conf.wresize_spin.set_sensitive(False)
-        conf.hresize_spin.set_sensitive(False)
-        conf.resize_cbtext.set_sensitive(False)
-        conf.resize_check.connect('toggled', self.on_resize_toggled)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(6)
+        grid.set_row_spacing(6)
+        grid.set_property('margin', 6)
 
-        #--Filters--#
-        denoise_label = Gtk.Label()
-        denoise_label.set_markup('<b>Denoise</b>')
-        denoise_label.set_halign(Gtk.Align.START)
-        denoise_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        denoise_sep.set_hexpand(True)
-        self.sdenoise_cfg_button = Gtk.Button()
-        self.sdenoise_cfg_button.set_label('Configure')
-        self.tdenoise_cfg_button = Gtk.Button()
-        self.tdenoise_cfg_button.set_label('Configure')
-        self.stdenoise_cfg_button = Gtk.Button()
-        self.stdenoise_cfg_button.set_label('Configure')
-        deband_label = Gtk.Label()
-        deband_label.set_markup('<b>Deband</b>')
-        deband_label.set_halign(Gtk.Align.START)
-        deband_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        deband_sep.set_hexpand(True)
-        self.deband_cfg_button = Gtk.Button()
-        self.deband_cfg_button.set_label('Configure')
+        for i in range(len(conf.filters)):
+            active_type = conf.filters[i][0]
+            active_name = conf.filters[i][1]
 
-        filter_grid.attach(denoise_label, 0, 0, 1, 1)
-        filter_grid.attach_next_to(denoise_sep, denoise_label,
-                                     Gtk.PositionType.RIGHT, 2, 1)
-        filter_grid.attach(conf.sdenoise_check, 0, 1, 1, 1)
-        filter_grid.attach_next_to(conf.sdenoise_cbtext,
-                                     conf.sdenoise_check,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach_next_to(self.sdenoise_cfg_button,
-                                     conf.sdenoise_cbtext,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach(conf.tdenoise_check, 0, 2, 1, 1)
-        filter_grid.attach_next_to(conf.tdenoise_cbtext,
-                                     conf.tdenoise_check,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach_next_to(self.tdenoise_cfg_button,
-                                     conf.tdenoise_cbtext,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach(conf.stdenoise_check, 0, 3, 1, 1)
-        filter_grid.attach_next_to(conf.stdenoise_cbtext,
-                                     conf.stdenoise_check,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach_next_to(self.stdenoise_cfg_button,
-                                     conf.stdenoise_cbtext,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach(deband_label, 0, 4, 1, 1)
-        filter_grid.attach_next_to(deband_sep, deband_label,
-                                     Gtk.PositionType.RIGHT, 2, 1)
-        filter_grid.attach(conf.deband_check, 0, 5, 1, 1)
-        filter_grid.attach_next_to(conf.deband_cbtext,
-                                     conf.deband_check,
-                                     Gtk.PositionType.RIGHT, 1, 1)
-        filter_grid.attach_next_to(self.deband_cfg_button,
-                                     conf.deband_cbtext,
-                                     Gtk.PositionType.RIGHT, 1, 1)
+            type_cbtext = Gtk.ComboBoxText()
+            type_cbtext.set_property('hexpand', True)
+            name_cbtext = Gtk.ComboBoxText()
+            name_cbtext.set_property('hexpand', True)
 
-        conf.sdenoise_cbtext.set_sensitive(False)
-        self.sdenoise_cfg_button.set_sensitive(False)
-        conf.sdenoise_check.connect('toggled', self.on_sdenoise_toggled)
-        self.sdenoise_cfg_button.connect('clicked', self.on_conf_clicked,
-                                         'spatial')
-        conf.tdenoise_cbtext.set_sensitive(False)
-        self.tdenoise_cfg_button.set_sensitive(False)
-        conf.tdenoise_check.connect('toggled', self.on_tdenoise_toggled)
-        self.tdenoise_cfg_button.connect('clicked', self.on_conf_clicked,
-                                         'temporal')
-        conf.stdenoise_cbtext.set_sensitive(False)
-        self.stdenoise_cfg_button.set_sensitive(False)
-        conf.stdenoise_check.connect('toggled', self.on_stdenoise_toggled)
-        self.stdenoise_cfg_button.connect('clicked', self.on_conf_clicked,
-                                          'spatio-temporal')
-        conf.deband_cbtext.set_sensitive(False)
-        self.deband_cfg_button.set_sensitive(False)
-        conf.deband_check.connect('toggled', self.on_deband_toggled)
-        self.deband_cfg_button.connect('clicked', self.on_conf_clicked,
-                                       'deband')
+            conf_icon = Gio.ThemedIcon(name='applications-system-symbolic')
+            conf_image = Gtk.Image.new_from_gicon(conf_icon,
+                                                  Gtk.IconSize.BUTTON)
+            conf_button = Gtk.Button()
+            conf_button.set_image(conf_image)
+            conf_button.set_sensitive(False)
 
-        #--Dialogs--#
-        self.rgvs_dlg = FilterDialog(self, 'RemoveGrain')
-        self.rgvs_dlg.hide()
-        self.tsoft_dlg = FilterDialog(self, 'TemporalSoften')
-        self.tsoft_dlg.hide()
-        self.fsmooth_dlg = FilterDialog(self, 'FluxSmooth')
-        self.fsmooth_dlg.hide()
-        self.f3kdb_dlg = FilterDialog(self, 'f3kdb')
-        self.f3kdb_dlg.hide()
+            up_button = Gtk.Button()
+            up_icon = Gio.ThemedIcon(name='go-up-symbolic')
+            up_image = Gtk.Image.new_from_gicon(up_icon, Gtk.IconSize.BUTTON)
+            up_button.set_image(up_image)
 
-        self.add_button('_OK', Gtk.ResponseType.OK)
+            down_button = Gtk.Button()
+            down_icon = Gio.ThemedIcon(name='go-down-symbolic')
+            down_image = Gtk.Image.new_from_gicon(down_icon,
+                                                  Gtk.IconSize.BUTTON)
+            down_button.set_image(down_image)
+
+            remove_button = Gtk.Button()
+            remove_icon = Gio.ThemedIcon(name='list-remove-symbolic')
+            remove_image = Gtk.Image.new_from_gicon(remove_icon,
+                                                    Gtk.IconSize.BUTTON)
+            remove_button.set_image(remove_image)
+
+            j = 0
+            for filter_type in FILTERS:
+                type_cbtext.append_text(filter_type)
+
+                if active_type == filter_type:
+                    type_cbtext.set_active(j)
+
+                    k = 0
+                    for filter_name in FILTERS[filter_type]:
+                        name_cbtext.append_text(filter_name)
+
+                        if active_name == filter_name:
+                            name_cbtext.set_active(k)
+                            conf_button.set_sensitive(True)
+
+                        k = k + 1
+                j = j + 1
+
+            if i == 0:
+                type_cbtext.set_sensitive(False)
+                up_button.set_sensitive(False)
+                down_button.set_sensitive(False)
+                remove_button.set_sensitive(False)
+            elif i == 1:
+                up_button.set_sensitive(False)
+
+            if i == len(conf.filters) - 1:
+                down_button.set_sensitive(False)
+
+            if i > 0:
+                type_cbtext.remove(0)
+
+            grid.attach(type_cbtext, 0, i, 1, 1)
+            grid.attach(name_cbtext, 1, i, 1, 1)
+            grid.attach(conf_button, 2, i, 1, 1)
+            grid.attach(up_button, 3, i, 1, 1)
+            grid.attach(down_button, 4, i, 1, 1)
+            grid.attach(remove_button, 5, i, 1, 1)
+
+            type_cbtext.connect('changed', self.on_type_changed, i)
+            name_cbtext.connect('changed', self.on_name_changed, active_type,
+                                i)
+            conf_button.connect('clicked', self.on_conf_clicked, active_type,
+                                active_name, i)
+            up_button.connect('clicked', self.on_move_clicked, 'up', i)
+            down_button.connect('clicked', self.on_move_clicked, 'down', i)
+            remove_button.connect('clicked', self.on_remove_clicked, i)
+
+        self.box.pack_start(grid, True, True, 0)
 
         self.show_all()
 
-    def on_fps_toggled(self, check):
-        state = check.get_active()
-        conf.fpsnum_spin.set_sensitive(state)
-        conf.fpsden_spin.set_sensitive(state)
+    def on_add_clicked(self, button):
+        conf.filters.append(['', '', OrderedDict()])
 
-    def on_crop_toggled(self, check):
-        state = check.get_active()
-        conf.lcrop_spin.set_sensitive(state)
-        conf.rcrop_spin.set_sensitive(state)
-        conf.tcrop_spin.set_sensitive(state)
-        conf.bcrop_spin.set_sensitive(state)
+        self._update_filters()
 
-    def on_resize_toggled(self, check):
-        state = check.get_active()
-        conf.wresize_spin.set_sensitive(state)
-        conf.hresize_spin.set_sensitive(state)
-        conf.resize_cbtext.set_sensitive(state)
+    def on_remove_clicked(self, button, i):
+        conf.filters.pop(i)
 
-    def on_sdenoise_toggled(self, check):
-        state = check.get_active()
-        conf.sdenoise_cbtext.set_sensitive(state)
-        self.sdenoise_cfg_button.set_sensitive(state)
+        self._update_filters()
 
-    def on_tdenoise_toggled(self, check):
-        state = check.get_active()
-        conf.tdenoise_cbtext.set_sensitive(state)
-        self.tdenoise_cfg_button.set_sensitive(state)
+    def on_move_clicked(self, button, direction, i):
+        if direction == 'up':
+            conf.filters[i - 1:i + 1] = [conf.filters[i],
+                                          conf.filters[i - 1]]
+        elif direction == 'down':
+            conf.filters[i:i + 2] = [conf.filters[i + 1],
+                                      conf.filters[i]]
+        self._update_filters()
 
-    def on_stdenoise_toggled(self, check):
-        state = check.get_active()
-        conf.stdenoise_cbtext.set_sensitive(state)
-        self.stdenoise_cfg_button.set_sensitive(state)
+    def on_type_changed(self, combo, i):
+        t = combo.get_active_text()
+        conf.filters[i][0] = t
+        conf.filters[i][1] = ''
+        conf.filters[i][2] = []
 
-    def on_deband_toggled(self, check):
-        state = check.get_active()
-        conf.deband_cbtext.set_sensitive(state)
-        self.deband_cfg_button.set_sensitive(state)
+        self._update_filters()
 
-    def on_conf_clicked(self, button, t):
-        if t == 'spatial':
-            f = conf.sdenoise_cbtext.get_active_text()
-        elif t == 'temporal':
-            f = conf.tdenoise_cbtext.get_active_text()
-        elif t == 'spatio-temporal':
-            f = conf.stdenoise_cbtext.get_active_text()
-        elif t == 'deband':
-            f = conf.deband_cbtext.get_active_text()
+    def on_name_changed(self, combo, t, i):
+        n = combo.get_active_text()
+        conf.filters[i][0] = t
+        conf.filters[i][1] = n
+        conf.filters[i][2] = FILTERS[t][n]
 
-        if f == 'RemoveGrain':
-            self.rgvs_dlg.run()
-            self.rgvs_dlg.hide()
-        elif f == 'TemporalSoften':
-            self.tsoft_dlg.run()
-            self.tsoft_dlg.hide()
-        elif f in 'FluxSmoothT':
-            conf.fsmooth_st_spin.set_sensitive(False)
-            self.fsmooth_dlg.run()
-            self.fsmooth_dlg.hide()
-        elif f == 'FluxSmoothST':
-            conf.fsmooth_st_spin.set_sensitive(True)
-            self.fsmooth_dlg.run()
-            self.fsmooth_dlg.hide()
-        elif f == 'f3kdb':
-            self.f3kdb_dlg.run()
-            self.f3kdb_dlg.hide()
+        self._update_filters()
+
+    def on_conf_clicked(self, button, t, n, i):
+        if t in ['Source', 'Resize']:
+            dlg = FilterDialog(self, t, i)
+        else:
+            dlg = FilterDialog(self, n, i)
+        dlg.run()
+        dlg.destroy()
 
 class FilterDialog(Gtk.Dialog):
 
-    def __init__(self, parent, f):
+    def __init__(self, parent, f, i):
         Gtk.Dialog.__init__(self, f + ' settings', parent, 0)
         self.set_default_size(240, 0)
+
+        button = self.add_button('_OK', Gtk.ResponseType.OK)
 
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(6)
@@ -2354,22 +2058,326 @@ class FilterDialog(Gtk.Dialog):
         box = self.get_content_area()
         box.add(self.grid)
 
-        if f == 'RemoveGrain':
-            self.rgvs()
-        if f == 'TemporalSoften':
-            self.tsoft()
-        if f == 'FluxSmooth':
-            self.fsmooth()
-        if f == 'f3kdb':
-            self.f3kdb()
-
-        self.add_button('_OK', Gtk.ResponseType.OK)
+        if f == 'Source':
+            self._source()
+            button.connect('clicked', self._update_source)
+        elif f == 'CropAbs':
+            self._crop(True, i)
+            button.connect('clicked', self._update_crop, True, i)
+        elif f == 'CropRel':
+            self._crop(False, i)
+            button.connect('clicked', self._update_crop, False, i)
+        elif f == 'Resize':
+            self._resize(i)
+            button.connect('clicked', self._update_resize, i)
+        elif f == 'FluxSmoothT':
+            self._fsmooth(False, i)
+            button.connect('clicked', self._update_fsmooth, False, i)
+        elif f == 'FluxSmoothST':
+            self._fsmooth(True, i)
+            button.connect('clicked', self._update_fsmooth, True, i)
+        elif f == 'RemoveGrain':
+            self._rgvs(i)
+            button.connect('clicked', self._update_rgvs, i)
+        elif f == 'TemporalSoften':
+            self._tsoft(i)
+            button.connect('clicked', self._update_tsoft, i)
+        elif f == 'f3kdb':
+            self._f3kdb(i)
+            button.connect('clicked', self._update_f3kdb, i)
 
         self.show_all()
 
-    def rgvs(self):
-        adv_label = Gtk.Label('Advanced')
-        adv_label.set_halign(Gtk.Align.START)
+    def _source(self):
+        fpsnum_adj = Gtk.Adjustment(0, 0, 300000, 1, 100)
+        fpsden_adj = Gtk.Adjustment(1, 1, 300000, 1, 100)
+
+        fpsnum_label = Gtk.Label('FPS Numerator')
+        fpsnum_label.set_halign(Gtk.Align.START)
+        fpsden_label = Gtk.Label('FPS Denominator')
+        fpsden_label.set_halign(Gtk.Align.START)
+
+        self.fpsnum_spin = Gtk.SpinButton()
+        self.fpsnum_spin.set_adjustment(fpsnum_adj)
+        self.fpsnum_spin.set_numeric(True)
+        self.fpsnum_spin.set_property('hexpand', True)
+        self.fpsden_spin = Gtk.SpinButton()
+        self.fpsden_spin.set_adjustment(fpsden_adj)
+        self.fpsden_spin.set_numeric(True)
+        self.fpsden_spin.set_property('hexpand', True)
+
+        flt = conf.filters[0][2]
+        self.fpsnum_spin.set_value(flt.get('fpsnum', 0))
+        self.fpsden_spin.set_value(flt.get('fpsden', 1))
+
+        self.grid.attach(fpsnum_label, 0, 0, 1, 1)
+        self.grid.attach(self.fpsnum_spin, 1, 0, 1, 1)
+        self.grid.attach(fpsden_label, 0, 1, 1, 1)
+        self.grid.attach(self.fpsden_spin, 1, 1, 1, 1)
+
+    def _update_source(self, button):
+        flt = conf.filters[0][2]
+
+        n = self.fpsnum_spin.get_value_as_int()
+        d = self.fpsden_spin.get_value_as_int()
+
+        if n != 0 or d != 1:
+            flt['fpsnum'] = n
+            flt['fpsden'] = d
+
+    def _crop(self, absolute, i):
+        left_adj = Gtk.Adjustment(0, 0, 3840, 1, 10)
+        right_adj = Gtk.Adjustment(0, 0, 3840, 1, 10)
+        top_adj = Gtk.Adjustment(0, 0, 2160, 1, 10)
+        bottom_adj = Gtk.Adjustment(0, 0, 2160, 1, 10)
+        width_adj = Gtk.Adjustment(0, 0, 3840, 1, 10)
+        height_adj = Gtk.Adjustment(0, 0, 2160, 1, 10)
+
+        left_label = Gtk.Label('Left')
+        left_label.set_halign(Gtk.Align.START)
+        right_label = Gtk.Label('Right')
+        right_label.set_halign(Gtk.Align.START)
+        top_label = Gtk.Label('Top')
+        top_label.set_halign(Gtk.Align.START)
+        bottom_label = Gtk.Label('Bottom')
+        bottom_label.set_halign(Gtk.Align.START)
+        width_label = Gtk.Label('Width')
+        width_label.set_halign(Gtk.Align.START)
+        height_label = Gtk.Label('Height')
+        height_label.set_halign(Gtk.Align.START)
+
+        self.left_spin = Gtk.SpinButton()
+        self.left_spin.set_adjustment(left_adj)
+        self.left_spin.set_numeric(True)
+        self.left_spin.set_property('hexpand', True)
+        self.right_spin = Gtk.SpinButton()
+        self.right_spin.set_adjustment(right_adj)
+        self.right_spin.set_numeric(True)
+        self.right_spin.set_property('hexpand', True)
+        self.right_spin.set_sensitive(not absolute)
+        self.top_spin = Gtk.SpinButton()
+        self.top_spin.set_adjustment(top_adj)
+        self.top_spin.set_numeric(True)
+        self.top_spin.set_property('hexpand', True)
+        self.bottom_spin = Gtk.SpinButton()
+        self.bottom_spin.set_adjustment(bottom_adj)
+        self.bottom_spin.set_numeric(True)
+        self.bottom_spin.set_property('hexpand', True)
+        self.bottom_spin.set_sensitive(not absolute)
+        self.width_spin = Gtk.SpinButton()
+        self.width_spin.set_adjustment(width_adj)
+        self.width_spin.set_numeric(True)
+        self.width_spin.set_property('hexpand', True)
+        self.width_spin.set_sensitive(absolute)
+        self.height_spin = Gtk.SpinButton()
+        self.height_spin.set_adjustment(width_adj)
+        self.height_spin.set_numeric(True)
+        self.height_spin.set_property('hexpand', True)
+        self.height_spin.set_sensitive(absolute)
+
+        flt = conf.filters[i][2]
+        self.left_spin.set_value(flt.get('left', 0))
+        self.right_spin.set_value(flt.get('right', 0))
+        self.top_spin.set_value(flt.get('top', 0))
+        self.bottom_spin.set_value(flt.get('bottom', 0))
+        self.width_spin.set_value(flt.get('width', 0))
+        self.height_spin.set_value(flt.get('height', 0))
+
+        self.grid.attach(left_label, 0, 0, 1, 1)
+        self.grid.attach(self.left_spin, 1, 0, 1, 1)
+        self.grid.attach(right_label, 0, 1, 1, 1)
+        self.grid.attach(self.right_spin, 1, 1, 1, 1)
+        self.grid.attach(top_label, 0, 2, 1, 1)
+        self.grid.attach(self.top_spin, 1, 2, 1, 1)
+        self.grid.attach(bottom_label, 0, 3, 1, 1)
+        self.grid.attach(self.bottom_spin, 1, 3, 1, 1)
+        self.grid.attach(width_label, 0, 4, 1, 1)
+        self.grid.attach(self.width_spin, 1, 4, 1, 1)
+        self.grid.attach(height_label, 0, 5, 1, 1)
+        self.grid.attach(self.height_spin, 1, 5, 1, 1)
+
+    def _update_crop(self, button, absolute, i):
+        flt = conf.filters[i][2]
+
+        l = self.left_spin.get_value_as_int()
+        r = self.right_spin.get_value_as_int()
+        t = self.top_spin.get_value_as_int()
+        b = self.bottom_spin.get_value_as_int()
+        w = self.width_spin.get_value_as_int()
+        h = self.height_spin.get_value_as_int()
+
+        if absolute:
+            flt['width'] = w
+            flt['height'] = h
+        else:
+            if l:
+                flt['left'] = l
+            if t:
+                flt['top'] = t
+
+        if r:
+            flt['right'] = r
+        if b:
+            flt['bottom'] = b
+
+    def _resize(self, i):
+        width_adj = Gtk.Adjustment(0, 0, 3840, 1, 10)
+        height_adj = Gtk.Adjustment(0, 0, 2160, 1, 10)
+        formats = ['GRAY8', 'GRAY16', 'GRAYH', 'GRAYS', 'YUV420P8', 'YUV422P8',
+                   'YUV444P8', 'YUV410P8', 'YUV411P8', 'YUV440P8', 'YUV420P9',
+                   'YUV422P9', 'YUV444P9', 'YUV420P10', 'YUV422P10',
+                   'YUV444P10', 'YUV420P16', 'YUV422P16', 'YUV444P16',
+                   'YUV444PH', 'YUV444PS', 'RGB24', 'RGB27', 'RGB30', 'RGB48',
+                   'RGBH', 'RGBS', 'COMPATBGR32', 'COMPATYUY2']
+
+        width_label = Gtk.Label('Width')
+        width_label.set_halign(Gtk.Align.START)
+        height_label = Gtk.Label('Height')
+        height_label.set_halign(Gtk.Align.START)
+        format_label = Gtk.Label('Format')
+        format_label.set_halign(Gtk.Align.START)
+
+        self.width_spin = Gtk.SpinButton()
+        self.width_spin.set_adjustment(width_adj)
+        self.width_spin.set_numeric(True)
+        self.width_spin.set_property('hexpand', True)
+        self.height_spin = Gtk.SpinButton()
+        self.height_spin.set_adjustment(height_adj)
+        self.height_spin.set_numeric(True)
+        self.height_spin.set_property('hexpand', True)
+
+        self.format_check = Gtk.CheckButton()
+
+        self.format_cbtext = Gtk.ComboBoxText()
+        self.format_cbtext.set_property('hexpand', True)
+        for f in formats:
+            self.format_cbtext.append_text(f)
+
+        flt = conf.filters[i][2]
+        self.width_spin.set_value(flt.get('width', 0))
+        self.height_spin.set_value(flt.get('height', 0))
+        f = flt.get('format', '')
+        if f:
+            self.format_check.set_active(True)
+            j = formats.index(f.strip('vs.'))
+            self.format_cbtext.set_active(j)
+        else:
+            self.format_cbtext.set_sensitive(False)
+
+        self.grid.attach(width_label, 0, 0, 2, 1)
+        self.grid.attach(self.width_spin, 2, 0, 1, 1)
+        self.grid.attach(height_label, 0, 1, 2, 1)
+        self.grid.attach(self.height_spin, 2, 1, 1, 1)
+        self.grid.attach(format_label, 0, 2, 1, 1)
+        self.grid.attach(self.format_check, 1, 2, 1, 1)
+        self.grid.attach(self.format_cbtext, 2, 2, 1, 1)
+
+        self.format_check.connect('toggled', self.on_format_toggled)
+
+    def _update_resize(self, button, i):
+        flt = conf.filters[i][2]
+
+        w = self.width_spin.get_value_as_int()
+        h = self.height_spin.get_value_as_int()
+        f = self.format_cbtext.get_active_text()
+
+        flt['width'] = w
+        flt['height'] = h
+
+        if self.format_check.get_active():
+            flt['format'] = 'vs.' + f
+        else:
+            if 'format' in flt:
+                flt.pop('format')
+
+    def on_format_toggled(self, check):
+        s = check.get_active()
+        self.format_cbtext.set_sensitive(s)
+
+    def _fsmooth(self, spatial, i):
+        tt_adj = Gtk.Adjustment(7, -1, 255, 1, 10)
+        st_adj = Gtk.Adjustment(7, -1, 255, 1, 10)
+
+        tt_label = Gtk.Label('Temporal Threshold')
+        tt_label.set_halign(Gtk.Align.START)
+        st_label = Gtk.Label('Spatial Threshold')
+        st_label.set_halign(Gtk.Align.START)
+        planes_label = Gtk.Label('Planes')
+        planes_label.set_halign(Gtk.Align.START)
+
+        self.tt_spin = Gtk.SpinButton()
+        self.tt_spin.set_adjustment(tt_adj)
+        self.tt_spin.set_property('hexpand', True)
+        self.st_spin = Gtk.SpinButton()
+        self.st_spin.set_adjustment(st_adj)
+        self.st_spin.set_property('hexpand', True)
+        self.st_spin.set_sensitive(spatial)
+        self.y_check = Gtk.CheckButton()
+        self.y_check.set_label('Y')
+        self.y_check.set_active(True)
+        self.u_check = Gtk.CheckButton()
+        self.u_check.set_label('U')
+        self.u_check.set_active(True)
+        self.v_check = Gtk.CheckButton()
+        self.v_check.set_label('V')
+        self.v_check.set_active(True)
+
+        flt = conf.filters[i][2]
+        self.tt_spin.set_value(flt.get('temporal_threshold', 7))
+        self.st_spin.set_value(flt.get('spatial_threshold', 7))
+        p = flt.get('planes', [0, 1, 2])
+        if not 0 in p:
+            self.y_check.set_active(False)
+        if not 1 in p:
+            self.u_check.set_active(False)
+        if not 2 in p:
+            self.v_check.set_active(False)
+
+        self.grid.attach(tt_label, 0, 0, 1, 1)
+        self.grid.attach(self.tt_spin, 1, 0, 3, 1)
+        self.grid.attach(st_label, 0, 1, 1, 1)
+        self.grid.attach(self.st_spin, 1, 1, 3, 1)
+        self.grid.attach(planes_label, 0, 2, 1, 1)
+        self.grid.attach(self.y_check, 1, 2, 1, 1)
+        self.grid.attach(self.u_check, 2, 2, 1, 1)
+        self.grid.attach(self.v_check, 3, 2, 1, 1)
+
+    def _update_fsmooth(self, button, spatial, i):
+        flt = conf.filters[i][2]
+
+        tt = self.tt_spin.get_value_as_int()
+        st = self.st_spin.get_value_as_int()
+        y = self.y_check.get_active()
+        u = self.u_check.get_active()
+        v = self.v_check.get_active()
+
+        if tt != 7:
+            flt['temporal_threshold'] = tt
+        else:
+            if 'temporal_threshold' in flt:
+                flt.pop('temporal_threshold')
+        if st != 7 and spatial:
+            flt['spatial_threshold'] = st
+        else:
+            if 'spatial_threshold' in flt:
+                flt.pop('spatial_threshold')
+        if not y or not u or not v:
+            flt['planes'] = []
+            if y:
+                flt['planes'].append(0)
+            if u:
+                flt['planes'].append(1)
+            if v:
+                flt['planes'].append(2)
+        else:
+            if 'planes' in flt:
+                flt.pop('planes')
+
+    def _rgvs(self, i):
+        mode_adj = Gtk.Adjustment(2, 0, 18, 1, 10)
+        modeu_adj = Gtk.Adjustment(2, 0, 18, 1, 10)
+        modev_adj = Gtk.Adjustment(2, 0, 18, 1, 10)
+
         mode_label = Gtk.Label('Mode')
         mode_label.set_halign(Gtk.Align.START)
         modeu_label = Gtk.Label('U Mode')
@@ -2377,25 +2385,80 @@ class FilterDialog(Gtk.Dialog):
         modev_label = Gtk.Label('V Mode')
         modev_label.set_halign(Gtk.Align.START)
 
-        self.grid.attach(mode_label, 0, 0, 1, 1)
-        self.grid.attach(conf.rgvs_mode_spin, 1, 0, 1, 1)
-        self.grid.attach(adv_label, 0, 1, 1, 1)
-        self.grid.attach(conf.rgvs_adv_check, 1, 1, 1, 1)
-        self.grid.attach(modeu_label, 0, 2, 1, 1)
-        self.grid.attach(conf.rgvs_modeu_spin, 1, 2, 1, 1)
-        self.grid.attach(modev_label, 0, 3, 1, 1)
-        self.grid.attach(conf.rgvs_modev_spin, 1, 3, 1, 1)
+        self.mode_spin = Gtk.SpinButton()
+        self.mode_spin.set_adjustment(mode_adj)
+        self.mode_spin.set_property('hexpand', True)
+        self.modeu_spin = Gtk.SpinButton()
+        self.modeu_spin.set_adjustment(modeu_adj)
+        self.modeu_spin.set_property('hexpand', True)
+        self.modeu_spin.set_sensitive(False)
+        self.modev_spin = Gtk.SpinButton()
+        self.modev_spin.set_adjustment(modev_adj)
+        self.modev_spin.set_property('hexpand', True)
+        self.modev_spin.set_sensitive(False)
 
-        conf.rgvs_modeu_spin.set_sensitive(False)
-        conf.rgvs_modev_spin.set_sensitive(False)
-        conf.rgvs_adv_check.connect('toggled', self.on_rgvs_adv_toggled)
+        self.modeu_check = Gtk.CheckButton()
+        self.modev_check = Gtk.CheckButton()
 
-    def on_rgvs_adv_toggled(self, check):
-        state = conf.rgvs_adv_check.get_active()
-        conf.rgvs_modeu_spin.set_sensitive(state)
-        conf.rgvs_modev_spin.set_sensitive(state)
+        flt = conf.filters[i][2]
+        m = flt.get('mode', [2])
+        self.mode_spin.set_value(m[0])
+        if len(m) > 1:
+            self.modeu_spin.set_value(m[1])
+            self.modeu_check.set_active(True)
+            self.modeu_spin.set_sensitive(True)
+        if len(m) > 2:
+            self.modev_spin.set_value(m[2])
+            self.modev_check.set_active(True)
+            self.modev_spin.set_sensitive(True)
 
-    def tsoft(self):
+        self.grid.attach(mode_label, 0, 0, 2, 1)
+        self.grid.attach(self.mode_spin, 2, 0, 1, 1)
+        self.grid.attach(modeu_label, 0, 1, 1, 1)
+        self.grid.attach(self.modeu_check, 1, 1, 1, 1)
+        self.grid.attach(self.modeu_spin, 2, 1, 1, 1)
+        self.grid.attach(modev_label, 0, 2, 1, 1)
+        self.grid.attach(self.modev_check, 1, 2, 1, 1)
+        self.grid.attach(self.modev_spin, 2, 2, 1, 1)
+
+        self.modeu_check.connect('toggled', self.on_modeu_toggled)
+        self.modev_check.connect('toggled', self.on_modev_toggled)
+
+    def _update_rgvs(self, button, i):
+        flt = conf.filters[i][2]
+
+        m = self.mode_spin.get_value_as_int()
+        su = self.modeu_check.get_active()
+        mu = self.modeu_spin.get_value_as_int()
+        sv = self.modev_check.get_active()
+        mv = self.modev_spin.get_value_as_int()
+
+        flt['mode'] = [m]
+        if su:
+            flt['mode'].append(mu)
+            if sv:
+                flt['mode'].append(mv)
+
+    def on_modeu_toggled(self, check):
+        s = check.get_active()
+        self.modeu_spin.set_sensitive(s)
+
+        if not s:
+            self.modev_check.set_active(False)
+
+    def on_modev_toggled(self, check):
+        s = check.get_active()
+        self.modev_spin.set_sensitive(s)
+
+        if s:
+            self.modeu_check.set_active(True)
+
+    def _tsoft(self, i):
+        rad_adj = Gtk.Adjustment(4, 1, 7, 1, 1)
+        lt_adj = Gtk.Adjustment(4, 0, 255, 1, 10)
+        ct_adj = Gtk.Adjustment(4, 0, 255, 1, 10)
+        sc_adj = Gtk.Adjustment(0, 0, 254, 1, 10)
+
         rad_label = Gtk.Label('Radius')
         rad_label.set_halign(Gtk.Align.START)
         lt_label = Gtk.Label('Luma Threshold')
@@ -2405,50 +2468,234 @@ class FilterDialog(Gtk.Dialog):
         sc_label = Gtk.Label('Scene Change')
         sc_label.set_halign(Gtk.Align.START)
 
+        self.rad_spin = Gtk.SpinButton()
+        self.rad_spin.set_adjustment(rad_adj)
+        self.rad_spin.set_property('hexpand', True)
+        self.lt_spin = Gtk.SpinButton()
+        self.lt_spin.set_adjustment(lt_adj)
+        self.lt_spin.set_property('hexpand', True)
+        self.ct_spin = Gtk.SpinButton()
+        self.ct_spin.set_adjustment(ct_adj)
+        self.ct_spin.set_property('hexpand', True)
+        self.sc_spin = Gtk.SpinButton()
+        self.sc_spin.set_adjustment(sc_adj)
+        self.sc_spin.set_property('hexpand', True)
+
+        flt = conf.filters[i][2]
+        self.rad_spin.set_value(flt.get('radius', 4))
+        self.lt_spin.set_value(flt.get('luma_threshold', 4))
+        self.ct_spin.set_value(flt.get('chroma_threshold', 4))
+        self.sc_spin.set_value(flt.get('scenechange', 0))
+
         self.grid.attach(rad_label, 0, 0, 1, 1)
-        self.grid.attach(conf.tsoft_rad_spin, 1, 0, 1, 1)
+        self.grid.attach(self.rad_spin, 1, 0, 1, 1)
         self.grid.attach(lt_label, 0, 1, 1, 1)
-        self.grid.attach(conf.tsoft_lt_spin, 1, 1, 1, 1)
+        self.grid.attach(self.lt_spin, 1, 1, 1, 1)
         self.grid.attach(ct_label, 0, 2, 1, 1)
-        self.grid.attach(conf.tsoft_ct_spin, 1, 2, 1, 1)
+        self.grid.attach(self.ct_spin, 1, 2, 1, 1)
         self.grid.attach(sc_label, 0, 3, 1, 1)
-        self.grid.attach(conf.tsoft_sc_spin, 1, 3, 1, 1)
+        self.grid.attach(self.sc_spin, 1, 3, 1, 1)
 
-    def fsmooth(self):
-        st_label = Gtk.Label('Spatial Threshold')
-        st_label.set_halign(Gtk.Align.START)
-        tt_label = Gtk.Label('Temporal Threshold')
-        tt_label.set_halign(Gtk.Align.START)
-        planes_label = Gtk.Label('Planes')
-        planes_label.set_halign(Gtk.Align.START)
+    def _update_tsoft(self, button, i):
+        flt = conf.filters[i][2]
 
-        self.grid.attach(st_label, 0, 0, 1, 1)
-        self.grid.attach(conf.fsmooth_st_spin, 1, 0, 3, 1)
-        self.grid.attach(tt_label, 0, 1, 1, 1)
-        self.grid.attach(conf.fsmooth_tt_spin, 1, 1, 3, 1)
-        self.grid.attach(planes_label, 0, 2, 1, 1)
-        self.grid.attach(conf.fsmooth_y_check, 1, 2, 1, 1)
-        self.grid.attach(conf.fsmooth_u_check, 2, 2, 1, 1)
-        self.grid.attach(conf.fsmooth_v_check, 3, 2, 1, 1)
+        rad = self.rad_spin.get_value_as_int()
+        lt = self.lt_spin.get_value_as_int()
+        ct = self.ct_spin.get_value_as_int()
+        sc = self.sc_spin.get_value_as_int()
 
-    def f3kdb(self):
-        preset_label = Gtk.Label('Preset')
-        preset_label.set_halign(Gtk.Align.START)
-        plane_label = Gtk.Label('Plane')
-        plane_label.set_halign(Gtk.Align.START)
-        grain_label = Gtk.Label('Grain')
-        grain_label.set_halign(Gtk.Align.START)
+        if rad != 4:
+            flt['radius'] = rad
+        else:
+            if 'radius' in flt:
+                flt.pop('radius')
+        if lt != 4:
+            flt['luma_threshold'] = lt
+        else:
+            if 'luma_threshold' in flt:
+                flt.pop('luma_threshold')
+        if ct != 4:
+            flt['chroma_threshold'] = ct
+        else:
+            if 'chroma_threshold' in flt:
+                flt.pop('chroma_threshold')
+        if sc != 0:
+            flt['scenechange'] = sc
+        else:
+            if 'scenechange' in flt:
+                flt.pop('scenechange')
+
+    def _f3kdb(self, i):
+        y_adj = Gtk.Adjustment(64, 0, 80, 1, 10)
+        cb_adj = Gtk.Adjustment(64, 0, 80, 1, 10)
+        cr_adj = Gtk.Adjustment(64, 0, 80, 1, 10)
+        grainy_adj = Gtk.Adjustment(64, 0, 80, 1, 10)
+        grainc_adj = Gtk.Adjustment(64, 0, 80, 1, 10)
+        depth_adj = Gtk.Adjustment(16, 8, 16, 1, 1)
+        modes = ['2 pixels', '4 pixels']
+        dithers = ['None', 'Ordered', 'Floyd-Steinberg']
+
+        y_label = Gtk.Label('Y')
+        y_label.set_halign(Gtk.Align.START)
+        cb_label = Gtk.Label('Cb')
+        cb_label.set_halign(Gtk.Align.START)
+        cr_label = Gtk.Label('Cr')
+        cr_label.set_halign(Gtk.Align.START)
+        grainy_label = Gtk.Label('Grain Y')
+        grainy_label.set_halign(Gtk.Align.START)
+        grainc_label = Gtk.Label('Grain C')
+        grainc_label.set_halign(Gtk.Align.START)
         depth_label = Gtk.Label('Output Depth')
         depth_label.set_halign(Gtk.Align.START)
+        dither_label = Gtk.Label('Dithering')
+        dither_label.set_halign(Gtk.Align.START)
+        mode_label = Gtk.Label('Sample Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        blur_label = Gtk.Label('Blur First')
+        blur_label.set_halign(Gtk.Align.START)
+        dyngrain_label = Gtk.Label('Dynamic Grain')
+        dyngrain_label.set_halign(Gtk.Align.START)
 
-        self.grid.attach(preset_label, 0, 0, 1, 1)
-        self.grid.attach(conf.f3kdb_preset_cbtext, 1, 0, 1, 1)
-        self.grid.attach(plane_label, 0, 1, 1, 1)
-        self.grid.attach(conf.f3kdb_plane_cbtext, 1, 1, 1, 1)
-        self.grid.attach(grain_label, 0, 2, 1, 1)
-        self.grid.attach(conf.f3kdb_grain_check, 1, 2, 1, 1)
-        self.grid.attach(depth_label, 0, 3, 1, 1)
-        self.grid.attach(conf.f3kdb_depth_spin, 1, 3, 1, 1)
+        self.y_spin = Gtk.SpinButton()
+        self.y_spin.set_adjustment(y_adj)
+        self.y_spin.set_property('hexpand', True)
+        self.cb_spin = Gtk.SpinButton()
+        self.cb_spin.set_adjustment(cb_adj)
+        self.cb_spin.set_property('hexpand', True)
+        self.cr_spin = Gtk.SpinButton()
+        self.cr_spin.set_adjustment(cr_adj)
+        self.cr_spin.set_property('hexpand', True)
+        self.grainy_spin = Gtk.SpinButton()
+        self.grainy_spin.set_adjustment(grainy_adj)
+        self.grainy_spin.set_property('hexpand', True)
+        self.grainc_spin = Gtk.SpinButton()
+        self.grainc_spin.set_adjustment(grainc_adj)
+        self.grainc_spin.set_property('hexpand', True)
+        self.depth_spin= Gtk.SpinButton()
+        self.depth_spin.set_adjustment(depth_adj)
+        self.depth_spin.set_property('hexpand', True)
+
+        self.dither_cbtext = Gtk.ComboBoxText()
+        self.dither_cbtext.set_property('hexpand', True)
+        for a in dithers:
+            self.dither_cbtext.append_text(a)
+        self.dither_cbtext.set_active(2)
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+        self.mode_cbtext.set_active(1)
+
+        self.dyngrain_check = Gtk.CheckButton()
+        self.dyngrain_check.set_active(False)
+        self.blur_check = Gtk.CheckButton()
+        self.blur_check.set_active(False)
+
+        flt = conf.filters[i][2]
+        self.y_spin.set_value(flt.get('y', 64))
+        self.cb_spin.set_value(flt.get('cb', 64))
+        self.cr_spin.set_value(flt.get('cr', 64))
+        self.grainy_spin.set_value(flt.get('grainy', 64))
+        self.grainc_spin.set_value(flt.get('grainc', 64))
+        self.depth_spin.set_value(flt.get('output_depth', 8))
+        self.dither_cbtext.set_active(flt.get('dither_algo', 3) - 1)
+        self.mode_cbtext.set_active(flt.get('dither_algo', 2) - 1)
+        self.blur_check.set_active(flt.get('blur_first', True))
+        self.dyngrain_check.set_active(flt.get('dynamic_grain', False))
+
+        self.grid.attach(y_label, 0, 0, 1, 1)
+        self.grid.attach(self.y_spin, 1, 0, 1, 1)
+        self.grid.attach(cb_label, 0, 1, 1, 1)
+        self.grid.attach(self.cb_spin, 1, 1, 1, 1)
+        self.grid.attach(cr_label, 0, 2, 1, 1)
+        self.grid.attach(self.cr_spin, 1, 2, 1, 1)
+        self.grid.attach(grainy_label, 0, 3, 1, 1)
+        self.grid.attach(self.grainy_spin, 1, 3, 1, 1)
+        self.grid.attach(grainc_label, 0, 4, 1, 1)
+        self.grid.attach(self.grainc_spin, 1, 4, 1, 1)
+        self.grid.attach(depth_label, 0, 5, 1, 1)
+        self.grid.attach(self.depth_spin, 1, 5, 1, 1)
+        self.grid.attach(dither_label, 0, 6, 1, 1)
+        self.grid.attach(self.dither_cbtext, 1, 6, 1, 1)
+        self.grid.attach(mode_label, 0, 7, 1, 1)
+        self.grid.attach(self.mode_cbtext, 1, 7, 1, 1)
+        self.grid.attach(blur_label, 0, 8, 1, 1)
+        self.grid.attach(self.blur_check, 1, 8, 1, 1)
+        self.grid.attach(dyngrain_label, 0, 9, 1, 1)
+        self.grid.attach(self.dyngrain_check, 1, 9, 1, 1)
+
+        self.depth_spin.connect('changed', self.on_depth_changed)
+
+    def _update_f3kdb(self, button, i):
+        flt = conf.filters[i][2]
+
+        y = self.y_spin.get_value_as_int()
+        cb = self.cb_spin.get_value_as_int()
+        cr = self.cr_spin.get_value_as_int()
+        gy = self.grainy_spin.get_value_as_int()
+        gc = self.grainc_spin.get_value_as_int()
+        od = self.depth_spin.get_value_as_int()
+        da = self.dither_cbtext.get_active() + 1
+        sm = self.mode_cbtext.get_active() + 1
+        bf = self.blur_check.get_active()
+        dg = self.dyngrain_check.get_active()
+
+        if y != 64:
+            flt['y'] = y
+        else:
+            if 'y' in flt:
+                flt.pop('y')
+        if cb != 64:
+            flt['cb'] = cb
+        else:
+            if 'cb' in flt:
+                flt.pop('cb')
+        if cr != 64:
+            flt['cr'] = cr
+        else:
+            if 'cr' in flt:
+                flt.pop('cr')
+        if gy != 64:
+            flt['grainy'] = gy
+        else:
+            if 'grainy' in flt:
+                flt.pop('grainy')
+        if gc != 64:
+            flt['grainc'] = gc
+        else:
+            if 'grainc' in flt:
+                flt.pop('grainc')
+        if od!= 8:
+            flt['output_depth'] = od
+        else:
+            if 'output_depth' in flt:
+                flt.pop('output_depth')
+        if da!= 3 and od != 16:
+            flt['dither_algo'] = da
+        else:
+            if 'dither_algo' in flt:
+                flt.pop('dither_algo')
+        if sm!= 2:
+            flt['sample_mode'] = sm
+        else:
+            if 'sample_mode' in flt:
+                flt.pop('sample_mode')
+        if not bf:
+            flt['blur_first'] = bf
+        else:
+            if 'blur_first' in flt:
+                flt.pop('blur_first')
+        if dg:
+            flt['dynamic_grain'] = dg
+        else:
+            if 'dynamic_grain' in flt:
+                flt.pop('dynamic_grain')
+
+    def on_depth_changed(self, spin):
+        if spin.get_value_as_int() == 16:
+            self.dither_cbtext.set_sensitive(False)
+        else:
+            self.dither_cbtext.set_sensitive(True)
 
 class AboutDialog(Gtk.AboutDialog):
 
