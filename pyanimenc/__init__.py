@@ -16,7 +16,7 @@ AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 VENCS = ['x264', 'x265']
 VTYPES = {'V_MPEG4/ISO/AVC': 'h264', 'V_MPEGH/ISO/HEVC': 'h265',
           'V_MS/VFW/FOURCC': 'xvid'}
-AENCS = ['fdkaac', 'lame']
+AENCS = ['fdkaac', 'lame', 'oggenc']
 ATYPES = {'A_AAC': 'aac', 'A_AAC/MPEG2/LC/SBR': 'aac', 'A_AC3': 'ac3',
           'A_DTS': 'dts', 'A_FLAC': 'flac', 'A_MP3': 'mp3', 'A_TRUEHD': 'thd',
           'A_VORBIS': 'ogg', 'A_WAVPACK4': 'wv'}
@@ -104,6 +104,10 @@ class Config:
             AENCS.remove('fdkaac')
         if self._find_enc('lame'):
             self.lame()
+        else:
+            AENCS.remove('lame')
+        if self._find_enc('oggenc'):
+            self.oggenc()
         else:
             AENCS.remove('lame')
         self._find_x264()
@@ -201,6 +205,27 @@ class Config:
         for m in lame_modes:
             self.lame_mode_cbtext.append_text(m)
         self.lame_mode_cbtext.set_active(0)
+
+    def oggenc(self):
+        oggenc_modes = ['CBR', 'ABR', 'VBR']
+        oggenc_bitrate = Gtk.Adjustment(160, 64, 500, 1, 10)
+        oggenc_quality = Gtk.Adjustment(5, 0, 10, 1)
+
+        self.oggenc_bitrate_spin = Gtk.SpinButton()
+        self.oggenc_bitrate_spin.set_property('hexpand', True)
+        self.oggenc_bitrate_spin.set_numeric(True)
+        self.oggenc_bitrate_spin.set_adjustment(oggenc_bitrate)
+
+        self.oggenc_quality_spin = Gtk.SpinButton()
+        self.oggenc_quality_spin.set_property('hexpand', True)
+        self.oggenc_quality_spin.set_numeric(True)
+        self.oggenc_quality_spin.set_adjustment(oggenc_quality)
+
+        self.oggenc_mode_cbtext = Gtk.ComboBoxText()
+        self.oggenc_mode_cbtext.set_property('hexpand', True)
+        for m in oggenc_modes:
+            self.oggenc_mode_cbtext.append_text(m)
+        self.oggenc_mode_cbtext.set_active(2)
 
     def x264(self):
         x264_depths = ['8']
@@ -511,14 +536,15 @@ class MainWindow(Gtk.Window):
         input_box.pack_start(input_grid, False, False, 0)
         input_box.pack_start(auto_scrwin, True, True, 0)
 
-        #--Queue--#
-        self.queue_tstore = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
-        # Do one encoding task at a time
+        #--Worker--#
         self.worker = ThreadPoolExecutor(max_workers=1)
-        # Lock the worker thread
         self.idle = True
         self.lock = Lock()
         self.lock.acquire()
+
+        #--Queue--#
+        self.queue_tstore = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
+        # Do one encoding task at a time
 
         queue_scrwin = Gtk.ScrolledWindow()
         queue_scrwin.set_policy(Gtk.PolicyType.AUTOMATIC,
@@ -596,6 +622,9 @@ class MainWindow(Gtk.Window):
         if 'lame' in AENCS:
             self.lame_dlg = EncoderDialog(self, 'lame')
             self.lame_dlg.hide()
+        if 'oggenc' in AENCS:
+            self.oggenc_dlg = EncoderDialog(self, 'oggenc')
+            self.oggenc_dlg.hide()
         if 'x264' in VENCS:
             self.x264_dlg = EncoderDialog(self, 'x264')
             self.x264_dlg.hide()
@@ -686,6 +715,11 @@ class MainWindow(Gtk.Window):
             b = conf.lame_bitrate_spin.get_value_as_int()
             q = conf.lame_quality_spin.get_value_as_int()
             future = self.worker.submit(self._lame, s, d, m, b, q)
+        elif x == 'oggenc':
+            m = conf.oggenc_mode_cbtext.get_active_text()
+            b = conf.oggenc_bitrate_spin.get_value_as_int()
+            q = conf.oggenc_quality_spin.get_value_as_int()
+            future = self.worker.submit(self._oggenc, s, d, m, b, q)
         self.queue_tstore.append(None, [future, f, x, 'Waiting'])
         self.worker.submit(self._update_queue)
 
@@ -937,6 +971,14 @@ class MainWindow(Gtk.Window):
                         future = self.worker.submit(self._lame, a, track[1], m,
                                                     b, q)
 
+                    elif x == 'oggenc':
+                        m = conf.oggenc_mode_cbtext.get_active_text()
+                        b = conf.oggenc_bitrate_spin.get_value_as_int()
+                        q = conf.oggenc_quality_spin.get_value_as_int()
+
+                        future = self.worker.submit(self._oggenc, a, track[1], m,
+                                                    b, q)
+
                     self.queue_tstore.append(job, [future, '', x, 'Waiting'])
 
             # Merge tracks
@@ -968,6 +1010,9 @@ class MainWindow(Gtk.Window):
         elif x == 'lame':
             self.lame_dlg.run()
             self.lame_dlg.hide()
+        elif x == 'oggenc':
+            self.oggenc_dlg.run()
+            self.oggenc_dlg.hide()
         elif x in ['x264', 'x264-10bit']:
             self.x264_dlg.run()
             self.x264_dlg.hide()
@@ -1143,6 +1188,8 @@ class MainWindow(Gtk.Window):
                     track[2] = c
                 elif x == 'lame':
                     track[2] = 'mp3'
+                elif x == 'oggenc':
+                    track[2] = 'ogg'
 
         cmd = MatroskaOps(source).merge(dest, vtrack, atracks, stracks, uid)
         print(cmd)
@@ -1221,6 +1268,15 @@ class MainWindow(Gtk.Window):
         print('Encode audio...')
         self._update_queue()
         cmd = Encode(source).lame(dest, mode, bitrate, quality)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _oggenc(self, source, dest, mode, bitrate, quality):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(source).oggenc(dest, mode, bitrate, quality)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
@@ -1748,6 +1804,8 @@ class EncoderDialog(Gtk.Dialog):
             self.fdkaac()
         if x == 'lame':
             self.lame()
+        if x == 'oggenc':
+            self.oggenc()
         if x == 'x264':
             self.x264()
         if x == 'x265':
@@ -1803,6 +1861,27 @@ class EncoderDialog(Gtk.Dialog):
 
         conf.lame_quality_spin.set_sensitive(False)
         conf.lame_mode_cbtext.connect('changed', self.on_lame_mode_changed)
+
+    def oggenc(self):
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
+        quality_label = Gtk.Label('Quality')
+        quality_label.set_halign(Gtk.Align.START)
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(conf.oggenc_mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(conf.oggenc_bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(quality_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(conf.oggenc_quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+        conf.oggenc_bitrate_spin.set_sensitive(False)
+        conf.oggenc_mode_cbtext.connect('changed', self.on_oggenc_mode_changed)
 
     def x264(self):
         depth_label = Gtk.Label('Depth')
@@ -1885,6 +1964,15 @@ class EncoderDialog(Gtk.Dialog):
         elif m == 'VBR':
             conf.lame_bitrate_spin.set_sensitive(False)
             conf.lame_quality_spin.set_sensitive(True)
+
+    def on_oggenc_mode_changed(self, combo):
+        m = combo.get_active_text()
+        if m == 'CBR' or m == 'ABR':
+            conf.oggenc_bitrate_spin.set_sensitive(True)
+            conf.oggenc_quality_spin.set_sensitive(False)
+        elif m == 'VBR':
+            conf.oggenc_bitrate_spin.set_sensitive(False)
+            conf.oggenc_quality_spin.set_sensitive(True)
 
 class VapourSynthDialog(Gtk.Dialog):
 

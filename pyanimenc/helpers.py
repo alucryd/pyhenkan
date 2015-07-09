@@ -297,4 +297,17 @@ class Encode:
         cmd = ' | '.join([ dec, enc ])
         return cmd
 
+    def oggenc(self, o='', m='CBR', b=320, q=4):
+        if not o:
+            o = self.sname
+        dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        if m == 'CBR':
+            enc = 'oggenc --quiet -b {} --managed -o "{}.ogg" -'.format(b, o)
+        elif m == 'ABR':
+            enc = 'oggenc --quiet -b {} -o "{}.ogg" -'.format(b, o)
+        elif m == 'VBR':
+            enc = 'oggenc --quiet -q {} -o "{}.ogg" -'.format(q, o)
+        cmd = ' | '.join([ dec, enc ])
+        return cmd
+
 # vim: ts=4 sw=4 et:
