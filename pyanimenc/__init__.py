@@ -1144,7 +1144,6 @@ class MainWindow(Gtk.Window):
                             # Mark as idle if child was the last job
                             if i == njobs - 1:
                                 self.idle = True
-                                self.lock.acquire()
                     # Mark running child as such
                     elif future.running():
                         GLib.idle_add(self.queue_tstore.set_value, step, 3,
@@ -1160,7 +1159,6 @@ class MainWindow(Gtk.Window):
                     # Mark as idle if job was the last
                     if i == njobs - 1:
                         self.idle = True
-                        self.lock.acquire()
                 # Mark running job as such
                 elif future.running():
                     GLib.idle_add(self.queue_tstore.set_value, job, 3,
