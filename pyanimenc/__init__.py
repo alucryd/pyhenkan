@@ -171,17 +171,18 @@ class Config:
                        'container': 'ogg'}
 
     def _find_enc(self, x, y=''):
-        if os.path.isfile('/usr/bin/' + x):
-            if x.startswith('x264') and not self._find_x264(x, y):
-                return False
-            elif x.startswith('x265') and not self._find_x265(x, y):
-                return False
-            elif x == 'ffmpeg' and y and not self._find_ffmpeg(y):
-                return False
-            else:
-                return True
-        else:
-            return False
+        path = os.environ['PATH'].split(':')
+        for p in path:
+            if os.path.isfile('/'.join([p, x])):
+                if x.startswith('x264') and not self._find_x264(x, y):
+                    return False
+                elif x.startswith('x265') and not self._find_x265(x, y):
+                    return False
+                elif x == 'ffmpeg' and y and not self._find_ffmpeg(y):
+                    return False
+                else:
+                    return True
+        return False
 
     def _find_ffmpeg(self, y):
         proc = subprocess.Popen('ffmpeg -buildconf',
