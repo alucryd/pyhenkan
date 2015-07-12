@@ -238,76 +238,195 @@ class Encode:
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x264(self, o='', d=8, q=18, p='medium', t='', c='mp4', args=''):
+    def x264(self, x='x264', o='', q=18, p='medium', t='none', c='264', a=''):
         if not o:
             o = self.sname
         dec = 'vspipe "{}" - -y'.format(self.source)
-        if d == 8:
-            x = 'x264'
-        elif d == 10:
-            x = 'x264-10bit'
-        enc = [x, '-', '--crf', str(q),  '--demuxer', 'y4m', '--output',
-               '"' + o + '.' + c + '"']
-        if p:
+        enc = [x,
+               '--crf', str(q),
+               '--demuxer', 'y4m']
+        if p != 'none':
             enc = enc + ['--preset', p]
-        if t:
+        if t != 'none':
             enc = enc + ['--tune', t]
-        if args:
-            enc.append(args)
+        if a:
+            enc.append(a)
+        enc = enc + ['--output', '"{}.{}" -'.format(o, c)]
         enc = ' '.join(enc)
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def x265(self, o='', d=8, q=18, p='medium', t='', c='265', args=''):
+    def x265(self, x='x265', d=8, o='', q=18, p='medium', t='none', c='265',
+             a=''):
         if not o:
             o = self.sname
         dec = 'vspipe "{}" - -y'.format(self.source)
-        enc = ['x265', '-', '--output-depth', str(d), '--crf', str(q), '--y4m',
-               '--output', '"' + o + '.' + c + '"']
-        if p:
+        enc = [x,
+               '--output-depth', str(d),
+               '--crf', str(q),
+               '--y4m']
+        if p != 'none':
             enc = enc + ['--preset', p]
-        if t:
+        if t != 'none':
             enc = enc + ['--tune', t]
-        if args:
-            enc.append(args)
+        if a:
+            enc.append(a)
+        enc = enc + ['--output', '"{}.{}" -'.format(o, c)]
+        enc = ' '.join(enc)
         cmd = ' | '.join([dec, enc])
         return cmd
 
-    def fdkaac(self, o='', m='CBR', b='192', q=4, c='m4a'):
+    def ffmpeg_libfaac(self, o='', m='VBR', b='128', q=100, c='m4a'):
+        if not o:
+            o = self.sname
+        cmd = ['ffmpeg -y -i "{}" -acodec libfaac'.format(self.source)]
+        if m == 'ABR':
+            cmd.append('-b {}'.format(b))
+        elif m == 'VBR':
+            cmd.append('-q {}'.format(q))
+        cmd.append('"{}.{}"'.format(o, c))
+        cmd = ' '.join(cmd)
+        return cmd
+
+    def faac(self, o='', m='VBR', b='128', q=100, c='m4a'):
+        if not o:
+            o = self.sname
+        dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        enc = ['faac']
+        if m == 'ABR':
+            enc.append('-b {}'.format(b))
+        elif m == 'VBR':
+            enc.append('-q {}'.format(q))
+        enc.append('-o "{}.{}" -'.format(o, c))
+        enc = ' '.join(enc)
+        cmd = ' | '.join([dec, enc])
+        return cmd
+
+    def ffmpeg_libfdk_aac(self, o='', m='VBR', b='128', q=4, c='m4a'):
+        if not o:
+            o = self.sname
+        cmd = ['ffmpeg -y -i "{}" -acodec libfdk_aac'.format(self.source)]
+        if m == 'CBR':
+            cmd.append('-b {}'.format(b))
+        elif m == 'VBR':
+            cmd.append('-vbr {}'.format(q))
+        cmd.append('"{}.{}"'.format(o, c))
+        cmd = ' '.join(cmd)
+        return cmd
+
+    def fdkaac(self, o='', m='VBR', b='128', q=4, c='m4a'):
         if not o:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f caf -'.format(self.source)
+        enc = ['fdkaac --silent']
         if m == 'CBR':
-            enc = 'fdkaac --silent - -b {} -o "{}.{}"'.format(b, o, c)
+            enc.append('-b {}'.format(b))
         elif m == 'VBR':
-            enc = 'fdkaac --silent - -m {} -o "{}.{}"'.format(q, o, c)
-        cmd = ' | '.join([ dec, enc ])
+            enc.append('-m {}'.format(q))
+        enc.append('-o "{}.{}" -'.format(o, c))
+        enc = ' '.join(enc)
+        cmd = ' | '.join([dec, enc])
         return cmd
 
-    def lame(self, o='', m='CBR', b=320, q=4):
+    def ffmpeg_flac(self, o='', cp=8, c='flac'):
+        if not o:
+            o = self.sname
+        cmd = 'ffmpeg -y -i "{}" -acodec flac -compression_level {} "{}.{}"'
+        cmd = cmd.format(self.source, cp, o, c)
+        return cmd
+
+    def flac(self, o='', cp=8, c='flac'):
         if not o:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
-        if m == 'CBR':
-            enc = 'lame --silent -b {} --cbr - "{}.mp3"'.format(b, o)
-        elif m == 'ABR':
-            enc = 'lame --silent -b {} --abr - "{}.mp3"'.format(b, o)
-        elif m == 'VBR':
-            enc = 'lame --silent -V {} - "{}.mp3"'.format(q, o)
-        cmd = ' | '.join([ dec, enc ])
+        enc = 'flac --silent -{} -o "{}.{}" -'.format(cp, o, c)
+        cmd = ' | '.join([dec, enc])
         return cmd
 
-    def oggenc(self, o='', m='CBR', b=320, q=4):
+    def ffmpeg_libmp3lame(self, o='', m='VBR', b=192, q=2, c='mp3'):
+        if not o:
+            o = self.sname
+        cmd = ['ffmpeg -y -i "{}" -acodec libmp3lame'.format(self.source)]
+        if m == 'CBR':
+            cmd.append('-b {}'.format(b))
+        elif m == 'ABR':
+            cmd.append('-b {} -abr'.format(b))
+        elif m == 'VBR':
+            cmd.append('-compression_level {}'.format(q))
+        cmd.append('"{}.{}"'.format(o, c))
+        cmd = ' '.join(cmd)
+        return cmd
+
+    def lame(self, o='', m='VBR', b=192, q=2, c='mp3'):
         if not o:
             o = self.sname
         dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        enc = ['lame --silent']
         if m == 'CBR':
-            enc = 'oggenc --quiet -b {} --managed -o "{}.ogg" -'.format(b, o)
+            enc.append('-b {} --cbr'.format(b))
         elif m == 'ABR':
-            enc = 'oggenc --quiet -b {} -o "{}.ogg" -'.format(b, o)
+            enc.append('-b {} --abr'.format(b))
         elif m == 'VBR':
-            enc = 'oggenc --quiet -q {} -o "{}.ogg" -'.format(q, o)
-        cmd = ' | '.join([ dec, enc ])
+            enc.append('-V {}'.format(q))
+        enc.append('- "{}.{}"'.format(o, c))
+        enc = ' '.join(enc)
+        cmd = ' | '.join([dec, enc])
+        return cmd
+
+    def ffmpeg_libopus(self, o='', m='VBR', b=128, c='opus'):
+        if not o:
+            o = self.sname
+        cmd = ['ffmpeg -i "{}" -acodec libopus -b {}'.format(self.source, b)]
+        if m == 'CBR':
+            cmd.append('-vbr off')
+        elif m == 'ABR':
+            cmd.append('-vbr constrained')
+        cmd.append('"{}.{}"'.format(o, c))
+        cmd = ' '.join(cmd)
+        return cmd
+
+    def opusenc(self, o='', m='VBR', b=128, c='opus'):
+        if not o:
+            o = self.sname
+        dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        enc = ['opusenc --quiet --bitrate {}'.format(b)]
+        if m == 'CBR':
+            enc.append('--hard-cbr')
+        elif m == 'ABR':
+            enc.append('--cvbr')
+        enc.append('- "{}.{}"'.format(o, c))
+        enc = ' '.join(enc)
+        cmd = ' | '.join([dec, enc])
+        return cmd
+
+    def ffmpeg_libvorbis(self, o='', m='VBR', b=160, q=5, c='ogg'):
+        if not o:
+            o = self.sname
+        cmd = ['ffmpeg -y -i "{}" -acodec libvorbis'.format(self.source)]
+        if m == 'CBR':
+            cmd.append('-b {} -m {} -M {}'.format(b, b, b))
+        elif m == 'ABR':
+            cmd.append('-b {}'.format(b))
+        elif m == 'VBR':
+            cmd.append('-q {}'.format(q))
+        cmd.append('"{}.{}"'.format(o, c))
+        cmd = ' '.join(cmd)
+        return cmd
+
+    def oggenc(self, o='', m='VBR', b=160, q=5, c='ogg'):
+        if not o:
+            o = self.sname
+        dec = 'ffmpeg -i "{}" -f wav -'.format(self.source)
+        enc = ['oggenc --quiet -b {}'.format(b)]
+        if m == 'CBR':
+            enc.append('-b {} --managed -m {} -M {}'.format(b, b, b))
+        elif m == 'ABR':
+            enc.append('-b {} --managed'.format(b))
+        elif m == 'VBR':
+            enc.append('-q {}'.format(q))
+        enc.append('-o "{}.{}" -'.format(o, c))
+        enc = ' '.join(enc)
+        cmd = ' | '.join([dec, enc])
         return cmd
 
 # vim: ts=4 sw=4 et:

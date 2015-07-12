@@ -13,15 +13,49 @@ from threading import Lock
 VERSION = '0.1b1'
 AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 
-VENCS = ['x264', 'x265']
-VTYPES = {'V_MPEG4/ISO/AVC': 'h264', 'V_MPEGH/ISO/HEVC': 'h265',
+VENCS = OrderedDict()
+VENCS['AVC (x264)'] = ['x264', 8]
+VENCS['AVC (x264, High10)'] = ['x264', 10]
+VENCS['HEVC (x265)'] = ['x265', 8]
+VENCS['HEVC (x265, Main10)'] = ['x265', 10]
+VENCS['HEVC (x265, Main12)'] = ['x265', 12]
+
+VTYPES = {'V_MPEG4/ISO/AVC': 'h264',
+          'V_MPEGH/ISO/HEVC': 'h265',
           'V_MS/VFW/FOURCC': 'xvid'}
-AENCS = ['fdkaac', 'lame', 'oggenc']
-ATYPES = {'A_AAC': 'aac', 'A_AAC/MPEG2/LC/SBR': 'aac', 'A_AC3': 'ac3',
-          'A_DTS': 'dts', 'A_FLAC': 'flac', 'A_MP3': 'mp3', 'A_TRUEHD': 'thd',
-          'A_VORBIS': 'ogg', 'A_WAVPACK4': 'wv'}
-STYPES = {'S_HDMV/PGS': 'sup', 'S_TEXT/ASS': 'ass', 'S_TEXT/SSA': 'ass',
-          'S_TEXT/UTF8': 'srt', 'S_VOBSUB': 'sub'}
+
+ADECS = OrderedDict()
+ADECS['DTS-HD (FFmpeg, libdcadec)'] = ['ffmpeg', 'libdcadec']
+
+AENCS = OrderedDict()
+AENCS['AAC (FFmpeg, libfaac)'] = ['ffmpeg', 'libfaac']
+AENCS['AAC (faac)'] = ['faac', '']
+AENCS['AAC (FFmpeg, libfdk_aac)'] = ['ffmpeg', 'libfdk-aac']
+AENCS['AAC (fdkaac)'] = ['fdkaac', '']
+AENCS['FLAC (FFmpeg)'] = ['ffmpeg', 'native-flac']
+AENCS['FLAC (flac)'] = ['flac', '']
+AENCS['MP3 (FFmpeg, libmp3lame)'] = ['ffmpeg', 'libmp3lame']
+AENCS['MP3 (lame)'] = ['lame', '']
+AENCS['Opus (FFmpeg, libopus)'] = ['ffmpeg', 'libopus']
+AENCS['Opus (opusenc)'] = ['opusenc', '']
+AENCS['Vorbis (FFmpeg, libvorbis)'] = ['ffmpeg', 'libvorbis']
+AENCS['Vorbis (oggenc)'] = ['oggenc', '']
+
+ATYPES = {'A_AAC': 'aac',
+          'A_AAC/MPEG2/LC/SBR': 'aac',
+          'A_AC3': 'ac3',
+          'A_DTS': 'dts',
+          'A_FLAC': 'flac',
+          'A_MP3': 'mp3',
+          'A_TRUEHD': 'thd',
+          'A_VORBIS': 'ogg',
+          'A_WAVPACK4': 'wv'}
+
+STYPES = {'S_HDMV/PGS': 'sup',
+          'S_TEXT/ASS': 'ass',
+          'S_TEXT/SSA': 'ass',
+          'S_TEXT/UTF8': 'srt',
+          'S_VOBSUB': 'sub'}
 
 SOURCE_FLTS = OrderedDict()
 SOURCE_FLTS['FFMpegSource'] = OrderedDict()
@@ -97,217 +131,115 @@ for p in ('*.aac', '*.ac3', '*.dts', '*.flac', '*.mka', '*.mp3', '*.mp4',
 class Config:
 
     def __init__(self):
-        # Initialize all codecs and filters configuration
-        if self._find_enc('fdkaac'):
-            self.fdkaac()
-        else:
-            AENCS.remove('fdkaac')
-        if self._find_enc('lame'):
-            self.lame()
-        else:
-            AENCS.remove('lame')
-        if self._find_enc('oggenc'):
-            self.oggenc()
-        else:
-            AENCS.remove('lame')
-        self._find_x264()
-        self._find_x265()
+        for key in VENCS:
+            venc = VENCS[key][0]
+            vdepth = VENCS[key][1]
+            if not self._find_enc(venc, vdepth):
+                venc = '{}-{}bit'.format(venc, vdepth)
+                VENCS[key][0] = venc
+                if not self._find_enc(venc, vdepth):
+                    VENCS.pop(key)
 
-        # list [str type, str name, list [args]]
+        for key in AENCS:
+            aenc = AENCS[key][0]
+            alib = AENCS[key][1]
+            if not self._find_enc(aenc, alib):
+                AENCS.pop(key)
+
         self.filters = [['Source', 'FFMpegSource', OrderedDict()]]
 
-    def _find_enc(self, x):
+        self.x264 = {'quality': 18,
+                     'preset': 'medium',
+                     'tune': 'none',
+                     'container': '264',
+                     'arguments': ''}
+
+        self.x265 = {'quality': 18,
+                     'preset': 'medium',
+                     'tune': 'none',
+                     'container': '265',
+                     'arguments': ''}
+
+        self.faac = {'mode': 'VBR',
+                     'bitrate': 128,
+                     'quality': 100,
+                     'container': 'm4a'}
+
+        self.fdkaac = {'mode': 'VBR',
+                       'bitrate': 128,
+                       'quality': 4,
+                       'container': 'm4a'}
+
+        self.flac = {'compression': 8,
+                     'container': 'flac'}
+
+        self.mp3 = {'mode': 'VBR',
+                    'bitrate': 192,
+                    'quality': 2,
+                    'container': 'mp3'}
+
+        self.opus = {'mode': 'VBR',
+                     'bitrate': 128,
+                     'container': 'opus'}
+
+        self.vorbis = {'mode': 'VBR',
+                       'bitrate': 160,
+                       'quality': 5,
+                       'container': 'ogg'}
+
+    def _find_enc(self, x, y=''):
         if os.path.isfile('/usr/bin/' + x):
-            return True
+            if x.startswith('x264') and not self._find_x264(x, y):
+                return False
+            elif x.startswith('x265') and not self._find_x265(x, y):
+                return False
+            elif x == 'ffmpeg' and y and not self._find_ffmpeg(y):
+                return False
+            else:
+                return True
         else:
             return False
 
-    def _find_x264(self):
-        self.x264_depths = []
-        if self._find_enc('x264'):
-            self.x264_depths.append('8')
-        if self._find_enc('x264-10bit'):
-            self.x264_depths.append('10')
-        if self.x264_depths:
-            #self.x264_depths.sort()
-            self.x264()
-        else:
-            VENCS.remove('x264')
+    def _find_ffmpeg(self, y):
+        proc = subprocess.Popen('ffmpeg -buildconf',
+                                shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL,
+                                universal_newlines=True)
+        line = proc.stdout.readline()
+        while line:
+            if '--enable-' + y in line or y.startswith('native'):
+                return True
+            line = proc.stdout.readline()
+        return False
 
-    def _find_x265(self):
-        self.x265_depths = []
-        if self._find_enc('x265'):
-            for d in ['8', '10', '12']:
-                cmd = ['x265', '--output-depth', d, '--version']
-                cmd = ' '.join(cmd)
-                self.proc = subprocess.Popen(cmd,
-                                             shell=True,
-                                             stderr=subprocess.PIPE,
-                                             universal_newlines=True)
-                line = self.proc.stderr.readline()
-                while line:
-                    depth = re.findall('(8|10|12)bit', line)
-                    if depth:
-                        depth = depth[0].strip('bit')
-                        if not depth in self.x265_depths:
-                            self.x265_depths.append(depth)
-                    line = self.proc.stderr.readline()
-        if self.x265_depths:
-            self.x265()
-        else:
-            VENCS.remove('x265')
+    def _find_x264(self, x, y):
+        cmd = [x, '--version']
+        cmd = ' '.join(cmd)
+        proc = subprocess.Popen(cmd,
+                                shell=True,
+                                stdout=subprocess.PIPE,
+                                universal_newlines=True)
+        line = proc.stdout.readline()
+        while line:
+            if '--bit-depth=' + str(y) in line:
+                return True
+            line = proc.stdout.readline()
+        return False
 
-    def fdkaac(self):
-        fdkaac_modes = ['CBR', 'VBR']
-        fdkaac_bitrate = Gtk.Adjustment(192, 0, 320, 1, 10)
-        fdkaac_quality = Gtk.Adjustment(4, 1, 5, 1)
-        fdkaac_conts = ['aac', 'm4a']
-
-        self.fdkaac_bitrate_spin = Gtk.SpinButton()
-        self.fdkaac_bitrate_spin.set_property('hexpand', True)
-        self.fdkaac_bitrate_spin.set_numeric(True)
-        self.fdkaac_bitrate_spin.set_adjustment(fdkaac_bitrate)
-
-        self.fdkaac_quality_spin = Gtk.SpinButton()
-        self.fdkaac_quality_spin.set_property('hexpand', True)
-        self.fdkaac_quality_spin.set_numeric(True)
-        self.fdkaac_quality_spin.set_adjustment(fdkaac_quality)
-
-        self.fdkaac_mode_cbtext = Gtk.ComboBoxText()
-        self.fdkaac_mode_cbtext.set_property('hexpand', True)
-        for m in fdkaac_modes:
-            self.fdkaac_mode_cbtext.append_text(m)
-        self.fdkaac_mode_cbtext.set_active(0)
-
-        self.fdkaac_cont_cbtext = Gtk.ComboBoxText()
-        self.fdkaac_cont_cbtext.set_property('hexpand', True)
-        for c in fdkaac_conts:
-            self.fdkaac_cont_cbtext.append_text(c)
-        self.fdkaac_cont_cbtext.set_active(0)
-
-    def lame(self):
-        lame_modes = ['CBR', 'ABR', 'VBR']
-        lame_bitrate = Gtk.Adjustment(320, 0, 320, 1, 10)
-        lame_quality = Gtk.Adjustment(4, 0, 9, 1)
-
-        self.lame_bitrate_spin = Gtk.SpinButton()
-        self.lame_bitrate_spin.set_property('hexpand', True)
-        self.lame_bitrate_spin.set_numeric(True)
-        self.lame_bitrate_spin.set_adjustment(lame_bitrate)
-
-        self.lame_quality_spin = Gtk.SpinButton()
-        self.lame_quality_spin.set_property('hexpand', True)
-        self.lame_quality_spin.set_numeric(True)
-        self.lame_quality_spin.set_adjustment(lame_quality)
-
-        self.lame_mode_cbtext = Gtk.ComboBoxText()
-        self.lame_mode_cbtext.set_property('hexpand', True)
-        for m in lame_modes:
-            self.lame_mode_cbtext.append_text(m)
-        self.lame_mode_cbtext.set_active(0)
-
-    def oggenc(self):
-        oggenc_modes = ['CBR', 'ABR', 'VBR']
-        oggenc_bitrate = Gtk.Adjustment(160, 64, 500, 1, 10)
-        oggenc_quality = Gtk.Adjustment(5, 0, 10, 1)
-
-        self.oggenc_bitrate_spin = Gtk.SpinButton()
-        self.oggenc_bitrate_spin.set_property('hexpand', True)
-        self.oggenc_bitrate_spin.set_numeric(True)
-        self.oggenc_bitrate_spin.set_adjustment(oggenc_bitrate)
-
-        self.oggenc_quality_spin = Gtk.SpinButton()
-        self.oggenc_quality_spin.set_property('hexpand', True)
-        self.oggenc_quality_spin.set_numeric(True)
-        self.oggenc_quality_spin.set_adjustment(oggenc_quality)
-
-        self.oggenc_mode_cbtext = Gtk.ComboBoxText()
-        self.oggenc_mode_cbtext.set_property('hexpand', True)
-        for m in oggenc_modes:
-            self.oggenc_mode_cbtext.append_text(m)
-        self.oggenc_mode_cbtext.set_active(2)
-
-    def x264(self):
-        x264_depths = ['8']
-        x264_quality = Gtk.Adjustment(18, 1, 51, 1, 10)
-        x264_presets = ['none', 'ultrafast', 'superfast', 'veryfast', 'faster',
-                        'fast', 'medium', 'slow', 'slower', 'veryslow',
-                        'placebo']
-        x264_tunes = ['none', 'film', 'animation', 'grain', 'stillimage',
-                      'psnr', 'ssim', 'fastdecode', 'zerolatency']
-        x264_conts = ['264', 'flv', 'mkv']
-
-        self.x264_depth_cbtext = Gtk.ComboBoxText()
-        self.x264_depth_cbtext.set_property('hexpand', True)
-        for d in self.x264_depths:
-            self.x264_depth_cbtext.append_text(d)
-        self.x264_depth_cbtext.set_active(0)
-
-        self.x264_quality_spin = Gtk.SpinButton()
-        self.x264_quality_spin.set_property('hexpand', True)
-        self.x264_quality_spin.set_numeric(True)
-        self.x264_quality_spin.set_adjustment(x264_quality)
-
-        self.x264_preset_cbtext = Gtk.ComboBoxText()
-        self.x264_preset_cbtext.set_property('hexpand', True)
-        for p in x264_presets:
-            self.x264_preset_cbtext.append_text(p)
-        self.x264_preset_cbtext.set_active(6)
-
-        self.x264_tune_cbtext = Gtk.ComboBoxText()
-        self.x264_tune_cbtext.set_property('hexpand', True)
-        for t in x264_tunes:
-            self.x264_tune_cbtext.append_text(t)
-        self.x264_tune_cbtext.set_active(0)
-
-        self.x264_cont_cbtext = Gtk.ComboBoxText()
-        self.x264_cont_cbtext.set_property('hexpand', True)
-        for c in x264_conts:
-            self.x264_cont_cbtext.append_text(c)
-        self.x264_cont_cbtext.set_active(0)
-
-        self.x264_arg_entry = Gtk.Entry()
-        self.x264_arg_entry.set_property('hexpand', True)
-
-    def x265(self):
-        x265_quality = Gtk.Adjustment(18, 1, 51, 1, 10)
-        x265_presets = ['none', 'ultrafast', 'superfast', 'veryfast', 'faster',
-                        'fast', 'medium', 'slow', 'slower', 'veryslow',
-                        'placebo']
-        x265_tunes = ['none', 'psnr', 'ssim', 'fastdecode', 'zerolatency']
-        x265_conts = ['265']
-
-        self.x265_depth_cbtext = Gtk.ComboBoxText()
-        self.x265_depth_cbtext.set_property('hexpand', True)
-        for d in self.x265_depths:
-            self.x265_depth_cbtext.append_text(d)
-        self.x265_depth_cbtext.set_active(0)
-
-        self.x265_quality_spin = Gtk.SpinButton()
-        self.x265_quality_spin.set_property('hexpand', True)
-        self.x265_quality_spin.set_numeric(True)
-        self.x265_quality_spin.set_adjustment(x265_quality)
-
-        self.x265_preset_cbtext = Gtk.ComboBoxText()
-        self.x265_preset_cbtext.set_property('hexpand', True)
-        for p in x265_presets:
-            self.x265_preset_cbtext.append_text(p)
-        self.x265_preset_cbtext.set_active(6)
-
-        self.x265_tune_cbtext = Gtk.ComboBoxText()
-        self.x265_tune_cbtext.set_property('hexpand', True)
-        for t in x265_tunes:
-            self.x265_tune_cbtext.append_text(t)
-        self.x265_tune_cbtext.set_active(0)
-
-        self.x265_cont_cbtext = Gtk.ComboBoxText()
-        self.x265_cont_cbtext.set_property('hexpand', True)
-        for c in x265_conts:
-            self.x265_cont_cbtext.append_text(c)
-        self.x265_cont_cbtext.set_active(0)
-
-        self.x265_arg_entry = Gtk.Entry()
-        self.x265_arg_entry.set_property('hexpand', True)
+    def _find_x265(self, x, y):
+        cmd = [x, '--output-depth', str(y), '--version']
+        cmd = ' '.join(cmd)
+        proc = subprocess.Popen(cmd,
+                                shell=True,
+                                stderr=subprocess.PIPE,
+                                universal_newlines=True)
+        line = proc.stderr.readline()
+        while line:
+            if str(y) + 'bit' in line:
+                return True
+            line = proc.stderr.readline()
+        return False
 
 class MainWindow(Gtk.Window):
 
@@ -615,23 +547,6 @@ class MainWindow(Gtk.Window):
             self.auto_aenc_cbtext.append_text(x)
             self.auto_aenc_cbtext.set_active(0)
 
-        #--Dialogs--#
-        if 'fdkaac' in AENCS:
-            self.fdkaac_dlg = EncoderDialog(self, 'fdkaac')
-            self.fdkaac_dlg.hide()
-        if 'lame' in AENCS:
-            self.lame_dlg = EncoderDialog(self, 'lame')
-            self.lame_dlg.hide()
-        if 'oggenc' in AENCS:
-            self.oggenc_dlg = EncoderDialog(self, 'oggenc')
-            self.oggenc_dlg.hide()
-        if 'x264' in VENCS:
-            self.x264_dlg = EncoderDialog(self, 'x264')
-            self.x264_dlg.hide()
-        if 'x265' in VENCS:
-            self.x265_dlg = EncoderDialog(self, 'x265')
-            self.x265_dlg.hide()
-
         self.about_dlg = AboutDialog(self)
         self.about_dlg.set_transient_for(self)
 
@@ -660,37 +575,29 @@ class MainWindow(Gtk.Window):
 
     def on_vqueue_clicked(self, button):
         self.worker.submit(self._wait)
-        x = self.venc_cbtext.get_active_text()
-        s = self.vsrc_fcbutton.get_filename()
-        wd, f = os.path.split(s)
+        k = self.venc_cbtext.get_active_text()
+        x = VENCS[k]
+        i = self.vsrc_fcbutton.get_filename()
+        wd, f = os.path.split(i)
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
-        d = wd + '/out/' + os.path.splitext(f)[0]
-        if x == 'x264':
-            dp = int(conf.x264_depth_cbtext.get_active_text())
-            q = conf.x264_quality_spin.get_value_as_int()
-            p = conf.x264_preset_cbtext.get_active_text()
-            if p == 'none':
-                p = ''
-            t = conf.x264_tune_cbtext.get_active_text()
-            if t == 'none':
-                t = ''
-            c = conf.x264_cont_cbtext.get_active_text()
-            args = conf.x264_arg_entry.get_text()
-            future = self.worker.submit(self._x264, s, d, dp, q, p, t, c, args)
-        elif x == 'x265':
-            dp = int(conf.x265_depth_cbtext.get_active_text())
-            q = conf.x265_quality_spin.get_value_as_int()
-            p = conf.x265_preset_cbtext.get_active_text()
-            if p == 'none':
-                p = ''
-            t = conf.x265_tune_cbtext.get_active_text()
-            if t == 'none':
-                t = ''
-            c = conf.x265_cont_cbtext.get_active_text()
-            args = conf.x265_arg_entry.get_text()
-            future = self.worker.submit(self._x265, s, d, dp, q, p, t, c, args)
-        self.queue_tstore.append(None, [future, f, x, 'Waiting'])
+        o = wd + '/out/' + os.path.splitext(f)[0]
+        if x[0].startswith('x264'):
+            q = conf.x264['quality']
+            p = conf.x264['preset']
+            t = conf.x264['tune']
+            c = conf.x264['container']
+            a = conf.x264['arguments']
+            future = self.worker.submit(self._x264, i, x[0], o, q, p, t, c, a)
+        elif x[0].startswith('x265'):
+            q = conf.x265['quality']
+            p = conf.x265['preset']
+            t = conf.x265['tune']
+            c = conf.x265['container']
+            a = conf.x265['arguments']
+            future = self.worker.submit(self._x265, i, x[0], x[1], o, q, p, t,
+                                        c, a)
+        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
         self.worker.submit(self._update_queue)
 
     def on_asrc_file_set(self, button):
@@ -698,29 +605,65 @@ class MainWindow(Gtk.Window):
 
     def on_aqueue_clicked(self, button):
         self.worker.submit(self._wait)
-        x = self.aenc_cbtext.get_active_text()
-        s = self.asrc_fcbutton.get_filename()
-        wd, f = os.path.split(s)
+        k = self.aenc_cbtext.get_active_text()
+        x = AENCS[k]
+        i = self.asrc_fcbutton.get_filename()
+        wd, f = os.path.split(i)
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
-        d = wd + '/out/' + os.path.splitext(f)[0]
-        if x == 'fdkaac':
-            m = conf.fdkaac_mode_cbtext.get_active_text()
-            b = conf.fdkaac_bitrate_spin.get_value_as_int()
-            q = conf.fdkaac_quality_spin.get_value_as_int()
-            c = conf.fdkaac_cont_cbtext.get_active_text()
-            future = self.worker.submit(self._fdkaac, s, d, m, b, q, c)
-        elif x == 'lame':
-            m = conf.lame_mode_cbtext.get_active_text()
-            b = conf.lame_bitrate_spin.get_value_as_int()
-            q = conf.lame_quality_spin.get_value_as_int()
-            future = self.worker.submit(self._lame, s, d, m, b, q)
-        elif x == 'oggenc':
-            m = conf.oggenc_mode_cbtext.get_active_text()
-            b = conf.oggenc_bitrate_spin.get_value_as_int()
-            q = conf.oggenc_quality_spin.get_value_as_int()
-            future = self.worker.submit(self._oggenc, s, d, m, b, q)
-        self.queue_tstore.append(None, [future, f, x, 'Waiting'])
+        o = wd + '/out/' + os.path.splitext(f)[0]
+        if x[0] == 'faac' or x[1] == 'libfaac':
+            m = conf.faac['mode']
+            b = conf.faac['bitrate']
+            q = conf.faac['quality']
+            c = conf.faac['container']
+            if x[0] == 'faac':
+                future = self.worker.submit(self._faac, i, o, m, b, q, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._libfaac, i, o, m, b, q, c)
+        elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
+            m = conf.fdkaac['mode']
+            b = conf.fdkaac['bitrate']
+            q = conf.fdkaac['quality']
+            c = conf.fdkaac['container']
+            if x[0] == 'fdkaac':
+                future = self.worker.submit(self._fdkaac, i, o, m, b, q, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._libfdk_aac, i, o, m, b, q, c)
+        elif x[0] == 'flac' or x[1] == 'native-flac':
+            cp = conf.flac['compression']
+            c = conf.flac['container']
+            if x[0] == 'flac':
+                future = self.worker.submit(self._flac, i, o, cp, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._native_flac, i, o, cp, c)
+        elif x[0] == 'lame' or x[1] == 'libmp3lame':
+            m = conf.mp3['mode']
+            b = conf.mp3['bitrate']
+            q = conf.mp3['quality']
+            c = conf.mp3['container']
+            if x[0] == 'lame':
+                future = self.worker.submit(self._lame, i, o, m, b, q, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._libmp3lame, i, o, m, b, q, c)
+        elif x[0] == 'opusenc' or x[1] == 'libopus':
+            m = conf.opus['mode']
+            b = conf.opus['bitrate']
+            c = conf.opus['container']
+            if x[0] == 'opusenc':
+                future = self.worker.submit(self._opusenc, i, o, m, b, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._libopus, i, o, m, b, c)
+        elif x[0] == 'oggenc' or x[1] == 'libvorbis':
+            m = conf.vorbis['mode']
+            b = conf.vorbis['bitrate']
+            q = conf.vorbis['quality']
+            c = conf.vorbis['container']
+            if x[0] == 'oggenc':
+                future = self.worker.submit(self._oggenc, i, o, m, b, q, c)
+            elif x[0] == 'ffmpeg':
+                future = self.worker.submit(self._libvorbis, i, o, m, b, q, c)
+        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
         self.worker.submit(self._update_queue)
 
     def on_auto_src_file_set(self, button):
@@ -904,39 +847,31 @@ class MainWindow(Gtk.Window):
                 self.worker.submit(self._vpy, source, vpy)
 
                 # Encode video
-                x = self.auto_venc_cbtext.get_active_text()
-                if x == 'x264':
-                    dp = int(conf.x264_depth_cbtext.get_active_text())
-                    q = conf.x264_quality_spin.get_value_as_int()
-                    p = conf.x264_preset_cbtext.get_active_text()
-                    if p == 'none':
-                        p = ''
-                    t = conf.x264_tune_cbtext.get_active_text()
-                    if t == 'none':
-                        t = ''
-                    c = conf.x264_cont_cbtext.get_active_text()
+                k = self.auto_venc_cbtext.get_active_text()
+                x = VENCS[k]
+                o = vtrack[1]
+                if x[0].startswith('x264'):
+                    q = conf.x264['quality']
+                    p = conf.x264['preset']
+                    t = conf.x264['tune']
+                    c = conf.x264['container']
+                    a = conf.x264['arguments']
                     vtrack[2] = c
-                    args = conf.x264_arg_entry.get_text()
 
-                    future = self.worker.submit(self._x264, vpy, vtrack[1], dp,
-                                                q, p, t, c, args)
-                if x == 'x265':
-                    dp = int(conf.x265_depth_cbtext.get_active_text())
-                    q = conf.x265_quality_spin.get_value_as_int()
-                    p = conf.x265_preset_cbtext.get_active_text()
-                    if p == 'none':
-                        p = ''
-                    t = conf.x265_tune_cbtext.get_active_text()
-                    if t == 'none':
-                        t = ''
-                    c = conf.x265_cont_cbtext.get_active_text()
+                    future = self.worker.submit(self._x264, vpy, x[0], o, q, p,
+                                                t, c, a)
+                if x[0].startswith('x265'):
+                    q = conf.x265['quality']
+                    p = conf.x265['preset']
+                    t = conf.x265['tune']
+                    c = conf.x265['container']
+                    a = conf.x265['arguments']
                     vtrack[2] = c
-                    args = conf.x265_arg_entry.get_text()
 
-                    future = self.worker.submit(self._x265, vpy, vtrack[1], dp,
-                                                q, p, t, c, args)
+                    future = self.worker.submit(self._x265, vpy, x[0], x[1], o,
+                                                q, p, t, c, a)
 
-                self.queue_tstore.append(job, [future, '', x, 'Waiting'])
+                self.queue_tstore.append(job, [future, '', x[0], 'Waiting'])
 
             # Extract audio
             tracks = []
@@ -952,34 +887,82 @@ class MainWindow(Gtk.Window):
             # Encode audio
             for track in atracks:
                 if track[5]:
-                    x = self.auto_aenc_cbtext.get_active_text()
-                    a = track[1] + '.' + track[2]
-                    if x == 'fdkaac':
-                        m = conf.fdkaac_mode_cbtext.get_active_text()
-                        b = conf.fdkaac_bitrate_spin.get_value_as_int()
-                        q = conf.fdkaac_quality_spin.get_value_as_int()
-                        c = conf.fdkaac_cont_cbtext.get_active_text()
+                    k = self.auto_aenc_cbtext.get_active_text()
+                    x = AENCS[k]
+                    i = track[1] + '.' + track[2]
+                    o = track[1]
+                    if x[0] == 'faac' or x[1] == 'libfaac':
+                        m = conf.faac['mode']
+                        b = conf.faac['bitrate']
+                        q = conf.faac['quality']
+                        c = conf.faac['container']
+                        #track[2] = c
+                        if x[0] == 'faac':
+                            future = self.worker.submit(self._faac, i, o, m, b,
+                                                        q, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._libfaac, i, o, m,
+                                                        b, q, c)
+                    elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
+                        m = conf.fdkaac['mode']
+                        b = conf.fdkaac['bitrate']
+                        q = conf.fdkaac['quality']
+                        c = conf.fdkaac['container']
+                        #track[2] = c
+                        if x[0] == 'fdkaac':
+                            future = self.worker.submit(self._fdkaac, i, o,
+                                                        m, b, q, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._libfdk_aac,
+                                                        i, o, m, b, q, c)
+                    elif x[0] == 'flac' or x[1] == 'native-flac':
+                        cp = conf.flac['compression']
+                        c = conf.flac['container']
+                        #track[2] = c
+                        if x[0] == 'flac':
+                            future = self.worker.submit(self._flac, i, o,
+                                                        cp, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._native_flac,
+                                                        i, o, cp, c)
+                    elif x[0] == 'lame' or x[1] == 'libmp3lame':
+                        m = conf.mp3['mode']
+                        b = conf.mp3['bitrate']
+                        q = conf.mp3['quality']
+                        c = conf.mp3['container']
+                        #track[2] = c
+                        if x[0] == 'lame':
+                            future = self.worker.submit(self._lame, i, o,
+                                                        m, b, q, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._libmp3lame,
+                                                        i, o, m, b, q, c)
+                    elif x[0] == 'opusenc' or x[1] == 'libopus':
+                        m = conf.opus['mode']
+                        b = conf.opus['bitrate']
+                        c = conf.opus['container']
+                        #track[2] = c
+                        if x[0] == 'opusenc':
+                            future = self.worker.submit(self._opus, i, o,
+                                                        m, b, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._libopus, i,
+                                                        o, m, b, c)
+                    elif x[0] == 'oggenc' or x[1] == 'libvorbis':
+                        m = conf.vorbis['mode']
+                        b = conf.vorbis['bitrate']
+                        q = conf.vorbis['quality']
+                        c = conf.vorbis['container']
+                        #track[2] = c
+                        if x[0] == 'oggenc':
+                            future = self.worker.submit(self._oggenc, i, o,
+                                                        m, b, q, c)
+                        elif x[0] == 'ffmpeg':
+                            future = self.worker.submit(self._libvorbis, i,
+                                                        o, m, b, q, c)
 
-                        future = self.worker.submit(self._fdkaac, a, track[1],
-                                                    m, b, q, c)
-
-                    elif x == 'lame':
-                        m = conf.lame_mode_cbtext.get_active_text()
-                        b = conf.lame_bitrate_spin.get_value_as_int()
-                        q = conf.lame_quality_spin.get_value_as_int()
-
-                        future = self.worker.submit(self._lame, a, track[1], m,
-                                                    b, q)
-
-                    elif x == 'oggenc':
-                        m = conf.oggenc_mode_cbtext.get_active_text()
-                        b = conf.oggenc_bitrate_spin.get_value_as_int()
-                        q = conf.oggenc_quality_spin.get_value_as_int()
-
-                        future = self.worker.submit(self._oggenc, a, track[1], m,
-                                                    b, q)
-
-                    self.queue_tstore.append(job, [future, '', x, 'Waiting'])
+                    self.queue_tstore.append(job, [future, '', x[0],
+                                             'Waiting'])
 
             # Merge tracks
             future = self.worker.submit(self._merge, source, destination,
@@ -995,30 +978,22 @@ class MainWindow(Gtk.Window):
     def on_conf_clicked(self, button, m, t):
         if m == 'manual':
             if t == 'video':
-                x = self.venc_cbtext.get_active_text()
+                enc = self.venc_cbtext.get_active_text()
+                enc = VENCS[enc]
             elif t == 'audio':
-                x = self.aenc_cbtext.get_active_text()
+                enc = self.aenc_cbtext.get_active_text()
+                enc = AENCS[enc]
         elif m == 'auto':
             if t == 'video':
-                x = self.auto_venc_cbtext.get_active_text()
+                enc = self.auto_venc_cbtext.get_active_text()
+                enc = VENCS[enc]
             elif t == 'audio':
-                x = self.auto_aenc_cbtext.get_active_text()
+                enc = self.auto_aenc_cbtext.get_active_text()
+                enc = AENCS[enc]
 
-        if x == 'fdkaac':
-            self.fdkaac_dlg.run()
-            self.fdkaac_dlg.hide()
-        elif x == 'lame':
-            self.lame_dlg.run()
-            self.lame_dlg.hide()
-        elif x == 'oggenc':
-            self.oggenc_dlg.run()
-            self.oggenc_dlg.hide()
-        elif x in ['x264', 'x264-10bit']:
-            self.x264_dlg.run()
-            self.x264_dlg.hide()
-        elif x in ['x265', 'x265-10bit']:
-            self.x265_dlg.run()
-            self.x265_dlg.hide()
+        dlg = EncoderDialog(self, enc)
+        dlg.run()
+        dlg.destroy()
 
     def on_auto_sconf_clicked(self, button):
         vs_dlg.set_transient_for(win)
@@ -1180,14 +1155,26 @@ class MainWindow(Gtk.Window):
         for track in atracks:
             if track[5]:
                 track[0] = 0
-                x = self.auto_aenc_cbtext.get_active_text()
-                if x == 'fdkaac':
-                    c = conf.fdkaac_cont_cbtext.get_active_text()
+                k = self.auto_aenc_cbtext.get_active_text()
+                x = AENCS[k]
+                if x[0] == 'faac' or x[1] == 'libfaac':
+                    c = conf.faac['container']
                     track[2] = c
-                elif x == 'lame':
-                    track[2] = 'mp3'
-                elif x == 'oggenc':
-                    track[2] = 'ogg'
+                elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
+                    c = conf.fdkaac['container']
+                    track[2] = c
+                elif x[0] == 'flac' or x[1] == 'native-flac':
+                    c = conf.flac['container']
+                    track[2] = c
+                elif x[0] == 'lame' or x[1] == 'libmp3lame':
+                    c = conf.mp3['container']
+                    track[2] = c
+                elif x[0] == 'opusenc' or x[1] == 'libopus':
+                    c = conf.opus['container']
+                    track[2] = c
+                elif x[0] == 'oggenc' or x[1] == 'libvorbis':
+                    c = conf.vorbis['container']
+                    track[2] = c
 
         cmd = MatroskaOps(source).merge(dest, vtrack, atracks, stracks, uid)
         print(cmd)
@@ -1226,55 +1213,132 @@ class MainWindow(Gtk.Window):
             line = self.proc.stdout.readline()
             # Get the frame total
             if 'Frames:' in line:
-                d = int(line.split(' ')[1])
-        return d
+                dur = int(line.split(' ')[1])
+        return dur
 
-    def _x264(self, source, dest, depth, quality, preset, tune, container,
-              arguments):
+    def _x264(self, i, x, o, q, p, t, c, a):
         print('Encode video...')
         self._update_queue()
-        d = self._info(source)
-        cmd = Encode(source).x264(dest, depth, quality, preset, tune,
-                                  container, arguments)
+        dur = self._info(i)
+        cmd = Encode(i).x264(x, o, q, p, t, c, a)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
-        self._video_progress(d)
+        self._video_progress(dur)
 
-    def _x265(self, source, dest, depth, quality, preset, tune, container,
-              arguments):
+    def _x265(self, i, x, o, d, q, p, t, c, a):
         print('Encode video...')
         self._update_queue()
-        d = self._info(source)
-        cmd = Encode(source).x265(dest, depth, quality, preset, tune,
-                                  container, arguments)
+        dur = self._info(i)
+        cmd = Encode(i).x265(x, o, d, q, p, t, c, a)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
-        self._video_progress(d)
+        self._video_progress(dur)
 
-    def _fdkaac(self, source, dest, mode, bitrate, quality, container):
+    def _faac(self, i, o, m, b, q, c):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(source).fdkaac(dest, mode, bitrate, quality, container)
+        cmd = Encode(i).faac(o, m, b, q, c)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _lame(self, source, dest, mode, bitrate, quality):
+    def _libfdk_aac(self, i, o, m, b, q, c):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(source).lame(dest, mode, bitrate, quality)
+        cmd = Encode(i).ffmpeg_libfaac(o, m, b, q, c)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _oggenc(self, source, dest, mode, bitrate, quality):
+    def _fdkaac(self, i, o, m, b, q, c):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(source).oggenc(dest, mode, bitrate, quality)
+        cmd = Encode(i).fdkaac(o, m, b, q, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _libfdk_aac(self, i, o, m, b, q, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).ffmpeg_libfdk_aac(o, m, b, q, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _flac(self, i, o, cp, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).flac(o, cp, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _native_flac(self, i, o, cp, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).ffmpeg_flac(o, cp, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _lame(self, i, o, m, b, q, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).lame(o, m, b, q, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _libmp3lame(self, i, o, m, b, q, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).ffmpeg_libmp3lame(o, m, b, q, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _opusenc(self, i, o, m, b, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).opusenc(o, m, b, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _libopus(self, i, o, m, b, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).ffmpeg_libopus(o, m, b, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _oggenc(self, i, o, m, b, q, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).oggenc(o, m, b, q, c)
+        print(cmd)
+        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
+                                     universal_newlines=True)
+        self._audio_progress()
+
+    def _libvorbis(self, i, o, m, b, q, c):
+        print('Encode audio...')
+        self._update_queue()
+        cmd = Encode(i).ffmpeg_libvorbis(o, m, b, q, c)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
@@ -1787,8 +1851,15 @@ class ScriptCreatorWindow(Gtk.Window):
 class EncoderDialog(Gtk.Dialog):
 
     def __init__(self, parent, x):
-        Gtk.Dialog.__init__(self, x + ' settings', parent, 0)
+        if x[0] == 'ffmpeg':
+            n = x[1]
+        else:
+            n = x[0]
+
+        Gtk.Dialog.__init__(self, n + ' settings', parent, 0)
         self.set_default_size(240, 0)
+
+        button = self.add_button('_OK', Gtk.ResponseType.OK)
 
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(6)
@@ -1798,92 +1869,151 @@ class EncoderDialog(Gtk.Dialog):
         box = self.get_content_area()
         box.add(self.grid)
 
-        if x == 'fdkaac':
-            self.fdkaac()
-        if x == 'lame':
-            self.lame()
-        if x == 'oggenc':
-            self.oggenc()
-        if x == 'x264':
-            self.x264()
-        if x == 'x265':
-            self.x265()
-
-        self.add_button('_OK', Gtk.ResponseType.OK)
+        if n.startswith('x264'):
+            self._x264()
+            button.connect('clicked', self._update_x264)
+        if n.startswith('x265'):
+            self._x265()
+            button.connect('clicked', self._update_x265)
+        if n == 'fdkaac' or n == 'libfdk-aac':
+            self._fdkaac()
+            button.connect('clicked', self._update_fdkaac)
+        if n == 'faac' or n == 'libfaac':
+            self._faac()
+            button.connect('clicked', self._update_faac)
+        if n == 'flac' or n == 'native-flac':
+            self._flac()
+            button.connect('clicked', self._update_flac)
+        if n == 'lame' or n == 'libmp3lame':
+            self._mp3()
+            button.connect('clicked', self._update_mp3)
+        if n == 'opusenc'or n == 'libopus':
+            self._opus()
+            button.connect('clicked', self._update_opus)
+        if n == 'oggenc' or n == 'libvorbis':
+            self._vorbis()
+            button.connect('clicked', self._update_vorbis)
 
         self.show_all()
 
-    def fdkaac(self):
-        mode_label = Gtk.Label('Mode')
-        mode_label.set_halign(Gtk.Align.START)
-        bitrate_label = Gtk.Label('Bitrate')
-        bitrate_label.set_halign(Gtk.Align.START)
+    def _x264(self):
+        quality = Gtk.Adjustment(18, 1, 51, 1, 10)
+        presets = ['none',
+                   'ultrafast',
+                   'superfast',
+                   'veryfast',
+                   'faster',
+                   'fast',
+                   'medium',
+                   'slow',
+                   'slower',
+                   'veryslow',
+                   'placebo']
+        tunes = ['none',
+                 'film',
+                 'animation',
+                 'grain',
+                 'stillimage',
+                 'psnr',
+                 'ssim',
+                 'fastdecode',
+                 'zerolatency']
+        conts = ['264',
+                 'flv',
+                 'mp4',
+                 'mkv']
+
         quality_label = Gtk.Label('Quality')
         quality_label.set_halign(Gtk.Align.START)
+        preset_label = Gtk.Label('Preset')
+        preset_label.set_halign(Gtk.Align.START)
+        tune_label = Gtk.Label('Tune')
+        tune_label.set_halign(Gtk.Align.START)
         cont_label = Gtk.Label('Container')
         cont_label.set_halign(Gtk.Align.START)
+        arg_label = Gtk.Label('Custom arguments')
+        arg_label.set_halign(Gtk.Align.CENTER)
 
-        self.grid.attach(mode_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(conf.fdkaac_mode_cbtext, mode_label,
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
+
+        self.preset_cbtext = Gtk.ComboBoxText()
+        self.preset_cbtext.set_property('hexpand', True)
+        for p in presets:
+            self.preset_cbtext.append_text(p)
+
+        self.tune_cbtext = Gtk.ComboBoxText()
+        self.tune_cbtext.set_property('hexpand', True)
+        for t in tunes:
+            self.tune_cbtext.append_text(t)
+
+        self.cont_cbtext = Gtk.ComboBoxText()
+        self.cont_cbtext.set_property('hexpand', True)
+        for c in conts:
+            self.cont_cbtext.append_text(c)
+
+        self.arg_entry = Gtk.Entry()
+        self.arg_entry.set_property('hexpand', True)
+
+        self.quality_spin.set_value(conf.x264['quality'])
+        i = presets.index(conf.x264['preset'])
+        self.preset_cbtext.set_active(i)
+        j = tunes.index(conf.x264['tune'])
+        self.tune_cbtext.set_active(j)
+        k = conts.index(conf.x264['container'])
+        self.cont_cbtext.set_active(k)
+        self.arg_entry.set_text(conf.x264['arguments'])
+
+        self.grid.attach(quality_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(bitrate_label, 0, 1, 1, 1)
-        self.grid.attach_next_to(conf.fdkaac_bitrate_spin, bitrate_label,
+        self.grid.attach(preset_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.preset_cbtext, preset_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(quality_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(conf.fdkaac_quality_spin, quality_label,
+        self.grid.attach(tune_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.tune_cbtext, tune_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
         self.grid.attach(cont_label, 0, 3, 1, 1)
-        self.grid.attach_next_to(conf.fdkaac_cont_cbtext, cont_label,
+        self.grid.attach_next_to(self.cont_cbtext, cont_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(arg_label, 0, 4, 2, 1)
+        self.grid.attach(self.arg_entry, 0, 5, 2, 1)
 
-        conf.fdkaac_quality_spin.set_sensitive(False)
-        conf.fdkaac_mode_cbtext.connect('changed', self.on_fdkaac_mode_changed)
+    def _update_x264(self, button):
+        q = self.quality_spin.get_value_as_int()
+        p = self.preset_cbtext.get_active_text()
+        t = self.tune_cbtext.get_active_text()
+        c = self.cont_cbtext.get_active_text()
+        a = self.arg_entry.get_text()
 
-    def lame(self):
-        mode_label = Gtk.Label('Mode')
-        mode_label.set_halign(Gtk.Align.START)
-        bitrate_label = Gtk.Label('Bitrate')
-        bitrate_label.set_halign(Gtk.Align.START)
-        quality_label = Gtk.Label('Quality')
-        quality_label.set_halign(Gtk.Align.START)
+        conf.x264['quality'] = q
+        conf.x264['preset'] = p
+        conf.x264['tune'] = t
+        conf.x264['container'] = c
+        conf.x264['arguments'] = a
 
-        self.grid.attach(mode_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(conf.lame_mode_cbtext, mode_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(bitrate_label, 0, 1, 1, 1)
-        self.grid.attach_next_to(conf.lame_bitrate_spin, bitrate_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(quality_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(conf.lame_quality_spin, quality_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
+    def _x265(self):
+        quality = Gtk.Adjustment(18, 1, 51, 1, 10)
+        presets = ['none',
+                   'ultrafast',
+                   'superfast',
+                   'veryfast',
+                   'faster',
+                   'fast',
+                   'medium',
+                   'slow',
+                   'slower',
+                   'veryslow',
+                   'placebo']
+        tunes = ['none',
+                 'psnr',
+                 'ssim',
+                 'fastdecode',
+                 'zerolatency']
+        conts = ['265']
 
-        conf.lame_quality_spin.set_sensitive(False)
-        conf.lame_mode_cbtext.connect('changed', self.on_lame_mode_changed)
-
-    def oggenc(self):
-        mode_label = Gtk.Label('Mode')
-        mode_label.set_halign(Gtk.Align.START)
-        bitrate_label = Gtk.Label('Bitrate')
-        bitrate_label.set_halign(Gtk.Align.START)
-        quality_label = Gtk.Label('Quality')
-        quality_label.set_halign(Gtk.Align.START)
-
-        self.grid.attach(mode_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(conf.oggenc_mode_cbtext, mode_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(bitrate_label, 0, 1, 1, 1)
-        self.grid.attach_next_to(conf.oggenc_bitrate_spin, bitrate_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(quality_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(conf.oggenc_quality_spin, quality_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-
-        conf.oggenc_bitrate_spin.set_sensitive(False)
-        conf.oggenc_mode_cbtext.connect('changed', self.on_oggenc_mode_changed)
-
-    def x264(self):
-        depth_label = Gtk.Label('Depth')
-        depth_label.set_halign(Gtk.Align.START)
         quality_label = Gtk.Label('Quality')
         quality_label.set_halign(Gtk.Align.START)
         preset_label = Gtk.Label('Preset')
@@ -1895,82 +2025,371 @@ class EncoderDialog(Gtk.Dialog):
         arg_label = Gtk.Label('Custom arguments')
         arg_label.set_halign(Gtk.Align.CENTER)
 
-        self.grid.attach(depth_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(conf.x264_depth_cbtext, depth_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(quality_label, 0, 1, 1, 1)
-        self.grid.attach_next_to(conf.x264_quality_spin, quality_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(preset_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(conf.x264_preset_cbtext, preset_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(tune_label, 0, 3, 1, 1)
-        self.grid.attach_next_to(conf.x264_tune_cbtext, tune_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(cont_label, 0, 4, 1, 1)
-        self.grid.attach_next_to(conf.x264_cont_cbtext, cont_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(arg_label, 0, 5, 2, 1)
-        self.grid.attach(conf.x264_arg_entry, 0, 6, 2, 1)
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
 
-    def x265(self):
-        depth_label = Gtk.Label('Depth')
-        depth_label.set_halign(Gtk.Align.START)
+        self.preset_cbtext = Gtk.ComboBoxText()
+        self.preset_cbtext.set_property('hexpand', True)
+        for p in presets:
+            self.preset_cbtext.append_text(p)
+
+        self.tune_cbtext = Gtk.ComboBoxText()
+        self.tune_cbtext.set_property('hexpand', True)
+        for t in tunes:
+            self.tune_cbtext.append_text(t)
+
+        self.cont_cbtext = Gtk.ComboBoxText()
+        self.cont_cbtext.set_property('hexpand', True)
+        for c in conts:
+            self.cont_cbtext.append_text(c)
+
+        self.arg_entry = Gtk.Entry()
+        self.arg_entry.set_property('hexpand', True)
+
+        self.quality_spin.set_value(conf.x265['quality'])
+        i = presets.index(conf.x265['preset'])
+        self.preset_cbtext.set_active(i)
+        j = tunes.index(conf.x265['tune'])
+        self.tune_cbtext.set_active(j)
+        k = conts.index(conf.x265['container'])
+        self.cont_cbtext.set_active(k)
+        self.arg_entry.set_text(conf.x265['arguments'])
+
+        self.grid.attach(quality_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(preset_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.preset_cbtext, preset_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(tune_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.tune_cbtext, tune_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(cont_label, 0, 3, 1, 1)
+        self.grid.attach_next_to(self.cont_cbtext, cont_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(arg_label, 0, 4, 2, 1)
+        self.grid.attach(self.arg_entry, 0, 5, 2, 1)
+
+    def _update_x265(self, button):
+        q = self.quality_spin.get_value_as_int()
+        p = self.preset_cbtext.get_active_text()
+        t = self.tune_cbtext.get_active_text()
+        c = self.cont_cbtext.get_active_text()
+        a = self.arg_entry.get_text()
+
+        conf.x265['quality'] = q
+        conf.x265['preset'] = p
+        conf.x265['tune'] = t
+        conf.x265['container'] = c
+        conf.x265['arguments'] = a
+
+    def _faac(self):
+        modes = ['ABR', 'VBR']
+        bitrate = Gtk.Adjustment(128, 0, 320, 1, 10)
+        quality = Gtk.Adjustment(100, 10, 500, 10, 100)
+        conts = ['aac', 'm4a']
+
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
         quality_label = Gtk.Label('Quality')
         quality_label.set_halign(Gtk.Align.START)
-        preset_label = Gtk.Label('Preset')
-        preset_label.set_halign(Gtk.Align.START)
-        tune_label = Gtk.Label('Tune')
-        tune_label.set_halign(Gtk.Align.START)
         cont_label = Gtk.Label('Container')
         cont_label.set_halign(Gtk.Align.START)
-        arg_label = Gtk.Label('Custom arguments')
-        arg_label.set_halign(Gtk.Align.CENTER)
 
-        self.grid.attach(depth_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(conf.x265_depth_cbtext, depth_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(quality_label, 0, 1, 1, 1)
-        self.grid.attach_next_to(conf.x265_quality_spin, quality_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(preset_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(conf.x265_preset_cbtext, preset_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(tune_label, 0, 3, 1, 1)
-        self.grid.attach_next_to(conf.x265_tune_cbtext, tune_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(cont_label, 0, 4, 1, 1)
-        self.grid.attach_next_to(conf.x265_cont_cbtext, cont_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(arg_label, 0, 5, 2, 1)
-        self.grid.attach(conf.x265_arg_entry, 0, 6, 2, 1)
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+        self.mode_cbtext.connect('changed', self.on_mode_changed)
 
-    def on_fdkaac_mode_changed(self, combo):
-        m = combo.get_active_text()
-        if m == 'CBR':
-            conf.fdkaac_bitrate_spin.set_sensitive(True)
-            conf.fdkaac_quality_spin.set_sensitive(False)
-        elif m == 'VBR':
-            conf.fdkaac_bitrate_spin.set_sensitive(False)
-            conf.fdkaac_quality_spin.set_sensitive(True)
+        self.bitrate_spin = Gtk.SpinButton()
+        self.bitrate_spin.set_property('hexpand', True)
+        self.bitrate_spin.set_numeric(True)
+        self.bitrate_spin.set_adjustment(bitrate)
 
-    def on_lame_mode_changed(self, combo):
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
+
+        self.cont_cbtext = Gtk.ComboBoxText()
+        self.cont_cbtext.set_property('hexpand', True)
+        for c in conts:
+            self.cont_cbtext.append_text(c)
+
+        i = modes.index(conf.faac['mode'])
+        self.mode_cbtext.set_active(i)
+        self.bitrate_spin.set_value(conf.faac['bitrate'])
+        self.quality_spin.set_value(conf.faac['quality'])
+        j = conts.index(conf.faac['container'])
+        self.cont_cbtext.set_active(j)
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(quality_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(cont_label, 0, 3, 1, 1)
+        self.grid.attach_next_to(self.cont_cbtext, cont_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_faac(self, button):
+        m = self.mode_cbtext.get_active_text()
+        b = self.bitrate_spin.get_value_as_int()
+        q = self.quality_spin.get_value_as_int()
+        c = self.cont_cbtext.get_active_text()
+
+        conf.faac['mode'] = m
+        conf.faac['bitrate'] = b
+        conf.faac['quality'] = q
+        conf.faac['container'] = c
+
+    def _fdkaac(self):
+        modes = ['CBR', 'VBR']
+        bitrate = Gtk.Adjustment(128, 0, 320, 1, 10)
+        quality = Gtk.Adjustment(4, 1, 5, 1, 10)
+        conts = ['aac', 'm4a']
+
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
+        quality_label = Gtk.Label('Quality')
+        quality_label.set_halign(Gtk.Align.START)
+        cont_label = Gtk.Label('Container')
+        cont_label.set_halign(Gtk.Align.START)
+
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+        self.mode_cbtext.connect('changed', self.on_mode_changed)
+
+        self.bitrate_spin = Gtk.SpinButton()
+        self.bitrate_spin.set_property('hexpand', True)
+        self.bitrate_spin.set_numeric(True)
+        self.bitrate_spin.set_adjustment(bitrate)
+
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
+
+        self.cont_cbtext = Gtk.ComboBoxText()
+        self.cont_cbtext.set_property('hexpand', True)
+        for c in conts:
+            self.cont_cbtext.append_text(c)
+
+        i = modes.index(conf.fdkaac['mode'])
+        self.mode_cbtext.set_active(i)
+        self.bitrate_spin.set_value(conf.fdkaac['bitrate'])
+        self.quality_spin.set_value(conf.fdkaac['quality'])
+        j = conts.index(conf.fdkaac['container'])
+        self.cont_cbtext.set_active(j)
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(quality_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(cont_label, 0, 3, 1, 1)
+        self.grid.attach_next_to(self.cont_cbtext, cont_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_fdkaac(self, button):
+        m = self.mode_cbtext.get_active_text()
+        b = self.bitrate_spin.get_value_as_int()
+        q = self.quality_spin.get_value_as_int()
+        c = self.cont_cbtext.get_active_text()
+
+        conf.fdkaac['mode'] = m
+        conf.fdkaac['bitrate'] = b
+        conf.fdkaac['quality'] = q
+        conf.fdkaac['container'] = c
+
+    def _flac(self):
+        compression = Gtk.Adjustment(8, 0, 8, 1, 10)
+
+        compression_label = Gtk.Label('Compression')
+        compression_label.set_halign(Gtk.Align.START)
+
+        self.compression_spin = Gtk.SpinButton()
+        self.compression_spin.set_property('hexpand', True)
+        self.compression_spin.set_numeric(True)
+        self.compression_spin.set_adjustment(compression)
+
+        self.compression_spin.set_value(conf.flac['compression'])
+
+        self.grid.attach(compression_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.compression_spin, compression_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_flac(self, button):
+        c = self.compression_spin.get_value_as_int()
+
+        conf.flac['compression'] = c
+
+    def _mp3(self):
+        modes = ['CBR', 'ABR', 'VBR']
+        bitrate = Gtk.Adjustment(320, 0, 320, 1, 10)
+        quality = Gtk.Adjustment(4, 0, 9, 1, 10)
+
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
+        quality_label = Gtk.Label('Quality')
+        quality_label.set_halign(Gtk.Align.START)
+
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+        self.mode_cbtext.connect('changed', self.on_mode_changed)
+
+        self.bitrate_spin = Gtk.SpinButton()
+        self.bitrate_spin.set_property('hexpand', True)
+        self.bitrate_spin.set_numeric(True)
+        self.bitrate_spin.set_adjustment(bitrate)
+
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
+
+        i = modes.index(conf.mp3['mode'])
+        self.mode_cbtext.set_active(i)
+        self.bitrate_spin.set_value(conf.mp3['bitrate'])
+        self.quality_spin.set_value(conf.mp3['quality'])
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(quality_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_mp3(self, button):
+        m = self.mode_cbtext.get_active_text()
+        b = self.bitrate_spin.get_value_as_int()
+        q = self.quality_spin.get_value_as_int()
+
+        conf.mp3['mode'] = m
+        conf.mp3['bitrate'] = b
+        conf.mp3['quality'] = q
+
+    def _opus(self):
+        modes = ['CBR', 'ABR', 'VBR']
+        bitrate = Gtk.Adjustment(128, 0, 510, 1, 10)
+
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
+
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+
+        self.bitrate_spin = Gtk.SpinButton()
+        self.bitrate_spin.set_property('hexpand', True)
+        self.bitrate_spin.set_numeric(True)
+        self.bitrate_spin.set_adjustment(bitrate)
+
+        i = modes.index(conf.opus['mode'])
+        self.mode_cbtext.set_active(i)
+        self.bitrate_spin.set_value(conf.opus['bitrate'])
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_opus(self, button):
+        m = self.mode_cbtext.get_active_text()
+        b = self.bitrate_spin.get_value_as_int()
+
+        conf.opus['mode'] = m
+        conf.opus['bitrate'] = b
+
+    def _vorbis(self):
+        modes = ['CBR', 'ABR', 'VBR']
+        bitrate = Gtk.Adjustment(160, 64, 500, 1, 10)
+        quality = Gtk.Adjustment(5, 0, 10, 1, 10)
+
+        mode_label = Gtk.Label('Mode')
+        mode_label.set_halign(Gtk.Align.START)
+        bitrate_label = Gtk.Label('Bitrate')
+        bitrate_label.set_halign(Gtk.Align.START)
+        quality_label = Gtk.Label('Quality')
+        quality_label.set_halign(Gtk.Align.START)
+
+        self.mode_cbtext = Gtk.ComboBoxText()
+        self.mode_cbtext.set_property('hexpand', True)
+        for m in modes:
+            self.mode_cbtext.append_text(m)
+        self.mode_cbtext.connect('changed', self.on_mode_changed)
+
+        self.bitrate_spin = Gtk.SpinButton()
+        self.bitrate_spin.set_property('hexpand', True)
+        self.bitrate_spin.set_numeric(True)
+        self.bitrate_spin.set_adjustment(bitrate)
+
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(quality)
+
+        i = modes.index(conf.vorbis['mode'])
+        self.mode_cbtext.set_active(i)
+        self.bitrate_spin.set_value(conf.vorbis['bitrate'])
+        self.quality_spin.set_value(conf.vorbis['quality'])
+
+        self.grid.attach(mode_label, 0, 0, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(bitrate_label, 0, 1, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(quality_label, 0, 2, 1, 1)
+        self.grid.attach_next_to(self.quality_spin, quality_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+    def _update_vorbis(self, button):
+        m = self.mode_cbtext.get_active_text()
+        b = self.bitrate_spin.get_value_as_int()
+        q = self.quality_spin.get_value_as_int()
+
+        conf.vorbis['mode'] = m
+        conf.vorbis['bitrate'] = b
+        conf.vorbis['quality'] = q
+
+    def on_mode_changed(self, combo):
         m = combo.get_active_text()
         if m == 'CBR' or m == 'ABR':
-            conf.lame_bitrate_spin.set_sensitive(True)
-            conf.lame_quality_spin.set_sensitive(False)
+            self.bitrate_spin.set_sensitive(True)
+            self.quality_spin.set_sensitive(False)
         elif m == 'VBR':
-            conf.lame_bitrate_spin.set_sensitive(False)
-            conf.lame_quality_spin.set_sensitive(True)
-
-    def on_oggenc_mode_changed(self, combo):
-        m = combo.get_active_text()
-        if m == 'CBR' or m == 'ABR':
-            conf.oggenc_bitrate_spin.set_sensitive(True)
-            conf.oggenc_quality_spin.set_sensitive(False)
-        elif m == 'VBR':
-            conf.oggenc_bitrate_spin.set_sensitive(False)
-            conf.oggenc_quality_spin.set_sensitive(True)
+            self.bitrate_spin.set_sensitive(False)
+            self.quality_spin.set_sensitive(True)
 
 class VapourSynthDialog(Gtk.Dialog):
 
@@ -2130,8 +2549,8 @@ class VapourSynthDialog(Gtk.Dialog):
 
 class FilterDialog(Gtk.Dialog):
 
-    def __init__(self, parent, f, i):
-        Gtk.Dialog.__init__(self, f + ' settings', parent, 0)
+    def __init__(self, parent, flt, i):
+        Gtk.Dialog.__init__(self, flt + ' settings', parent, 0)
         self.set_default_size(240, 0)
 
         button = self.add_button('_OK', Gtk.ResponseType.OK)
@@ -2144,31 +2563,31 @@ class FilterDialog(Gtk.Dialog):
         box = self.get_content_area()
         box.add(self.grid)
 
-        if f == 'Source':
+        if flt == 'Source':
             self._source()
             button.connect('clicked', self._update_source)
-        elif f == 'CropAbs':
+        elif flt == 'CropAbs':
             self._crop(True, i)
             button.connect('clicked', self._update_crop, True, i)
-        elif f == 'CropRel':
+        elif flt == 'CropRel':
             self._crop(False, i)
             button.connect('clicked', self._update_crop, False, i)
-        elif f == 'Resize':
+        elif flt == 'Resize':
             self._resize(i)
             button.connect('clicked', self._update_resize, i)
-        elif f == 'FluxSmoothT':
+        elif flt == 'FluxSmoothT':
             self._fsmooth(False, i)
             button.connect('clicked', self._update_fsmooth, False, i)
-        elif f == 'FluxSmoothST':
+        elif flt == 'FluxSmoothST':
             self._fsmooth(True, i)
             button.connect('clicked', self._update_fsmooth, True, i)
-        elif f == 'RemoveGrain':
+        elif flt == 'RemoveGrain':
             self._rgvs(i)
             button.connect('clicked', self._update_rgvs, i)
-        elif f == 'TemporalSoften':
+        elif flt == 'TemporalSoften':
             self._tsoft(i)
             button.connect('clicked', self._update_tsoft, i)
-        elif f == 'f3kdb':
+        elif flt == 'f3kdb':
             self._f3kdb(i)
             button.connect('clicked', self._update_f3kdb, i)
 
