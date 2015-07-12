@@ -58,51 +58,34 @@ STYPES = {'S_HDMV/PGS': 'sup',
           'S_VOBSUB': 'sub'}
 
 SOURCE_FLTS = OrderedDict()
-SOURCE_FLTS['FFMpegSource'] = OrderedDict()
-SOURCE_FLTS['LibavSMASHSource'] = OrderedDict()
-SOURCE_FLTS['LWLibavSource'] = OrderedDict()
+SOURCE_FLTS['FFMpegSource'] = None
+SOURCE_FLTS['LibavSMASHSource'] = None
+SOURCE_FLTS['LWLibavSource'] = None
 
 CROP_FLTS = OrderedDict()
-CROP_FLTS['CropAbs'] = OrderedDict()
-CROP_FLTS['CropAbs']['width'] = 0
-CROP_FLTS['CropAbs']['height'] = 0
-CROP_FLTS['CropRel'] = OrderedDict()
+CROP_FLTS['CropAbs'] = None
+CROP_FLTS['CropRel'] = None
 
 RESIZE_FLTS = OrderedDict()
-RESIZE_FLTS['Bilinear'] = OrderedDict()
-RESIZE_FLTS['Bilinear']['width'] = 0
-RESIZE_FLTS['Bilinear']['height'] = 0
-RESIZE_FLTS['Bicubic'] = OrderedDict()
-RESIZE_FLTS['Bicubic']['width'] = 0
-RESIZE_FLTS['Bicubic']['height'] = 0
-RESIZE_FLTS['Gauss'] = OrderedDict()
-RESIZE_FLTS['Gauss']['width'] = 0
-RESIZE_FLTS['Gauss']['height'] = 0
-RESIZE_FLTS['Lanczos'] = OrderedDict()
-RESIZE_FLTS['Lanczos']['width'] = 0
-RESIZE_FLTS['Lanczos']['height'] = 0
-RESIZE_FLTS['Point'] = OrderedDict()
-RESIZE_FLTS['Point']['width'] = 0
-RESIZE_FLTS['Point']['height'] = 0
-RESIZE_FLTS['Sinc'] = OrderedDict()
-RESIZE_FLTS['Sinc']['width'] = 0
-RESIZE_FLTS['Sinc']['height'] = 0
-RESIZE_FLTS['Spline'] = OrderedDict()
-RESIZE_FLTS['Spline']['width'] = 0
-RESIZE_FLTS['Spline']['height'] = 0
+RESIZE_FLTS['Bilinear'] = None
+RESIZE_FLTS['Bicubic'] = None
+RESIZE_FLTS['Gauss'] = None
+RESIZE_FLTS['Lanczos'] = None
+RESIZE_FLTS['Point'] = None
+RESIZE_FLTS['Sinc'] = None
+RESIZE_FLTS['Spline'] = None
 
 DENOISE_FLTS = OrderedDict()
-DENOISE_FLTS['FluxSmoothT'] = OrderedDict()
-DENOISE_FLTS['FluxSmoothST'] = OrderedDict()
-DENOISE_FLTS['RemoveGrain'] = OrderedDict()
-DENOISE_FLTS['RemoveGrain']['mode'] = [2]
-DENOISE_FLTS['TemporalSoften'] = OrderedDict()
+DENOISE_FLTS['FluxSmoothT'] = None
+DENOISE_FLTS['FluxSmoothST'] = None
+DENOISE_FLTS['RemoveGrain'] = None
+DENOISE_FLTS['TemporalSoften'] = None
 
 DEBAND_FLTS = OrderedDict()
-DEBAND_FLTS['f3kdb'] = OrderedDict()
+DEBAND_FLTS['f3kdb'] = None
 
 MISC_FLTS = OrderedDict()
-MISC_FLTS['Trim'] = [0, 0]
+MISC_FLTS['Trim'] = None
 
 FILTERS = OrderedDict()
 FILTERS['Source'] = SOURCE_FLTS
@@ -2505,7 +2488,7 @@ class VapourSynthDialog(Gtk.Dialog):
         self.show_all()
 
     def on_add_clicked(self, button):
-        conf.filters.append(['', '', OrderedDict()])
+        conf.filters.append(['', '', None])
 
         self._update_filters()
 
@@ -2527,7 +2510,7 @@ class VapourSynthDialog(Gtk.Dialog):
         t = combo.get_active_text()
         conf.filters[i][0] = t
         conf.filters[i][1] = ''
-        conf.filters[i][2] = []
+        conf.filters[i][2] = None
 
         self._update_filters()
 
@@ -2535,7 +2518,16 @@ class VapourSynthDialog(Gtk.Dialog):
         n = combo.get_active_text()
         conf.filters[i][0] = t
         conf.filters[i][1] = n
-        conf.filters[i][2] = FILTERS[t][n]
+        args = OrderedDict()
+        if t == 'Resize':
+            args['width'] = 0
+            args['height'] = 0
+        elif n == 'RemoveGrain':
+            args['mode'] = [2]
+        elif n == 'Trim':
+            args['first'] = 0
+            args['last'] = 0
+        conf.filters[i][2] = args
 
         self._update_filters()
 
@@ -2590,6 +2582,9 @@ class FilterDialog(Gtk.Dialog):
         elif flt == 'f3kdb':
             self._f3kdb(i)
             button.connect('clicked', self._update_f3kdb, i)
+        elif flt == 'Trim':
+            self._trim(i)
+            button.connect('clicked', self._update_trim, i)
 
         self.show_all()
 
@@ -2675,7 +2670,7 @@ class FilterDialog(Gtk.Dialog):
         self.width_spin.set_property('hexpand', True)
         self.width_spin.set_sensitive(absolute)
         self.height_spin = Gtk.SpinButton()
-        self.height_spin.set_adjustment(width_adj)
+        self.height_spin.set_adjustment(height_adj)
         self.height_spin.set_numeric(True)
         self.height_spin.set_property('hexpand', True)
         self.height_spin.set_sensitive(absolute)
@@ -2714,14 +2709,15 @@ class FilterDialog(Gtk.Dialog):
         if absolute:
             flt['width'] = w
             flt['height'] = h
-        else:
+
+        if not absolute:
             if l:
                 flt['left'] = l
-            if t:
-                flt['top'] = t
-
         if r:
             flt['right'] = r
+        if not absolute:
+            if t:
+                flt['top'] = t
         if b:
             flt['bottom'] = b
 
@@ -3195,6 +3191,42 @@ class FilterDialog(Gtk.Dialog):
         else:
             if 'dynamic_grain' in flt:
                 flt.pop('dynamic_grain')
+
+    def _trim(self):
+        first_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
+        last_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
+
+        first_label = Gtk.Label('First')
+        first_label.set_halign(Gtk.Align.START)
+        last_label = Gtk.Label('Last')
+        last_label.set_halign(Gtk.Align.START)
+
+        self.first_spin = Gtk.SpinButton()
+        self.first_spin.set_adjustment(fpsnum_adj)
+        self.first_spin.set_numeric(True)
+        self.first_spin.set_property('hexpand', True)
+        self.last_spin = Gtk.SpinButton()
+        self.last_spin.set_adjustment(fpsden_adj)
+        self.last_spin.set_numeric(True)
+        self.last_spin.set_property('hexpand', True)
+
+        flt = conf.filters[0][2]
+        self.first_spin.set_value(flt.get('first', 0))
+        self.last_spin.set_value(flt.get('last', 0))
+
+        self.grid.attach(first_label, 0, 0, 1, 1)
+        self.grid.attach(self.first_spin, 1, 0, 1, 1)
+        self.grid.attach(last_label, 0, 1, 1, 1)
+        self.grid.attach(self.last_spin, 1, 1, 1, 1)
+
+    def _update_trim(self, button):
+        flt = conf.filters[0][2]
+
+        f = self.first_spin.get_value_as_int()
+        l = self.last_spin.get_value_as_int()
+
+        flt['first'] = f
+        flt['last'] = l
 
     def on_depth_changed(self, spin):
         if spin.get_value_as_int() == 16:
