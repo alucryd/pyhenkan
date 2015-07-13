@@ -107,8 +107,8 @@ for p in ('*.avi', '*.flv', '*.mkv', '*.mp4', '*.ogm'):
 
 aflt = Gtk.FileFilter()
 aflt.set_name('Audio files')
-for p in ('*.aac', '*.ac3', '*.dts', '*.flac', '*.mka', '*.mp3', '*.mp4',
-          '*.mpc', '*.ogg', '*.thd', '*.wav', '*.wv'):
+for p in ('*.aac', '*.ac3', '*.dts', '*.flac', '*.m4a', '*.mka', '*.mp3',
+          '*.mpc', '*.ogg', '*.opus', '*.thd', '*.wav', '*.wv'):
     aflt.add_pattern(p)
 
 class Config:
@@ -129,7 +129,7 @@ class Config:
             if not self._find_enc(aenc, alib):
                 AENCS.pop(key)
 
-        self.filters = [['Source', 'FFMpegSource', OrderedDict()]]
+        self.vs = [['Source', 'FFMpegSource', OrderedDict()]]
 
         self.x264 = {'quality': 18,
                      'preset': 'medium',
@@ -142,6 +142,9 @@ class Config:
                      'tune': 'none',
                      'container': '265',
                      'arguments': ''}
+
+        self.audio = {'rate': 0,
+                      'channel': 0}
 
         self.faac = {'mode': 'VBR',
                      'bitrate': 128,
@@ -535,10 +538,12 @@ class MainWindow(Gtk.Window):
         self.about_dlg.set_transient_for(self)
 
     def on_sccr_clicked(self, button):
-        sccr_win.show_all()
+        win = ScriptCreatorWindow()
+        win.show_all()
 
     def on_ched_clicked(self, button):
-        ched_win.show_all()
+        win = ChapterEditorWindow()
+        win.show_all()
 
     def on_about_clicked(self, button):
         self.about_dlg.run()
@@ -566,6 +571,11 @@ class MainWindow(Gtk.Window):
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
         o = wd + '/out/' + os.path.splitext(f)[0]
+        future = self._video_job(x, i, o)
+        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
+        self.worker.submit(self._update_queue)
+
+    def _video_job(self, x, i, o):
         if x[0].startswith('x264'):
             q = conf.x264['quality']
             p = conf.x264['preset']
@@ -581,8 +591,7 @@ class MainWindow(Gtk.Window):
             a = conf.x265['arguments']
             future = self.worker.submit(self._x265, i, x[0], x[1], o, q, p, t,
                                         c, a)
-        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
-        self.worker.submit(self._update_queue)
+        return future
 
     def on_asrc_file_set(self, button):
         self.aqueue_button.set_sensitive(True)
@@ -596,59 +605,77 @@ class MainWindow(Gtk.Window):
         if not os.path.isdir(wd + '/out'):
             os.mkdir(wd + '/out')
         o = wd + '/out/' + os.path.splitext(f)[0]
+        future = self._audio_job(x, i, o)
+        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
+        self.worker.submit(self._update_queue)
+
+    def _audio_job(self, x, i, o):
+        r = conf.audio['rate']
+        c = conf.audio['channel']
         if x[0] == 'faac' or x[1] == 'libfaac':
             m = conf.faac['mode']
             b = conf.faac['bitrate']
             q = conf.faac['quality']
-            c = conf.faac['container']
+            co = conf.faac['container']
             if x[0] == 'faac':
-                future = self.worker.submit(self._faac, i, o, m, b, q, c)
+                future = self.worker.submit(self._faac, i, o,
+                                            r, c, m, b, q, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libfaac, i, o, m, b, q, c)
+                future = self.worker.submit(self._libfaac, i, o,
+                                            r, c, o, m, b, q, co)
         elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
             m = conf.fdkaac['mode']
             b = conf.fdkaac['bitrate']
             q = conf.fdkaac['quality']
-            c = conf.fdkaac['container']
+            co = conf.fdkaac['container']
             if x[0] == 'fdkaac':
-                future = self.worker.submit(self._fdkaac, i, o, m, b, q, c)
+                future = self.worker.submit(self._fdkaac, i, o,
+                                            r, c, m, b, q, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libfdk_aac, i, o, m, b, q, c)
+                future = self.worker.submit(self._libfdk_aac, i, o,
+                                            r, c, m, b, q, co)
         elif x[0] == 'flac' or x[1] == 'native-flac':
             cp = conf.flac['compression']
-            c = conf.flac['container']
+            co = conf.flac['container']
             if x[0] == 'flac':
-                future = self.worker.submit(self._flac, i, o, cp, c)
+                future = self.worker.submit(self._flac, i, o,
+                                            r, c, cp, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._native_flac, i, o, cp, c)
+                future = self.worker.submit(self._native_flac, i, o,
+                                            r, c, cp, co)
         elif x[0] == 'lame' or x[1] == 'libmp3lame':
             m = conf.mp3['mode']
             b = conf.mp3['bitrate']
             q = conf.mp3['quality']
-            c = conf.mp3['container']
+            co = conf.mp3['container']
             if x[0] == 'lame':
-                future = self.worker.submit(self._lame, i, o, m, b, q, c)
+                future = self.worker.submit(self._lame, i, o,
+                                            r, c, m, b, q, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libmp3lame, i, o, m, b, q, c)
+                future = self.worker.submit(self._libmp3lame, i, o,
+                                            r, c, m, b, q, co)
         elif x[0] == 'opusenc' or x[1] == 'libopus':
             m = conf.opus['mode']
             b = conf.opus['bitrate']
-            c = conf.opus['container']
+            co = conf.opus['container']
             if x[0] == 'opusenc':
-                future = self.worker.submit(self._opusenc, i, o, m, b, c)
+                future = self.worker.submit(self._opusenc, i, o,
+                                            r, c, m, b, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libopus, i, o, m, b, c)
+                future = self.worker.submit(self._libopus, i, o,
+                                            r, c, m, b, co)
         elif x[0] == 'oggenc' or x[1] == 'libvorbis':
             m = conf.vorbis['mode']
             b = conf.vorbis['bitrate']
             q = conf.vorbis['quality']
-            c = conf.vorbis['container']
+            co = conf.vorbis['container']
             if x[0] == 'oggenc':
-                future = self.worker.submit(self._oggenc, i, o, m, b, q, c)
+                future = self.worker.submit(self._oggenc, i, o,
+                                            r, c, m, b, q, co)
             elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libvorbis, i, o, m, b, q, c)
-        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
-        self.worker.submit(self._update_queue)
+                future = self.worker.submit(self._libvorbis, i, o,
+                                            r, c, m, b, q, co)
+        return future
 
     def on_auto_src_file_set(self, button):
         wd = button.get_filename()
@@ -834,27 +861,7 @@ class MainWindow(Gtk.Window):
                 k = self.auto_venc_cbtext.get_active_text()
                 x = VENCS[k]
                 o = vtrack[1]
-                if x[0].startswith('x264'):
-                    q = conf.x264['quality']
-                    p = conf.x264['preset']
-                    t = conf.x264['tune']
-                    c = conf.x264['container']
-                    a = conf.x264['arguments']
-                    vtrack[2] = c
-
-                    future = self.worker.submit(self._x264, vpy, x[0], o, q, p,
-                                                t, c, a)
-                if x[0].startswith('x265'):
-                    q = conf.x265['quality']
-                    p = conf.x265['preset']
-                    t = conf.x265['tune']
-                    c = conf.x265['container']
-                    a = conf.x265['arguments']
-                    vtrack[2] = c
-
-                    future = self.worker.submit(self._x265, vpy, x[0], x[1], o,
-                                                q, p, t, c, a)
-
+                future = self._video_job(x, vpy, o)
                 self.queue_tstore.append(job, [future, '', x[0], 'Waiting'])
 
             # Extract audio
@@ -875,76 +882,7 @@ class MainWindow(Gtk.Window):
                     x = AENCS[k]
                     i = track[1] + '.' + track[2]
                     o = track[1]
-                    if x[0] == 'faac' or x[1] == 'libfaac':
-                        m = conf.faac['mode']
-                        b = conf.faac['bitrate']
-                        q = conf.faac['quality']
-                        c = conf.faac['container']
-                        #track[2] = c
-                        if x[0] == 'faac':
-                            future = self.worker.submit(self._faac, i, o, m, b,
-                                                        q, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._libfaac, i, o, m,
-                                                        b, q, c)
-                    elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
-                        m = conf.fdkaac['mode']
-                        b = conf.fdkaac['bitrate']
-                        q = conf.fdkaac['quality']
-                        c = conf.fdkaac['container']
-                        #track[2] = c
-                        if x[0] == 'fdkaac':
-                            future = self.worker.submit(self._fdkaac, i, o,
-                                                        m, b, q, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._libfdk_aac,
-                                                        i, o, m, b, q, c)
-                    elif x[0] == 'flac' or x[1] == 'native-flac':
-                        cp = conf.flac['compression']
-                        c = conf.flac['container']
-                        #track[2] = c
-                        if x[0] == 'flac':
-                            future = self.worker.submit(self._flac, i, o,
-                                                        cp, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._native_flac,
-                                                        i, o, cp, c)
-                    elif x[0] == 'lame' or x[1] == 'libmp3lame':
-                        m = conf.mp3['mode']
-                        b = conf.mp3['bitrate']
-                        q = conf.mp3['quality']
-                        c = conf.mp3['container']
-                        #track[2] = c
-                        if x[0] == 'lame':
-                            future = self.worker.submit(self._lame, i, o,
-                                                        m, b, q, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._libmp3lame,
-                                                        i, o, m, b, q, c)
-                    elif x[0] == 'opusenc' or x[1] == 'libopus':
-                        m = conf.opus['mode']
-                        b = conf.opus['bitrate']
-                        c = conf.opus['container']
-                        #track[2] = c
-                        if x[0] == 'opusenc':
-                            future = self.worker.submit(self._opus, i, o,
-                                                        m, b, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._libopus, i,
-                                                        o, m, b, c)
-                    elif x[0] == 'oggenc' or x[1] == 'libvorbis':
-                        m = conf.vorbis['mode']
-                        b = conf.vorbis['bitrate']
-                        q = conf.vorbis['quality']
-                        c = conf.vorbis['container']
-                        #track[2] = c
-                        if x[0] == 'oggenc':
-                            future = self.worker.submit(self._oggenc, i, o,
-                                                        m, b, q, c)
-                        elif x[0] == 'ffmpeg':
-                            future = self.worker.submit(self._libvorbis, i,
-                                                        o, m, b, q, c)
-
+                    future = self._audio_job(x, i, o)
                     self.queue_tstore.append(job, [future, '', x[0],
                                              'Waiting'])
 
@@ -1181,7 +1119,7 @@ class MainWindow(Gtk.Window):
 
     def _vpy(self, source, destination):
         print('Create VapourSynth script...')
-        v = Encode(source).vpy(conf.filters)
+        v = Encode(source).vpy(conf.vs)
 
         print('Write ' + destination)
         with open(destination, 'w') as f:
@@ -1220,109 +1158,109 @@ class MainWindow(Gtk.Window):
                                      universal_newlines=True)
         self._video_progress(dur)
 
-    def _faac(self, i, o, m, b, q, c):
+    def _faac(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).faac(o, m, b, q, c)
+        cmd = Encode(i).faac(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libfdk_aac(self, i, o, m, b, q, c):
+    def _libfaac(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_libfaac(o, m, b, q, c)
+        cmd = Encode(i).ffmpeg_libfaac(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _fdkaac(self, i, o, m, b, q, c):
+    def _fdkaac(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).fdkaac(o, m, b, q, c)
+        cmd = Encode(i).fdkaac(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libfdk_aac(self, i, o, m, b, q, c):
+    def _libfdk_aac(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_libfdk_aac(o, m, b, q, c)
+        cmd = Encode(i).ffmpeg_libfdk_aac(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _flac(self, i, o, cp, c):
+    def _flac(self, i, o, r, c, cp, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).flac(o, cp, c)
+        cmd = Encode(i).flac(o, r, c, cp, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _native_flac(self, i, o, cp, c):
+    def _native_flac(self, i, o, r, c, cp, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_flac(o, cp, c)
+        cmd = Encode(i).ffmpeg_flac(o, r, c, cp, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _lame(self, i, o, m, b, q, c):
+    def _lame(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).lame(o, m, b, q, c)
+        cmd = Encode(i).lame(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libmp3lame(self, i, o, m, b, q, c):
+    def _libmp3lame(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_libmp3lame(o, m, b, q, c)
+        cmd = Encode(i).ffmpeg_libmp3lame(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _opusenc(self, i, o, m, b, c):
+    def _opusenc(self, i, o, r, c, m, b, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).opusenc(o, m, b, c)
+        cmd = Encode(i).opusenc(o, r, c, m, b, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libopus(self, i, o, m, b, c):
+    def _libopus(self, i, o, r, c, m, b, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_libopus(o, m, b, c)
+        cmd = Encode(i).ffmpeg_libopus(o, r, c, m, b, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _oggenc(self, i, o, m, b, q, c):
+    def _oggenc(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).oggenc(o, m, b, q, c)
+        cmd = Encode(i).oggenc(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libvorbis(self, i, o, m, b, q, c):
+    def _libvorbis(self, i, o, r, c, m, b, q, co):
         print('Encode audio...')
         self._update_queue()
-        cmd = Encode(i).ffmpeg_libvorbis(o, m, b, q, c)
+        cmd = Encode(i).ffmpeg_libvorbis(o, r, c, m, b, q, co)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
@@ -1675,6 +1613,19 @@ class ChapterEditorWindow(Gtk.Window):
 
         self._update_entries()
 
+    def on_remove_clicked(self, button, i):
+        self.chapters.pop(i)
+        self._update_entries()
+
+    def on_move_clicked(self, button, direction, i):
+        if direction == 'up':
+            self.chapters[i - 1:i + 1] = [self.chapters[i],
+                                          self.chapters[i - 1]]
+        elif direction == 'down':
+            self.chapters[i:i + 2] = [self.chapters[i + 1],
+                                      self.chapters[i]]
+        self._update_entries()
+
     def on_ordered_toggled(self, check):
         self.ordered = check.get_active()
         self._update_entries()
@@ -1722,19 +1673,6 @@ class ChapterEditorWindow(Gtk.Window):
 
     def on_uid_changed(self, entry, i):
         self.chapters[i][4] = entry.get_text()
-
-    def on_remove_clicked(self, button, i):
-        self.chapters.pop(i)
-        self._update_entries()
-
-    def on_move_clicked(self, button, direction, i):
-        if direction == 'up':
-            self.chapters[i - 1:i + 1] = [self.chapters[i],
-                                          self.chapters[i - 1]]
-        elif direction == 'down':
-            self.chapters[i:i + 2] = [self.chapters[i + 1],
-                                      self.chapters[i]]
-        self._update_entries()
 
 class ScriptCreatorWindow(Gtk.Window):
 
@@ -1792,7 +1730,7 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        s = Encode(self.source).vpy(conf.filters)
+        s = Encode(self.source).vpy(conf.vs)
         self.tbuffer.set_text(s)
 
     def on_open_clicked(self, button):
@@ -1840,10 +1778,8 @@ class EncoderDialog(Gtk.Dialog):
         else:
             n = x[0]
 
-        Gtk.Dialog.__init__(self, n + ' settings', parent, 0)
-        self.set_default_size(240, 0)
-
-        button = self.add_button('_OK', Gtk.ResponseType.OK)
+        Gtk.Dialog.__init__(self, n + ' settings', parent, 0, use_header_bar=1)
+        self.set_default_size(240, 240)
 
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(6)
@@ -1855,30 +1791,142 @@ class EncoderDialog(Gtk.Dialog):
 
         if n.startswith('x264'):
             self._x264()
-            button.connect('clicked', self._update_x264)
+            self.connect('delete-event', self._update_x264)
         if n.startswith('x265'):
             self._x265()
-            button.connect('clicked', self._update_x265)
-        if n == 'fdkaac' or n == 'libfdk-aac':
-            self._fdkaac()
-            button.connect('clicked', self._update_fdkaac)
+            self.connect('delete-event', self._update_x265)
         if n == 'faac' or n == 'libfaac':
+            self._hbar('aac')
             self._faac()
-            button.connect('clicked', self._update_faac)
+            self.connect('delete-event', self._update_faac)
+        if n == 'fdkaac' or n == 'libfdk-aac':
+            self._hbar('aac')
+            self._fdkaac()
+            self.connect('delete-event', self._update_fdkaac)
         if n == 'flac' or n == 'native-flac':
+            self._hbar()
             self._flac()
-            button.connect('clicked', self._update_flac)
+            self.connect('delete-event', self._update_flac)
         if n == 'lame' or n == 'libmp3lame':
+            self._hbar('mp3')
             self._mp3()
-            button.connect('clicked', self._update_mp3)
+            self.connect('delete-event', self._update_mp3)
         if n == 'opusenc'or n == 'libopus':
+            self._hbar('opus')
             self._opus()
-            button.connect('clicked', self._update_opus)
+            self.connect('delete-event', self._update_opus)
         if n == 'oggenc' or n == 'libvorbis':
+            self._hbar()
             self._vorbis()
-            button.connect('clicked', self._update_vorbis)
+            self.connect('delete-event', self._update_vorbis)
 
         self.show_all()
+
+    def _hbar(self, subset=''):
+        icon = Gio.ThemedIcon(name='applications-system-symbolic')
+        image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
+
+        grid = Gtk.Grid()
+        grid.set_property('margin', 6)
+        grid.set_column_spacing(6)
+        grid.set_row_spacing(6)
+
+        popover = Gtk.Popover()
+        popover.set_modal(False)
+        popover.add(grid)
+
+        mbutton = Gtk.MenuButton()
+        mbutton.set_image(image)
+        mbutton.set_direction(Gtk.ArrowType.DOWN)
+        mbutton.set_use_popover(True)
+        mbutton.set_popover(popover)
+
+        hbar = self.get_header_bar()
+        hbar.pack_start(mbutton)
+
+        self.rates = OrderedDict()
+        self.rates['8 kHz'] = 8000
+        if subset not in ('opus'):
+            self.rates['11.025 kHz'] = 11025
+        self.rates['16 kHz'] = 16000
+        if subset not in ('opus'):
+            self.rates['22.05 kHz'] = 22050
+        self.rates['24 kHz'] = 24000
+        if subset not in ('opus'):
+            self.rates['32 kHz'] = 32000
+        if subset not in ('opus'):
+            self.rates['44.1 kHz'] = 44100
+        self.rates['48 kHz'] = 48000
+        if subset not in ('mp3', 'opus'):
+            self.rates['64 kHz'] = 64000
+        if subset not in ('mp3', 'opus'):
+            self.rates['88.2 kHz'] = 88200
+        if subset not in ('mp3', 'opus'):
+            self.rates['96 kHz'] = 96000
+        if subset not in ('aac', 'mp3', 'opus'):
+            self.rates['192 kHz'] = 192000
+
+        self.channels = OrderedDict()
+        self.channels['1.0'] = 1
+        self.channels['2.0'] = 2
+        if subset != 'mp3':
+            self.channels['2.1'] = 3
+        if subset != 'mp3':
+            self.channels['4.0'] = 4
+        if subset != 'mp3':
+            self.channels['5.0'] = 5
+        if subset != 'mp3':
+            self.channels['5.1'] = 6
+        if subset != 'mp3':
+            self.channels['6.1'] = 7
+        if subset != 'mp3':
+            self.channels['7.1'] = 8
+
+        rate_label = Gtk.Label('Sample Rate')
+        channel_label = Gtk.Label('Channels')
+
+        self.rate_check = Gtk.CheckButton()
+        self.rate_check.connect('toggled', self.on_rate_toggled)
+        self.channel_check = Gtk.CheckButton()
+        self.channel_check.connect('toggled', self.on_channel_toggled)
+
+        self.rate_cbtext = Gtk.ComboBoxText()
+        self.rate_cbtext.set_property('hexpand', True)
+        for r in self.rates:
+            self.rate_cbtext.append_text(r)
+        self.rate_cbtext.set_sensitive(False)
+
+        self.channel_cbtext = Gtk.ComboBoxText()
+        self.channel_cbtext.set_property('hexpand', True)
+        for c in self.channels:
+            self.channel_cbtext.append_text(c)
+        self.channel_cbtext.set_sensitive(False)
+
+        sr = conf.audio['rate']
+        ch = conf.audio['channel']
+        i = 0
+        j = 0
+        for srk in self.rates:
+            if not sr == self.rates[srk]:
+                i = i + 1
+            else:
+                self.rate_check.set_active(True)
+                self.rate_cbtext.set_active(i)
+        for chk in self.channels:
+            if not ch == self.channels[chk]:
+                j = j + 1
+            else:
+                self.channel_check.set_active(True)
+                self.channel_cbtext.set_active(j)
+
+        grid.attach(rate_label, 0, 0, 1, 1)
+        grid.attach(self.rate_check, 1, 0, 1, 1)
+        grid.attach(self.rate_cbtext, 2, 0, 1, 1)
+        grid.attach(channel_label, 0, 1, 1, 1)
+        grid.attach(self.channel_check, 1, 1, 1, 1)
+        grid.attach(self.channel_cbtext, 2, 1, 1, 1)
+
+        grid.show_all()
 
     def _x264(self):
         quality = Gtk.Adjustment(18, 1, 51, 1, 10)
@@ -1965,7 +2013,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach(arg_label, 0, 4, 2, 1)
         self.grid.attach(self.arg_entry, 0, 5, 2, 1)
 
-    def _update_x264(self, button):
+    def _update_x264(self, widget, event):
         q = self.quality_spin.get_value_as_int()
         p = self.preset_cbtext.get_active_text()
         t = self.tune_cbtext.get_active_text()
@@ -2056,7 +2104,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach(arg_label, 0, 4, 2, 1)
         self.grid.attach(self.arg_entry, 0, 5, 2, 1)
 
-    def _update_x265(self, button):
+    def _update_x265(self, widget, event):
         q = self.quality_spin.get_value_as_int()
         p = self.preset_cbtext.get_active_text()
         t = self.tune_cbtext.get_active_text()
@@ -2125,7 +2173,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.cont_cbtext, cont_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_faac(self, button):
+    def _update_faac(self, widget, event):
         m = self.mode_cbtext.get_active_text()
         b = self.bitrate_spin.get_value_as_int()
         q = self.quality_spin.get_value_as_int()
@@ -2135,6 +2183,8 @@ class EncoderDialog(Gtk.Dialog):
         conf.faac['bitrate'] = b
         conf.faac['quality'] = q
         conf.faac['container'] = c
+
+        self._update_audio()
 
     def _fdkaac(self):
         modes = ['CBR', 'VBR']
@@ -2192,7 +2242,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.cont_cbtext, cont_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_fdkaac(self, button):
+    def _update_fdkaac(self, widget, event):
         m = self.mode_cbtext.get_active_text()
         b = self.bitrate_spin.get_value_as_int()
         q = self.quality_spin.get_value_as_int()
@@ -2202,6 +2252,8 @@ class EncoderDialog(Gtk.Dialog):
         conf.fdkaac['bitrate'] = b
         conf.fdkaac['quality'] = q
         conf.fdkaac['container'] = c
+
+        self._update_audio()
 
     def _flac(self):
         compression = Gtk.Adjustment(8, 0, 8, 1, 10)
@@ -2220,10 +2272,12 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.compression_spin, compression_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_flac(self, button):
+    def _update_flac(self, widget, event):
         c = self.compression_spin.get_value_as_int()
 
         conf.flac['compression'] = c
+
+        self._update_audio()
 
     def _mp3(self):
         modes = ['CBR', 'ABR', 'VBR']
@@ -2268,7 +2322,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.quality_spin, quality_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_mp3(self, button):
+    def _update_mp3(self, widget, event):
         m = self.mode_cbtext.get_active_text()
         b = self.bitrate_spin.get_value_as_int()
         q = self.quality_spin.get_value_as_int()
@@ -2277,9 +2331,11 @@ class EncoderDialog(Gtk.Dialog):
         conf.mp3['bitrate'] = b
         conf.mp3['quality'] = q
 
+        self._update_audio()
+
     def _opus(self):
         modes = ['CBR', 'ABR', 'VBR']
-        bitrate = Gtk.Adjustment(128, 0, 510, 1, 10)
+        bitrate = Gtk.Adjustment(128, 6, 510, 1, 10)
 
         mode_label = Gtk.Label('Mode')
         mode_label.set_halign(Gtk.Align.START)
@@ -2307,12 +2363,14 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.bitrate_spin, bitrate_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_opus(self, button):
+    def _update_opus(self, widget, event):
         m = self.mode_cbtext.get_active_text()
         b = self.bitrate_spin.get_value_as_int()
 
         conf.opus['mode'] = m
         conf.opus['bitrate'] = b
+
+        self._update_audio()
 
     def _vorbis(self):
         modes = ['CBR', 'ABR', 'VBR']
@@ -2357,7 +2415,7 @@ class EncoderDialog(Gtk.Dialog):
         self.grid.attach_next_to(self.quality_spin, quality_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
-    def _update_vorbis(self, button):
+    def _update_vorbis(self, widget, event):
         m = self.mode_cbtext.get_active_text()
         b = self.bitrate_spin.get_value_as_int()
         q = self.quality_spin.get_value_as_int()
@@ -2365,6 +2423,23 @@ class EncoderDialog(Gtk.Dialog):
         conf.vorbis['mode'] = m
         conf.vorbis['bitrate'] = b
         conf.vorbis['quality'] = q
+
+        self._update_audio()
+
+    def _update_audio(self):
+        if self.rate_check.get_active():
+            srk = self.rate_cbtext.get_active_text()
+            sr = self.rates[srk]
+        else:
+            sr = 0
+        if self.channel_check.get_active():
+            chk = self.channel_cbtext.get_active_text()
+            ch = self.channels[chk]
+        else:
+            ch = 0
+
+        conf.audio['rate'] = sr
+        conf.audio['channel'] = ch
 
     def on_mode_changed(self, combo):
         m = combo.get_active_text()
@@ -2375,11 +2450,20 @@ class EncoderDialog(Gtk.Dialog):
             self.bitrate_spin.set_sensitive(False)
             self.quality_spin.set_sensitive(True)
 
+    def on_rate_toggled(self, check):
+        s = self.rate_check.get_active()
+        self.rate_cbtext.set_sensitive(s)
+
+    def on_channel_toggled(self, check):
+        s = self.channel_check.get_active()
+        self.channel_cbtext.set_sensitive(s)
+
 class VapourSynthDialog(Gtk.Dialog):
 
     def __init__(self, parent):
         Gtk.Dialog.__init__(self, 'VapourSynth settings', parent, 0,
                             use_header_bar=1)
+        self.set_default_size(240, 240)
 
         add_button = Gtk.Button()
         add_icon = Gio.ThemedIcon(name='list-add-symbolic')
@@ -2403,9 +2487,9 @@ class VapourSynthDialog(Gtk.Dialog):
         grid.set_row_spacing(6)
         grid.set_property('margin', 6)
 
-        for i in range(len(conf.filters)):
-            active_type = conf.filters[i][0]
-            active_name = conf.filters[i][1]
+        for i in range(len(conf.vs)):
+            active_type = conf.vs[i][0]
+            active_name = conf.vs[i][1]
 
             type_cbtext = Gtk.ComboBoxText()
             type_cbtext.set_property('hexpand', True)
@@ -2462,7 +2546,7 @@ class VapourSynthDialog(Gtk.Dialog):
             elif i == 1:
                 up_button.set_sensitive(False)
 
-            if i == len(conf.filters) - 1:
+            if i == len(conf.vs) - 1:
                 down_button.set_sensitive(False)
 
             if i > 0:
@@ -2489,36 +2573,36 @@ class VapourSynthDialog(Gtk.Dialog):
         self.show_all()
 
     def on_add_clicked(self, button):
-        conf.filters.append(['', '', None])
+        conf.vs.append(['', '', None])
 
         self._update_filters()
 
     def on_remove_clicked(self, button, i):
-        conf.filters.pop(i)
+        conf.vs.pop(i)
 
         self._update_filters()
 
     def on_move_clicked(self, button, direction, i):
         if direction == 'up':
-            conf.filters[i - 1:i + 1] = [conf.filters[i],
-                                          conf.filters[i - 1]]
+            conf.vs[i - 1:i + 1] = [conf.vs[i],
+                                       conf.vs[i - 1]]
         elif direction == 'down':
-            conf.filters[i:i + 2] = [conf.filters[i + 1],
-                                      conf.filters[i]]
+            conf.vs[i:i + 2] = [conf.vs[i + 1],
+                                   conf.vs[i]]
         self._update_filters()
 
     def on_type_changed(self, combo, i):
         t = combo.get_active_text()
-        conf.filters[i][0] = t
-        conf.filters[i][1] = ''
-        conf.filters[i][2] = None
+        conf.vs[i][0] = t
+        conf.vs[i][1] = ''
+        conf.vs[i][2] = None
 
         self._update_filters()
 
     def on_name_changed(self, combo, t, i):
         n = combo.get_active_text()
-        conf.filters[i][0] = t
-        conf.filters[i][1] = n
+        conf.vs[i][0] = t
+        conf.vs[i][1] = n
         args = OrderedDict()
         if t == 'Resize':
             args['width'] = 0
@@ -2528,7 +2612,7 @@ class VapourSynthDialog(Gtk.Dialog):
         elif n == 'Trim':
             args['first'] = 0
             args['last'] = 0
-        conf.filters[i][2] = args
+        conf.vs[i][2] = args
 
         self._update_filters()
 
@@ -2607,7 +2691,7 @@ class FilterDialog(Gtk.Dialog):
         self.fpsden_spin.set_numeric(True)
         self.fpsden_spin.set_property('hexpand', True)
 
-        flt = conf.filters[0][2]
+        flt = conf.vs[0][2]
         self.fpsnum_spin.set_value(flt.get('fpsnum', 0))
         self.fpsden_spin.set_value(flt.get('fpsden', 1))
 
@@ -2617,7 +2701,7 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.fpsden_spin, 1, 1, 1, 1)
 
     def _update_source(self, button):
-        flt = conf.filters[0][2]
+        flt = conf.vs[0][2]
 
         n = self.fpsnum_spin.get_value_as_int()
         d = self.fpsden_spin.get_value_as_int()
@@ -2676,7 +2760,7 @@ class FilterDialog(Gtk.Dialog):
         self.height_spin.set_property('hexpand', True)
         self.height_spin.set_sensitive(absolute)
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         self.left_spin.set_value(flt.get('left', 0))
         self.right_spin.set_value(flt.get('right', 0))
         self.top_spin.set_value(flt.get('top', 0))
@@ -2698,7 +2782,7 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.height_spin, 1, 5, 1, 1)
 
     def _update_crop(self, button, absolute, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         l = self.left_spin.get_value_as_int()
         r = self.right_spin.get_value_as_int()
@@ -2755,7 +2839,7 @@ class FilterDialog(Gtk.Dialog):
         for f in formats:
             self.format_cbtext.append_text(f)
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         self.width_spin.set_value(flt.get('width', 0))
         self.height_spin.set_value(flt.get('height', 0))
         f = flt.get('format', '')
@@ -2777,7 +2861,7 @@ class FilterDialog(Gtk.Dialog):
         self.format_check.connect('toggled', self.on_format_toggled)
 
     def _update_resize(self, button, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         w = self.width_spin.get_value_as_int()
         h = self.height_spin.get_value_as_int()
@@ -2824,7 +2908,7 @@ class FilterDialog(Gtk.Dialog):
         self.v_check.set_label('V')
         self.v_check.set_active(True)
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         self.tt_spin.set_value(flt.get('temporal_threshold', 7))
         self.st_spin.set_value(flt.get('spatial_threshold', 7))
         p = flt.get('planes', [0, 1, 2])
@@ -2845,7 +2929,7 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.v_check, 3, 2, 1, 1)
 
     def _update_fsmooth(self, button, spatial, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         tt = self.tt_spin.get_value_as_int()
         st = self.st_spin.get_value_as_int()
@@ -2902,7 +2986,7 @@ class FilterDialog(Gtk.Dialog):
         self.modeu_check = Gtk.CheckButton()
         self.modev_check = Gtk.CheckButton()
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         m = flt.get('mode', [2])
         self.mode_spin.set_value(m[0])
         if len(m) > 1:
@@ -2927,7 +3011,7 @@ class FilterDialog(Gtk.Dialog):
         self.modev_check.connect('toggled', self.on_modev_toggled)
 
     def _update_rgvs(self, button, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         m = self.mode_spin.get_value_as_int()
         su = self.modeu_check.get_active()
@@ -2983,7 +3067,7 @@ class FilterDialog(Gtk.Dialog):
         self.sc_spin.set_adjustment(sc_adj)
         self.sc_spin.set_property('hexpand', True)
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         self.rad_spin.set_value(flt.get('radius', 4))
         self.lt_spin.set_value(flt.get('luma_threshold', 4))
         self.ct_spin.set_value(flt.get('chroma_threshold', 4))
@@ -2999,7 +3083,7 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.sc_spin, 1, 3, 1, 1)
 
     def _update_tsoft(self, button, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         rad = self.rad_spin.get_value_as_int()
         lt = self.lt_spin.get_value_as_int()
@@ -3093,7 +3177,7 @@ class FilterDialog(Gtk.Dialog):
         self.blur_check = Gtk.CheckButton()
         self.blur_check.set_active(False)
 
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
         self.y_spin.set_value(flt.get('y', 64))
         self.cb_spin.set_value(flt.get('cb', 64))
         self.cr_spin.set_value(flt.get('cr', 64))
@@ -3129,7 +3213,7 @@ class FilterDialog(Gtk.Dialog):
         self.depth_spin.connect('changed', self.on_depth_changed)
 
     def _update_f3kdb(self, button, i):
-        flt = conf.filters[i][2]
+        flt = conf.vs[i][2]
 
         y = self.y_spin.get_value_as_int()
         cb = self.cb_spin.get_value_as_int()
@@ -3193,6 +3277,12 @@ class FilterDialog(Gtk.Dialog):
             if 'dynamic_grain' in flt:
                 flt.pop('dynamic_grain')
 
+    def on_depth_changed(self, spin):
+        if spin.get_value_as_int() == 16:
+            self.dither_cbtext.set_sensitive(False)
+        else:
+            self.dither_cbtext.set_sensitive(True)
+
     def _trim(self):
         first_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
         last_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
@@ -3211,7 +3301,7 @@ class FilterDialog(Gtk.Dialog):
         self.last_spin.set_numeric(True)
         self.last_spin.set_property('hexpand', True)
 
-        flt = conf.filters[0][2]
+        flt = conf.vs[0][2]
         self.first_spin.set_value(flt.get('first', 0))
         self.last_spin.set_value(flt.get('last', 0))
 
@@ -3221,19 +3311,13 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.last_spin, 1, 1, 1, 1)
 
     def _update_trim(self, button):
-        flt = conf.filters[0][2]
+        flt = conf.vs[0][2]
 
         f = self.first_spin.get_value_as_int()
         l = self.last_spin.get_value_as_int()
 
         flt['first'] = f
         flt['last'] = l
-
-    def on_depth_changed(self, spin):
-        if spin.get_value_as_int() == 16:
-            self.dither_cbtext.set_sensitive(False)
-        else:
-            self.dither_cbtext.set_sensitive(True)
 
 class AboutDialog(Gtk.AboutDialog):
 
@@ -3250,9 +3334,6 @@ conf = Config()
 
 win = MainWindow()
 win.connect('delete-event', Gtk.main_quit)
-
-sccr_win = ScriptCreatorWindow()
-ched_win = ChapterEditorWindow()
 
 vs_dlg = VapourSynthDialog(win)
 vs_dlg.hide()
