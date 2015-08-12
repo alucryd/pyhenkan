@@ -25,6 +25,7 @@ setup(
     install_requires = [
         'lxml',
         'pygobject',
+        'pymediainfo',
         'setuptools',
     ],
     package_data = {'': ['glade/*.glade']},
