@@ -6,6 +6,7 @@ from lxml import etree
 from random import randrange
 
 class Chapters:
+
     def __init__(self, ordered=False, frame=False, fpsnum=24000, fpsden=1001):
         self.ordered = ordered
         self.frame = frame

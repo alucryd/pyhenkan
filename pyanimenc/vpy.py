@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-def vpy(source, filters):
+import pyanimenc.conf as conf
+
+def vpy(source):
     s = []
     s.append('import vapoursynth as vs')
     s.append('core = vs.get_core()')
-    for f in filters:
+    for f in conf.filters:
         line = 'clip = core.'
         args = ['clip']
         if f[0] == 'Source':
@@ -29,6 +31,9 @@ def vpy(source, filters):
         elif f[0] == 'Deband':
             if f[1] == 'f3kdb':
                 line = line + '.'.join([f[1], f[0]])
+        elif f[0] == 'Misc':
+            if f[1] == 'Trim':
+                line = line + 'std.' + f[1]
         line = line + '({})'
         if f[2]:
             args = args + ['='.join([key, str(f[2][key])]) for key in f[2]]

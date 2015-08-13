@@ -6,10 +6,9 @@ from gi.repository import Gtk
 class FilterDialog(Gtk.Dialog):
 
     def __init__(self, parent, flt, i):
-        Gtk.Dialog.__init__(self, flt + ' settings', parent, 0)
+        Gtk.Dialog.__init__(self, flt + ' settings', parent, 0,
+                            use_header_bar=True)
         self.set_default_size(240, 0)
-
-        button = self.add_button('_OK', Gtk.ResponseType.OK)
 
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(6)
@@ -21,34 +20,34 @@ class FilterDialog(Gtk.Dialog):
 
         if flt == 'Source':
             self._source()
-            button.connect('clicked', self._update_source)
+            self.connect('delete-event', self._update_source)
         elif flt == 'CropAbs':
             self._crop(True, i)
-            button.connect('clicked', self._update_crop, True, i)
+            self.connect('delete-event', self._update_crop, True, i)
         elif flt == 'CropRel':
             self._crop(False, i)
-            button.connect('clicked', self._update_crop, False, i)
+            self.connect('delete-event', self._update_crop, False, i)
         elif flt == 'Resize':
             self._resize(i)
-            button.connect('clicked', self._update_resize, i)
+            self.connect('delete-event', self._update_resize, i)
         elif flt == 'FluxSmoothT':
             self._fsmooth(False, i)
-            button.connect('clicked', self._update_fsmooth, False, i)
+            self.connect('delete-event', self._update_fsmooth, False, i)
         elif flt == 'FluxSmoothST':
             self._fsmooth(True, i)
-            button.connect('clicked', self._update_fsmooth, True, i)
+            self.connect('delete-event', self._update_fsmooth, True, i)
         elif flt == 'RemoveGrain':
             self._rgvs(i)
-            button.connect('clicked', self._update_rgvs, i)
+            self.connect('delete-event', self._update_rgvs, i)
         elif flt == 'TemporalSoften':
             self._tsoft(i)
-            button.connect('clicked', self._update_tsoft, i)
+            self.connect('delete-event', self._update_tsoft, i)
         elif flt == 'f3kdb':
             self._f3kdb(i)
-            button.connect('clicked', self._update_f3kdb, i)
+            self.connect('delete-event', self._update_f3kdb, i)
         elif flt == 'Trim':
             self._trim(i)
-            button.connect('clicked', self._update_trim, i)
+            self.connect('delete-event', self._update_trim, i)
 
         self.show_all()
 
@@ -70,7 +69,7 @@ class FilterDialog(Gtk.Dialog):
         self.fpsden_spin.set_numeric(True)
         self.fpsden_spin.set_property('hexpand', True)
 
-        flt = conf.vs[0][2]
+        flt = conf.filters[0][2]
         self.fpsnum_spin.set_value(flt.get('fpsnum', 0))
         self.fpsden_spin.set_value(flt.get('fpsden', 1))
 
@@ -79,8 +78,8 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(fpsden_label, 0, 1, 1, 1)
         self.grid.attach(self.fpsden_spin, 1, 1, 1, 1)
 
-    def _update_source(self, button):
-        flt = conf.vs[0][2]
+    def _update_source(self, widget, event):
+        flt = conf.filters[0][2]
 
         n = self.fpsnum_spin.get_value_as_int()
         d = self.fpsden_spin.get_value_as_int()
@@ -88,6 +87,8 @@ class FilterDialog(Gtk.Dialog):
         if n != 0 or d != 1:
             flt['fpsnum'] = n
             flt['fpsden'] = d
+            conf.video['fpsnum'] = n
+            conf.video['fpsden'] = d
 
     def _crop(self, absolute, i):
         left_adj = Gtk.Adjustment(0, 0, 3840, 1, 10)
@@ -139,7 +140,7 @@ class FilterDialog(Gtk.Dialog):
         self.height_spin.set_property('hexpand', True)
         self.height_spin.set_sensitive(absolute)
 
-        flt = conf.vs[i][2]
+        flt = conf.filters[i][2]
         self.left_spin.set_value(flt.get('left', 0))
         self.right_spin.set_value(flt.get('right', 0))
         self.top_spin.set_value(flt.get('top', 0))
@@ -160,8 +161,8 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(height_label, 0, 5, 1, 1)
         self.grid.attach(self.height_spin, 1, 5, 1, 1)
 
-    def _update_crop(self, button, absolute, i):
-        flt = conf.vs[i][2]
+    def _update_crop(self, widget, event, absolute, i):
+        flt = conf.filters[i][2]
 
         l = self.left_spin.get_value_as_int()
         r = self.right_spin.get_value_as_int()
@@ -218,9 +219,15 @@ class FilterDialog(Gtk.Dialog):
         for f in formats:
             self.format_cbtext.append_text(f)
 
-        flt = conf.vs[i][2]
-        self.width_spin.set_value(flt.get('width', 0))
-        self.height_spin.set_value(flt.get('height', 0))
+        flt = conf.filters[i][2]
+        w = flt.get('width', 0)
+        if not w:
+            w = conf.video['width']
+        h = flt.get('height', 0)
+        if not h:
+            h = conf.video['height']
+        self.width_spin.set_value(w)
+        self.height_spin.set_value(h)
         f = flt.get('format', '')
         if f:
             self.format_check.set_active(True)
@@ -239,8 +246,8 @@ class FilterDialog(Gtk.Dialog):
 
         self.format_check.connect('toggled', self.on_format_toggled)
 
-    def _update_resize(self, button, i):
-        flt = conf.vs[i][2]
+    def _update_resize(self, widget, event, i):
+        flt = conf.filters[i][2]
 
         w = self.width_spin.get_value_as_int()
         h = self.height_spin.get_value_as_int()
@@ -287,7 +294,7 @@ class FilterDialog(Gtk.Dialog):
         self.v_check.set_label('V')
         self.v_check.set_active(True)
 
-        flt = conf.vs[i][2]
+        flt = conf.filters[i][2]
         self.tt_spin.set_value(flt.get('temporal_threshold', 7))
         self.st_spin.set_value(flt.get('spatial_threshold', 7))
         p = flt.get('planes', [0, 1, 2])
@@ -307,8 +314,8 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(self.u_check, 2, 2, 1, 1)
         self.grid.attach(self.v_check, 3, 2, 1, 1)
 
-    def _update_fsmooth(self, button, spatial, i):
-        flt = conf.vs[i][2]
+    def _update_fsmooth(self, widget, event, spatial, i):
+        flt = conf.filters[i][2]
 
         tt = self.tt_spin.get_value_as_int()
         st = self.st_spin.get_value_as_int()
@@ -365,7 +372,7 @@ class FilterDialog(Gtk.Dialog):
         self.modeu_check = Gtk.CheckButton()
         self.modev_check = Gtk.CheckButton()
 
-        flt = conf.vs[i][2]
+        flt = conf.filters[i][2]
         m = flt.get('mode', [2])
         self.mode_spin.set_value(m[0])
         if len(m) > 1:
@@ -389,8 +396,8 @@ class FilterDialog(Gtk.Dialog):
         self.modeu_check.connect('toggled', self.on_modeu_toggled)
         self.modev_check.connect('toggled', self.on_modev_toggled)
 
-    def _update_rgvs(self, button, i):
-        flt = conf.vs[i][2]
+    def _update_rgvs(self, widget, event, i):
+        flt = conf.filters[i][2]
 
         m = self.mode_spin.get_value_as_int()
         su = self.modeu_check.get_active()
@@ -446,7 +453,7 @@ class FilterDialog(Gtk.Dialog):
         self.sc_spin.set_adjustment(sc_adj)
         self.sc_spin.set_property('hexpand', True)
 
-        flt = conf.vs[i][2]
+        flt = conf.filters[i][2]
         self.rad_spin.set_value(flt.get('radius', 4))
         self.lt_spin.set_value(flt.get('luma_threshold', 4))
         self.ct_spin.set_value(flt.get('chroma_threshold', 4))
@@ -461,8 +468,8 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(sc_label, 0, 3, 1, 1)
         self.grid.attach(self.sc_spin, 1, 3, 1, 1)
 
-    def _update_tsoft(self, button, i):
-        flt = conf.vs[i][2]
+    def _update_tsoft(self, widget, event, i):
+        flt = conf.filters[i][2]
 
         rad = self.rad_spin.get_value_as_int()
         lt = self.lt_spin.get_value_as_int()
@@ -556,7 +563,7 @@ class FilterDialog(Gtk.Dialog):
         self.blur_check = Gtk.CheckButton()
         self.blur_check.set_active(False)
 
-        flt = conf.vs[i][2]
+        flt = conf.filters[i][2]
         self.y_spin.set_value(flt.get('y', 64))
         self.cb_spin.set_value(flt.get('cb', 64))
         self.cr_spin.set_value(flt.get('cr', 64))
@@ -591,8 +598,8 @@ class FilterDialog(Gtk.Dialog):
 
         self.depth_spin.connect('changed', self.on_depth_changed)
 
-    def _update_f3kdb(self, button, i):
-        flt = conf.vs[i][2]
+    def _update_f3kdb(self, widget, event, i):
+        flt = conf.filters[i][2]
 
         y = self.y_spin.get_value_as_int()
         cb = self.cb_spin.get_value_as_int()
@@ -662,7 +669,7 @@ class FilterDialog(Gtk.Dialog):
         else:
             self.dither_cbtext.set_sensitive(True)
 
-    def _trim(self):
+    def _trim(self, i):
         first_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
         last_adj = Gtk.Adjustment(0, 0, 1000000, 1, 100)
 
@@ -672,15 +679,15 @@ class FilterDialog(Gtk.Dialog):
         last_label.set_halign(Gtk.Align.START)
 
         self.first_spin = Gtk.SpinButton()
-        self.first_spin.set_adjustment(fpsnum_adj)
+        self.first_spin.set_adjustment(first_adj)
         self.first_spin.set_numeric(True)
         self.first_spin.set_property('hexpand', True)
         self.last_spin = Gtk.SpinButton()
-        self.last_spin.set_adjustment(fpsden_adj)
+        self.last_spin.set_adjustment(last_adj)
         self.last_spin.set_numeric(True)
         self.last_spin.set_property('hexpand', True)
 
-        flt = conf.vs[0][2]
+        flt = conf.filters[i][2]
         self.first_spin.set_value(flt.get('first', 0))
         self.last_spin.set_value(flt.get('last', 0))
 
@@ -689,12 +696,14 @@ class FilterDialog(Gtk.Dialog):
         self.grid.attach(last_label, 0, 1, 1, 1)
         self.grid.attach(self.last_spin, 1, 1, 1, 1)
 
-    def _update_trim(self, button):
-        flt = conf.vs[0][2]
+    def _update_trim(self, widget, event, i):
+        flt = conf.filters[i][2]
 
         f = self.first_spin.get_value_as_int()
         l = self.last_spin.get_value_as_int()
 
         flt['first'] = f
         flt['last'] = l
+        conf.trim = [f, l]
 
+# vim: ts=4 sw=4 et:

@@ -33,9 +33,9 @@ class VapourSynthDialog(Gtk.Dialog):
         grid.set_row_spacing(6)
         grid.set_property('margin', 6)
 
-        for i in range(len(conf.vs)):
-            active_type = conf.vs[i][0]
-            active_name = conf.vs[i][1]
+        for i in range(len(conf.filters)):
+            active_type = conf.filters[i][0]
+            active_name = conf.filters[i][1]
 
             type_cbtext = Gtk.ComboBoxText()
             type_cbtext.set_property('hexpand', True)
@@ -92,7 +92,7 @@ class VapourSynthDialog(Gtk.Dialog):
             elif i == 1:
                 up_button.set_sensitive(False)
 
-            if i == len(conf.vs) - 1:
+            if i == len(conf.filters) - 1:
                 down_button.set_sensitive(False)
 
             if i > 0:
@@ -119,36 +119,36 @@ class VapourSynthDialog(Gtk.Dialog):
         self.show_all()
 
     def on_add_clicked(self, button):
-        conf.vs.append(['', '', None])
+        conf.filters.append(['', '', None])
 
         self._update_filters()
 
     def on_remove_clicked(self, button, i):
-        conf.vs.pop(i)
+        conf.filters.pop(i)
 
         self._update_filters()
 
     def on_move_clicked(self, button, direction, i):
         if direction == 'up':
-            conf.vs[i - 1:i + 1] = [conf.vs[i],
-                                       conf.vs[i - 1]]
+            conf.filters[i - 1:i + 1] = [conf.filters[i],
+                                         conf.filters[i - 1]]
         elif direction == 'down':
-            conf.vs[i:i + 2] = [conf.vs[i + 1],
-                                   conf.vs[i]]
+            conf.filters[i:i + 2] = [conf.filters[i + 1],
+                                     conf.filters[i]]
         self._update_filters()
 
     def on_type_changed(self, combo, i):
         t = combo.get_active_text()
-        conf.vs[i][0] = t
-        conf.vs[i][1] = ''
-        conf.vs[i][2] = None
+        conf.filters[i][0] = t
+        conf.filters[i][1] = ''
+        conf.filters[i][2] = None
 
         self._update_filters()
 
     def on_name_changed(self, combo, t, i):
         n = combo.get_active_text()
-        conf.vs[i][0] = t
-        conf.vs[i][1] = n
+        conf.filters[i][0] = t
+        conf.filters[i][1] = n
         args = OrderedDict()
         if t == 'Resize':
             args['width'] = 0
@@ -158,7 +158,7 @@ class VapourSynthDialog(Gtk.Dialog):
         elif n == 'Trim':
             args['first'] = 0
             args['last'] = 0
-        conf.vs[i][2] = args
+        conf.filters[i][2] = args
 
         self._update_filters()
 

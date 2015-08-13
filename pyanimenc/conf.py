@@ -76,19 +76,26 @@ sflt = Gtk.FileFilter()
 sflt.set_name('VapourSynth scripts')
 sflt.add_pattern('*.vpy')
 
+vext = ['3gp', 'avi', 'flv', 'mkv', 'mp4', 'ogm', 'webm']
 vflt = Gtk.FileFilter()
 vflt.set_name('Video files')
-for p in ('*.avi', '*.flv', '*.mkv', '*.mp4', '*.ogm'):
-    vflt.add_pattern(p)
+for ext in vext:
+    vflt.add_pattern('*.' + ext)
 
+aext = ['aac', 'ac3', 'dts', 'flac', 'm4a', 'mka', 'mp3', 'mpc', 'ogg', 'opus',
+        'thd', 'wav', 'wv']
 aflt = Gtk.FileFilter()
 aflt.set_name('Audio files')
-for p in ('*.aac', '*.ac3', '*.dts', '*.flac', '*.m4a', '*.mka', '*.mp3',
-          '*.mpc', '*.ogg', '*.opus', '*.thd', '*.wav', '*.wv'):
-    aflt.add_pattern(p)
+for ext in aext:
+    aflt.add_pattern('*.' + ext)
 
 #--Default Settings--#
-vs = [['Source', 'FFMpegSource', OrderedDict()]]
+filters = [['Source', 'FFMpegSource', OrderedDict()]]
+
+video = {'width':  0,
+         'height': 0,
+         'fpsnum':  0,
+         'fpsden':  1}
 
 x264 = {'quality': 18,
         'preset': 'medium',
@@ -132,6 +139,8 @@ vorbis = {'mode': 'VBR',
           'bitrate': 160,
           'quality': 5,
           'container': 'ogg'}
+
+trim = [0, 0]
 
 def find_enc(x, y=''):
     path = os.environ['PATH'].split(':')

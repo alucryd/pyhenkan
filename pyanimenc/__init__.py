@@ -26,6 +26,8 @@ class MainWindow(Gtk.Window):
         Gtk.Window.__init__(self, title='pyanimenc')
         self.set_default_size(800, 600)
 
+        self.wdir = os.environ['HOME']
+
         #--Header Bar--#
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
@@ -81,171 +83,119 @@ class MainWindow(Gtk.Window):
 
         #---Input---#
         input_grid = Gtk.Grid()
+        input_grid.set_column_homogeneous(True)
         input_grid.set_column_spacing(6)
         input_grid.set_row_spacing(6)
 
         conf_icon = Gio.ThemedIcon(name='applications-system-symbolic')
         queue_icon = Gio.ThemedIcon(name='list-add-symbolic')
 
-        manual_label = Gtk.Label()
-        manual_label.set_markup('<b>Manual</b>')
-        manual_label.set_halign(Gtk.Align.CENTER)
-        vid_label = Gtk.Label('Video')
-        vid_label.set_angle(90)
-        aud_label = Gtk.Label('Audio')
-        aud_label.set_angle(90)
+        in_file_label = Gtk.Label('File')
+        in_file_label.set_property('hexpand', True)
+        in_folder_label = Gtk.Label('Folder')
+        in_folder_label.set_property('hexpand', True)
+        vid_label = Gtk.Label('Video Codec')
+        vid_label.set_property('hexpand', True)
+        aud_label = Gtk.Label('Audio Codec')
+        aud_label.set_property('hexpand', True)
 
-        self.vsrc_fcbutton = Gtk.FileChooserButton()
-        self.vsrc_fcbutton.set_property('hexpand', True)
-        self.vsrc_fcbutton.add_filter(conf.sflt)
-        self.vsrc_fcbutton.connect('file-set', self.on_vsrc_file_set)
-        self.asrc_fcbutton = Gtk.FileChooserButton()
-        self.asrc_fcbutton.set_property('hexpand', True)
-        self.asrc_fcbutton.add_filter(conf.aflt)
-        self.asrc_fcbutton.connect('file-set', self.on_asrc_file_set)
+        hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+
+        in_file_button = Gtk.Button('Select File')
+        in_file_button.set_property('hexpand', True)
+        in_file_button.connect('clicked', self.on_input_clicked, 'file')
+
+        in_folder_button = Gtk.Button('Select Folder')
+        in_folder_button.set_property('hexpand', True)
+        in_folder_button.connect('clicked', self.on_input_clicked, 'folder')
 
         self.venc_cbtext = Gtk.ComboBoxText()
         self.venc_cbtext.set_property('hexpand', True)
         self.aenc_cbtext = Gtk.ComboBoxText()
         self.aenc_cbtext.set_property('hexpand', True)
 
-        vqueue_image = Gtk.Image.new_from_gicon(queue_icon,
-                                                Gtk.IconSize.BUTTON)
-        self.vqueue_button = Gtk.Button()
-        self.vqueue_button.set_image(vqueue_image)
-        self.vqueue_button.set_sensitive(False)
-        self.vqueue_button.connect('clicked', self.on_vqueue_clicked)
+        iconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
+        iconf_button = Gtk.Button()
+        iconf_button.set_image(iconf_image)
+        iconf_button.set_property('hexpand', True)
+        iconf_button.connect('clicked', self.on_conf_clicked, 'input')
         vconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
-        self.vconf_button = Gtk.Button()
-        self.vconf_button.set_image(vconf_image)
-        self.vconf_button.connect('clicked', self.on_conf_clicked, 'manual',
-                                  'video')
-        aqueue_image = Gtk.Image.new_from_gicon(queue_icon,
-                                                Gtk.IconSize.BUTTON)
-        self.aqueue_button = Gtk.Button()
-        self.aqueue_button.set_image(aqueue_image)
-        self.aqueue_button.set_sensitive(False)
-        self.aqueue_button.connect('clicked', self.on_aqueue_clicked)
+        vconf_button = Gtk.Button()
+        vconf_button.set_image(vconf_image)
+        vconf_button.set_property('hexpand', True)
+        vconf_button.connect('clicked', self.on_conf_clicked, 'video')
         aconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
-        self.aconf_button = Gtk.Button()
-        self.aconf_button.set_image(aconf_image)
-        self.aconf_button.connect('clicked', self.on_conf_clicked, 'manual',
-                                  'audio')
+        aconf_button = Gtk.Button()
+        aconf_button.set_image(aconf_image)
+        aconf_button.set_property('hexpand', True)
+        aconf_button.connect('clicked', self.on_conf_clicked, 'audio')
 
-        vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        queue_image = Gtk.Image.new_from_gicon(queue_icon, Gtk.IconSize.BUTTON)
+        self.queue_button = Gtk.Button()
+        self.queue_button.set_property('hexpand', True)
+        self.queue_button.set_image(queue_image)
+        self.queue_button.set_sensitive(False)
+        self.queue_button.connect('clicked', self.on_queue_clicked)
 
-        auto_label = Gtk.Label()
-        auto_label.set_markup('<b>One-Click</b>')
-        auto_label.set_halign(Gtk.Align.CENTER)
+        input_grid.attach(in_file_button, 0, 0, 1, 1)
+        input_grid.attach(in_folder_button, 1, 0, 1, 1)
+        input_grid.attach(iconf_button, 0, 1, 2, 1)
+        input_grid.attach(vid_label, 0, 2, 1, 1)
+        input_grid.attach(aud_label, 1, 2, 1, 1)
+        input_grid.attach_next_to(self.venc_cbtext, vid_label,
+                                  Gtk.PositionType.BOTTOM, 1, 1)
+        input_grid.attach_next_to(vconf_button, self.venc_cbtext,
+                                  Gtk.PositionType.BOTTOM, 1, 1)
+        input_grid.attach_next_to(self.aenc_cbtext, aud_label,
+                                  Gtk.PositionType.BOTTOM, 1, 1)
+        input_grid.attach_next_to(aconf_button, self.aenc_cbtext,
+                                  Gtk.PositionType.BOTTOM, 1, 1)
+        input_grid.attach(self.queue_button, 0, 5, 2, 1)
+        input_grid.attach(hsep, 0, 6, 2, 1)
 
-        self.auto_src_fcbutton = Gtk.FileChooserButton()
-        self.auto_src_fcbutton.set_action(Gtk.FileChooserAction.SELECT_FOLDER)
-        self.auto_src_fcbutton.set_property('hexpand', True)
-        self.auto_src_fcbutton.connect('file-set', self.on_auto_src_file_set)
-
-        self.auto_venc_cbtext = Gtk.ComboBoxText()
-        self.auto_venc_cbtext.set_property('hexpand', True)
-        self.auto_aenc_cbtext = Gtk.ComboBoxText()
-        self.auto_aenc_cbtext.set_property('hexpand', True)
-
-        auto_sconf_image = Gtk.Image.new_from_gicon(conf_icon,
-                                                    Gtk.IconSize.BUTTON)
-        auto_sconf_button = Gtk.Button()
-        auto_sconf_button.set_image(auto_sconf_image)
-        auto_sconf_button.connect('clicked', self.on_auto_sconf_clicked)
-        auto_vconf_image = Gtk.Image.new_from_gicon(conf_icon,
-                                                    Gtk.IconSize.BUTTON)
-        auto_vconf_button = Gtk.Button()
-        auto_vconf_button.set_image(auto_vconf_image)
-        auto_vconf_button.connect('clicked', self.on_conf_clicked, 'auto',
-                                  'video')
-        auto_aconf_image = Gtk.Image.new_from_gicon(conf_icon,
-                                                    Gtk.IconSize.BUTTON)
-        auto_aconf_button = Gtk.Button()
-        auto_aconf_button.set_image(auto_aconf_image)
-        auto_aconf_button.connect('clicked', self.on_conf_clicked, 'auto',
-                                  'audio')
-
-        auto_queue_image = Gtk.Image.new_from_gicon(queue_icon,
-                                                    Gtk.IconSize.BUTTON)
-        self.auto_queue_button = Gtk.Button()
-        self.auto_queue_button.set_image(auto_queue_image)
-        self.auto_queue_button.set_sensitive(False)
-        self.auto_queue_button.connect('clicked', self.on_auto_queue_clicked)
-
-        input_grid.attach(manual_label, 0, 0, 3, 1)
-        input_grid.attach(vid_label, 0, 1, 1, 2)
-        input_grid.attach(self.vsrc_fcbutton, 1, 1, 1, 1)
-        input_grid.attach_next_to(self.vqueue_button, self.vsrc_fcbutton,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(self.venc_cbtext, 1, 2, 1, 1)
-        input_grid.attach_next_to(self.vconf_button, self.venc_cbtext,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(aud_label, 0, 3, 1, 2)
-        input_grid.attach(self.asrc_fcbutton, 1, 3, 1, 1)
-        input_grid.attach_next_to(self.aqueue_button, self.asrc_fcbutton,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(self.aenc_cbtext, 1, 4, 1, 1)
-        input_grid.attach_next_to(self.aconf_button, self.aenc_cbtext,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(vsep, 3, 0, 1, 5)
-        input_grid.attach(auto_label, 4, 0, 2 ,1)
-        input_grid.attach(self.auto_src_fcbutton, 4, 1, 1, 1)
-        input_grid.attach_next_to(auto_sconf_button, self.auto_src_fcbutton,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(self.auto_venc_cbtext, 4, 2, 1, 1)
-        input_grid.attach_next_to(auto_vconf_button, self.auto_venc_cbtext,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(self.auto_aenc_cbtext, 4, 3, 1, 1)
-        input_grid.attach_next_to(auto_aconf_button, self.auto_aenc_cbtext,
-                                  Gtk.PositionType.RIGHT, 1, 1)
-        input_grid.attach(self.auto_queue_button, 4, 4, 2, 1)
-        input_grid.attach(hsep, 0, 5, 6, 1)
-
-        auto_scrwin = Gtk.ScrolledWindow()
-        auto_scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
+        scrwin = Gtk.ScrolledWindow()
+        scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
 
         #(enable, enable_edit, encode, encode_edit, type, codec, name,
         # language)
         self.tracks = Gtk.ListStore(bool, bool, bool, bool, str, str, str, str)
 
-        auto_tview = Gtk.TreeView(self.tracks)
-        auto_scrwin.add(auto_tview)
+        tview = Gtk.TreeView(self.tracks)
+        scrwin.add(tview)
 
         enable_crtoggle = Gtk.CellRendererToggle()
         enable_tvcolumn = Gtk.TreeViewColumn('Enable', enable_crtoggle,
                                              active=0, activatable=1)
         enable_crtoggle.connect('toggled', self.on_cell_toggled, 0)
-        auto_tview.append_column(enable_tvcolumn)
+        tview.append_column(enable_tvcolumn)
 
         encode_crtoggle = Gtk.CellRendererToggle()
         encode_tvcolumn = Gtk.TreeViewColumn('Encode', encode_crtoggle,
                                              active=2, activatable=3,
                                              sensitive=0)
         encode_crtoggle.connect('toggled', self.on_cell_toggled, 2)
-        auto_tview.append_column(encode_tvcolumn)
+        tview.append_column(encode_tvcolumn)
 
         codec_crtext = Gtk.CellRendererText()
         codec_tvcolumn = Gtk.TreeViewColumn('Codec', codec_crtext, text=5,
                                             sensitive=0)
-        auto_tview.append_column(codec_tvcolumn)
+        tview.append_column(codec_tvcolumn)
 
         title_crtext = Gtk.CellRendererText()
         title_tvcolumn = Gtk.TreeViewColumn('Title', title_crtext, text=6,
                                             editable=0, sensitive=0)
         title_tvcolumn.set_expand(True)
         title_crtext.connect('edited', self.on_cell_edited, 6)
-        auto_tview.append_column(title_tvcolumn)
+        tview.append_column(title_tvcolumn)
 
         lang_crtext = Gtk.CellRendererText()
         lang_tvcolumn = Gtk.TreeViewColumn('Language', lang_crtext, text=7,
                                            editable=0, sensitive=0)
         lang_crtext.connect('edited', self.on_cell_edited, 7)
-        auto_tview.append_column(lang_tvcolumn)
+        tview.append_column(lang_tvcolumn)
 
         input_box.pack_start(input_grid, False, False, 0)
-        input_box.pack_start(auto_scrwin, True, True, 0)
+        input_box.pack_start(scrwin, True, True, 0)
 
         #--Worker--#
         self.worker = ThreadPoolExecutor(max_workers=1)
@@ -268,9 +218,9 @@ class MainWindow(Gtk.Window):
         qexp_tvcolumn = Gtk.TreeViewColumn('', qexp_crpixbuf)
         queue_tview.append_column(qexp_tvcolumn)
 
-        qsrc_crtext = Gtk.CellRendererText()
-        qsrc_tvcolumn = Gtk.TreeViewColumn('Source', qsrc_crtext, text=1)
-        queue_tview.append_column(qsrc_tvcolumn)
+        qin_crtext = Gtk.CellRendererText()
+        qin_tvcolumn = Gtk.TreeViewColumn('Input', qin_crtext, text=1)
+        queue_tview.append_column(qin_tvcolumn)
 
         qcod_crtext = Gtk.CellRendererText()
         qcod_tvcolumn = Gtk.TreeViewColumn('Codec', qcod_crtext, text=2)
@@ -317,19 +267,15 @@ class MainWindow(Gtk.Window):
         for x in conf.VENCS:
             self.venc_cbtext.append_text(x)
             self.venc_cbtext.set_active(0)
-            self.auto_venc_cbtext.append_text(x)
-            self.auto_venc_cbtext.set_active(0)
         for x in conf.AENCS:
             self.aenc_cbtext.append_text(x)
             self.aenc_cbtext.set_active(0)
-            self.auto_aenc_cbtext.append_text(x)
-            self.auto_aenc_cbtext.set_active(0)
 
         self.about_dlg = AboutDialog(self)
         self.about_dlg.set_transient_for(self)
 
     def on_sccr_clicked(self, button):
-        win = ScriptCreatorWindow(conf.vs)
+        win = ScriptCreatorWindow()
         win.show_all()
 
     def on_ched_clicked(self, button):
@@ -350,141 +296,53 @@ class MainWindow(Gtk.Window):
             t = t[:3]
         self.tracks[path][i] = t
 
-    def on_vsrc_file_set(self, button):
-        self.vqueue_button.set_sensitive(True)
+    def on_input_clicked(self, button, m):
+        if m == 'file':
+            dlg = Gtk.FileChooserDialog('Open File', self,
+                                        Gtk.FileChooserAction.OPEN,
+                                        ('Cancel',
+                                         Gtk.ResponseType.CANCEL,
+                                         'Open', Gtk.ResponseType.OK))
+            dlg.add_filter(conf.vflt)
+        elif m == 'folder':
+            dlg = Gtk.FileChooserDialog('Open Folder', self,
+                                        Gtk.FileChooserAction.SELECT_FOLDER,
+                                        ('Cancel',
+                                         Gtk.ResponseType.CANCEL,
+                                         'Open', Gtk.ResponseType.OK))
+        dlg.set_current_folder(self.wdir)
 
-    def on_vqueue_clicked(self, button):
-        self.worker.submit(self._wait)
-        k = self.venc_cbtext.get_active_text()
-        x = conf.VENCS[k]
-        i = self.vsrc_fcbutton.get_filename()
-        wd, f = os.path.split(i)
-        if not os.path.isdir(wd + '/out'):
-            os.mkdir(wd + '/out')
-        o = wd + '/out/' + os.path.splitext(f)[0]
-        future = self._video_job(x, i, o)
-        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
-        self.worker.submit(self._update_queue)
+        response = dlg.run()
 
-    def _video_job(self, x, i, o):
-        if x[0].startswith('x264'):
-            q = conf.x264['quality']
-            p = conf.x264['preset']
-            t = conf.x264['tune']
-            c = conf.x264['container']
-            a = conf.x264['arguments']
-            future = self.worker.submit(self._x264, i, o, x[0], q, p, t, c, a)
-        elif x[0].startswith('x265'):
-            q = conf.x265['quality']
-            p = conf.x265['preset']
-            t = conf.x265['tune']
-            c = conf.x265['container']
-            a = conf.x265['arguments']
-            future = self.worker.submit(self._x265, i, o, x[0], x[1], q, p, t,
-                                        c, a)
-        return future
+        if response == Gtk.ResponseType.OK:
+            self.files = []
+            self.data = []
+            self.tracks.clear()
 
-    def on_asrc_file_set(self, button):
-        self.aqueue_button.set_sensitive(True)
+            if m == 'file':
+                path = dlg.get_filename()
+                self.wdir, f = os.path.split(path)
+                self.files.append(f)
+            elif m == 'folder':
+                self.wdir = dlg.get_filename()
 
-    def on_aqueue_clicked(self, button):
-        self.worker.submit(self._wait)
-        k = self.aenc_cbtext.get_active_text()
-        x = conf.AENCS[k]
-        i = self.asrc_fcbutton.get_filename()
-        wd, f = os.path.split(i)
-        if not os.path.isdir(wd + '/out'):
-            os.mkdir(wd + '/out')
-        o = wd + '/out/' + os.path.splitext(f)[0]
-        future = self._audio_job(x, i, 0, o)
-        self.queue_tstore.append(None, [future, f, x[0], 'Waiting'])
-        self.worker.submit(self._update_queue)
+                # Keep video files only
+                for f in os.listdir(self.wdir):
+                    if os.path.splitext(f)[1].lstrip('.') in conf.vext:
+                        self.files.append(f)
+                self.files.sort()
 
-    def _audio_job(self, x, i, t, o):
-        r = conf.audio['rate']
-        c = conf.audio['channel']
-        if x[0] == 'faac' or x[1] == 'libfaac':
-            m = conf.faac['mode']
-            b = conf.faac['bitrate']
-            q = conf.faac['quality']
-            co = conf.faac['container']
-            if x[0] == 'faac':
-                future = self.worker.submit(self._faac, i, o, t,
-                                            r, c, m, b, q, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libfaac, i, o, t,
-                                            r, c, m, b, q, co)
-        elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
-            m = conf.fdkaac['mode']
-            b = conf.fdkaac['bitrate']
-            q = conf.fdkaac['quality']
-            co = conf.fdkaac['container']
-            if x[0] == 'fdkaac':
-                future = self.worker.submit(self._fdkaac, i, o, t,
-                                            r, c, m, b, q, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libfdk_aac, i, o, t,
-                                            r, c, m, b, q, co)
-        elif x[0] == 'flac' or x[1] == 'native-flac':
-            cp = conf.flac['compression']
-            co = conf.flac['container']
-            if x[0] == 'flac':
-                future = self.worker.submit(self._flac, i, o, t,
-                                            r, c, cp, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._native_flac, i, o, t,
-                                            r, c, cp, co)
-        elif x[0] == 'lame' or x[1] == 'libmp3lame':
-            m = conf.mp3['mode']
-            b = conf.mp3['bitrate']
-            q = conf.mp3['quality']
-            co = conf.mp3['container']
-            if x[0] == 'lame':
-                future = self.worker.submit(self._lame, i, o, t,
-                                            r, c, m, b, q, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libmp3lame, i, o, t,
-                                            r, c, m, b, q, co)
-        elif x[0] == 'opusenc' or x[1] == 'libopus':
-            m = conf.opus['mode']
-            b = conf.opus['bitrate']
-            co = conf.opus['container']
-            if x[0] == 'opusenc':
-                future = self.worker.submit(self._opusenc, i, o, t,
-                                            r, c, m, b, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libopus, i, o, t,
-                                            r, c, m, b, co)
-        elif x[0] == 'oggenc' or x[1] == 'libvorbis':
-            m = conf.vorbis['mode']
-            b = conf.vorbis['bitrate']
-            q = conf.vorbis['quality']
-            co = conf.vorbis['container']
-            if x[0] == 'oggenc':
-                future = self.worker.submit(self._oggenc, i, o, t,
-                                            r, c, m, b, q, co)
-            elif x[0] == 'ffmpeg':
-                future = self.worker.submit(self._libvorbis, i, o, t,
-                                            r, c, m, b, q, co)
-        return future
+            self._get_tracks()
 
-    def on_auto_src_file_set(self, button):
-        wd = button.get_filename()
-        self.sources = []
-        self.data = []
-        self.tracks.clear()
+            self.queue_button.set_sensitive(True)
 
-        # Keep MKVs only (for now?)
-        for f in os.listdir(wd):
-            if re.search('\.mkv$', f):
-                f = wd + '/' + f
-                self.sources.append(f)
-        self.sources.sort()
+        dlg.destroy()
 
-        # Get source infos
-        for i in range(len(self.sources)):
-            s = self.sources[i]
-            d = MediaInfo.parse(s)
+    def _get_tracks(self):
+        # Get file infos
+        for i in range(len(self.files)):
+            f = self.files[i]
+            d = MediaInfo.parse('/'.join([self.wdir, f]))
             self.data.append(d)
 
         # Pick reference tracks
@@ -496,8 +354,8 @@ class MainWindow(Gtk.Window):
 
         for i in range(1, len(self.data)):
             tracks = self.data[i].tracks
-            o = os.path.basename(self.sources[0])
-            f = os.path.basename(self.sources[i])
+            o = os.path.basename(self.files[0])
+            f = os.path.basename(self.files[i])
 
             if len(tracks) != len(tracks_ref):
                 t = ('{} ({} tracks) and {} ({} tracks) differ from each '
@@ -557,13 +415,28 @@ class MainWindow(Gtk.Window):
             track = tracks_ref[i]
             track_type = track.track_type
             codec = track.codec_family
+            # Sometimes codec_family is not available
+            if not codec:
+                codec = track.codec
             title = track.title
             language = track.other_language
-
+            # other_language is a list, we want the 3 letter code
             if language:
                 language = language[3]
             else:
                 language = 'und'
+
+            if track_type == 'Video':
+                conf.video['width'] = track.width
+                conf.video['height'] = track.height
+                # TODO: add more frame rates
+                if track.frame_rate_mode == 'CFR':
+                    if track.frame_rate == '23.976':
+                        conf.video['fpsnum'] = 24000
+                        conf.video['fpsden'] = 1001
+                    elif track.frame_rate == '29.970':
+                        conf.fpsnum = 30000
+                        conf.fpsden = 1001
 
             #if track_type == 'Audio':
             #channels = track.channel_s
@@ -588,38 +461,31 @@ class MainWindow(Gtk.Window):
             self.tracks.append([enable, enable_edit, encode, encode_edit,
                                      track_type, codec, title, language])
 
-        self.auto_queue_button.set_sensitive(True)
+    def on_queue_clicked(self, button):
+        if not os.path.isdir(self.wdir + '/out'):
+            os.mkdir(self.wdir + '/out')
 
-    def on_auto_queue_clicked(self, button):
-        wd = self.auto_src_fcbutton.get_filename()
-        if not os.path.isdir(wd + '/out'):
-            os.mkdir(wd + '/out')
-
-        for i in range(len(self.sources)):
-            self.worker.submit(self._wait)
+        for i in range(len(self.files)):
             vtrack = []
             atracks = []
             stracks = []
-            source = self.sources[i]
-            filename = os.path.basename(source)
-            destination = wd + '/out/' + filename
-            basename, extension = os.path.splitext(filename)
-            extension = extension.strip('.')
-            job = self.queue_tstore.append(None, [None, filename, '',
-                                                  'Waiting'])
+
+            file = self.files[i]
+            input = '/'.join([self.wdir, file])
+            file_name = os.path.splitext(file)[0]
+            out_name = '/out/'.join([self.wdir, file_name])
 
             # Preserve UID for Matroska segment linking
-            if extension == 'mkv':
+            if file.endswith('.mkv'):
                 uid = self.data[i].tracks[0].other_unique_id[0]
                 uid = re.findall('0x[^)]*', uid)[0].lstrip('0x')
             else:
                 uid = ''
 
+            self.worker.submit(self._wait)
+            job = self.queue_tstore.append(None, [None, file, '', 'Waiting'])
+
             for j in range(len(self.tracks)):
-                #(enable, enable_edit, encode, encode_edit, type, codec, title,
-                # language)
-                # {v,a,s}track = [id, filename, extension, name, language,
-                #                 encode]
                 track = self.tracks[j]
                 enable = track[0]
                 encode = track[2]
@@ -627,101 +493,163 @@ class MainWindow(Gtk.Window):
                 codec = track[5]
                 title = track[6]
                 language = track[7]
+
                 if track_type == 'Video' and enable:
                     if encode:
-                        f = wd + '/out/' + basename
+                        # Encode video
+                        k = self.venc_cbtext.get_active_text()
+                        x = conf.VENCS[k]
+
+                        in_vpy = out_name + '.vpy'
+                        self.worker.submit(self._vpy, input, in_vpy)
+
+                        if x[0].startswith('x264'):
+                            ext = conf.x264['container']
+                            output = '.'.join([out_name, ext])
+                            future = self.worker.submit(self._x264,
+                                                        in_vpy,
+                                                        output,
+                                                        x[0])
+                        elif x[0].startswith('x265'):
+                            ext = conf.x265['container']
+                            output = '.'.join([out_name, ext])
+                            future = self.worker.submit(self._x265,
+                                                        in_vpy,
+                                                        output,
+                                                        x[0],
+                                                        x[1])
+
+                        self.queue_tstore.append(job, [future,
+                                                       '',
+                                                       x[0],
+                                                       'Waiting'])
+
+                        vtrack = [0, output, title, language]
                     else:
-                        f = wd + '/' + basename
-                    vtrack = [j, f, extension, title, language, encode]
-                if track_type == 'Audio' and enable:
+                        vtrack = [j, input, title, language]
+
+                elif track_type == 'Audio' and enable:
                     if encode:
-                        f = wd + '/out/' + basename + '_' + str(j)
+                        # Encode audio
+                        k = self.aenc_cbtext.get_active_text()
+                        x = conf.AENCS[k]
+                        o = '_'.join([out_name, str(j)])
+
+                        if x[0] == 'faac' or x[1] == 'libfaac':
+                            ext = conf.faac['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'faac':
+                                future = self.worker.submit(self._faac,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._libfaac,
+                                                            input,
+                                                            output,
+                                                            j)
+                        elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
+                            ext = conf.fdkaac['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'fdkaac':
+                                future = self.worker.submit(self._fdkaac,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._libfdk_aac,
+                                                            input,
+                                                            output,
+                                                            j)
+                        elif x[0] == 'flac' or x[1] == 'native-flac':
+                            ext = conf.flac['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'flac':
+                                future = self.worker.submit(self._flac,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._native_flac,
+                                                            input,
+                                                            output,
+                                                            j)
+                        elif x[0] == 'lame' or x[1] == 'libmp3lame':
+                            ext = conf.mp3['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'lame':
+                                future = self.worker.submit(self._lame,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._libmp3lame,
+                                                            input,
+                                                            output,
+                                                            j)
+                        elif x[0] == 'opusenc' or x[1] == 'libopus':
+                            ext = conf.opus['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'opusenc':
+                                future = self.worker.submit(self._opusenc,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._libopus,
+                                                            input,
+                                                            output,
+                                                            j)
+                        elif x[0] == 'oggenc' or x[1] == 'libvorbis':
+                            ext = conf.vorbis['container']
+                            output = '.'.join([o, ext])
+                            if x[0] == 'oggenc':
+                                future = self.worker.submit(self._oggenc,
+                                                            input,
+                                                            output,
+                                                            j)
+                            elif x[0] == 'ffmpeg':
+                                future = self.worker.submit(self._libvorbis,
+                                                            input,
+                                                            output,
+                                                            j)
+
+                        self.queue_tstore.append(job, [future,
+                                                       '',
+                                                       x[0],
+                                                       'Waiting'])
+
+                        atracks.append([0, output, title, language])
                     else:
-                        f = wd + '/' + basename
-                    atracks.append([j, f, extension, title, language, encode])
-                if track_type == 'Subtitle' and enable:
-                    f = wd + '/' + basename
-                    stracks.append([j, f, extension, name, lang, encode])
+                        atracks.append([j, input, title, language])
 
-            if vtrack[5]:
-                # Create VapourSynth script
-                s = wd + '/out/' + basename + '.vpy'
-
-                self.worker.submit(self._vpy, source, s)
-
-                # Encode video
-                k = self.auto_venc_cbtext.get_active_text()
-                x = conf.VENCS[k]
-                o = vtrack[1]
-
-                if x[0].startswith('x264'):
-                    c = conf.x264['container']
-                elif x[0].startswith('x265'):
-                    c = conf.x265['container']
-                vtrack[2] = c
-
-                future = self._video_job(x, s, o)
-                self.queue_tstore.append(job, [future, '', x[0], 'Waiting'])
-
-            # Encode audio
-            for track in atracks:
-                if track[5]:
-                    k = self.auto_aenc_cbtext.get_active_text()
-                    x = conf.AENCS[k]
-                    t = track[0]
-                    o = track[1]
-
-                    if x[0] == 'faac' or x[1] == 'libfaac':
-                        c = conf.faac['container']
-                    elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
-                        c = conf.fdkaac['container']
-                    elif x[0] == 'flac' or x[1] == 'native-flac':
-                        c = conf.flac['container']
-                    elif x[0] == 'lame' or x[1] == 'libmp3lame':
-                        c = conf.mp3['container']
-                    elif x[0] == 'opusenc' or x[1] == 'libopus':
-                        c = conf.opus['container']
-                    elif x[0] == 'oggenc' or x[1] == 'libvorbis':
-                        c = conf.vorbis['container']
-                    track[2] = c
-
-                    future = self._audio_job(x, source, t, o)
-                    self.queue_tstore.append(job, [future, '', x[0],
-                                             'Waiting'])
+                elif track_type == 'Subtitle' and enable:
+                    stracks.append([j, input, title, language])
 
             # Merge tracks
-            future = self.worker.submit(self._merge, source, destination,
+            output = out_name + '.mkv'
+            future = self.worker.submit(self._merge, input, output,
                                         vtrack, atracks, stracks, uid)
 
             self.queue_tstore.append(job, [future, '', 'merge', 'Waiting'])
 
             # Clean up
-            self.worker.submit(self._clean, wd)
+            self.worker.submit(self._clean, self.wdir)
 
             self.worker.submit(self._update_queue)
 
-    def on_conf_clicked(self, button, m, t):
-        if m == 'manual':
+    def on_conf_clicked(self, button, t):
+        if t == 'input':
+            dlg = VapourSynthDialog(self)
+        else:
             if t == 'video':
                 enc = self.venc_cbtext.get_active_text()
                 enc = conf.VENCS[enc]
             elif t == 'audio':
                 enc = self.aenc_cbtext.get_active_text()
                 enc = conf.AENCS[enc]
-        elif m == 'auto':
-            if t == 'video':
-                enc = self.auto_venc_cbtext.get_active_text()
-                enc = conf.VENCS[enc]
-            elif t == 'audio':
-                enc = self.auto_aenc_cbtext.get_active_text()
-                enc = conf.AENCS[enc]
+            dlg = EncoderDialog(self, enc)
 
-        dlg = EncoderDialog(self, enc)
-        dlg.run()
-        dlg.destroy()
-
-    def on_auto_sconf_clicked(self, button):
-        dlg = VapourSynthDialog(self)
         dlg.run()
         dlg.destroy()
 
@@ -868,17 +796,11 @@ class MainWindow(Gtk.Window):
         print('Merge...')
         self._update_queue()
 
-        if vt[5]:
-            vt[0] = 0
-        for t in at:
-            if t[5]:
-                t[0] = 0
-
         cmd = command.merge(i, o, vt, at, st, uid)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                      universal_newlines=True)
-        self._mkvtoolnix_progress('m')
+        self._mkvtoolnix_progress()
 
     def _clean(self, d):
         print('Clean leftovers...')
@@ -895,7 +817,7 @@ class MainWindow(Gtk.Window):
 
     def _vpy(self, i, o):
         print('Create VapourSynth script...')
-        s = vpy(i, conf.vs)
+        s = vpy(i)
 
         print('Write ' + o)
         with open(o, 'w') as f:
@@ -914,140 +836,137 @@ class MainWindow(Gtk.Window):
                 dur = int(line.split(' ')[1])
         return dur
 
-    def _x264(self, i, o, x, q, p, t, c, a):
+    def _x264(self, i, o, x):
         print('Encode video...')
         self._update_queue()
         dur = self._info(i)
-        cmd = command.x264(i, o, x, q, p, t, c, a)
+        cmd = command.x264(i, o, x)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._video_progress(dur)
 
-    def _x265(self, i, o, x, d, q, p, t, c, a):
+    def _x265(self, i, o, x, d):
         print('Encode video...')
         self._update_queue()
         dur = self._info(i)
-        cmd = command.x265(i, o, x, d, q, p, t, c, a)
+        cmd = command.x265(i, o, x, d)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._video_progress(dur)
 
-    def _faac(self, i, o, t, r, c, m, b, q, co):
+    def _faac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.faac(i, o, t, r, c, m, b, q, co)
+        cmd = command.faac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libfaac(self, i, o, t, r, c, m, b, q, co):
+    def _libfaac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_libfaac(i, o, t, r, c, m, b, q, co)
+        cmd = command.ffmpeg_libfaac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _fdkaac(self, i, o, t, r, c, m, b, q, co):
+    def _fdkaac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.fdkaac(i, o, t, r, c, m, b, q, co)
+        cmd = command.fdkaac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libfdk_aac(self, i, o, t, r, c, m, b, q, co):
+    def _libfdk_aac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_libfdk_aac(i, o, t, r, c, m, b, q, co)
+        cmd = command.ffmpeg_libfdk_aac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _flac(self, i, o, t, r, c, cp, co):
+    def _flac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.flac(i, o, t, r, c, cp, co)
+        cmd = command.flac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _native_flac(self, i, o, t, r, c, cp, co):
+    def _native_flac(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_flac(i, o, t, r, c, cp, co)
+        cmd = command.ffmpeg_flac(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _lame(self, i, o, t, r, c, m, b, q, co):
+    def _lame(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.lame(i, o, t, r, c, m, b, q, co)
+        cmd = command.lame(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libmp3lame(self, i, o, t, r, c, m, b, q, co):
+    def _libmp3lame(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_libmp3lame(i, o, t, r, c, m, b, q, co)
+        cmd = command.ffmpeg_libmp3lame(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _opusenc(self, i, o, t, r, c, m, b, co):
+    def _opusenc(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.opusenc(i, o, t, r, c, m, b, co)
+        cmd = command.opusenc(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libopus(self, i, o, t, r, c, m, b, co):
+    def _libopus(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_libopus(i, o, t, r, c, m, b, co)
+        cmd = command.ffmpeg_libopus(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _oggenc(self, i, o, t, r, c, m, b, q, co):
+    def _oggenc(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.oggenc(i, o, t, r, c, m, b, q, co)
+        cmd = command.oggenc(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _libvorbis(self, i, o, t, r, c, m, b, q, co):
+    def _libvorbis(self, i, o, t):
         print('Encode audio...')
         self._update_queue()
-        cmd = command.ffmpeg_libvorbis(i, o, t, r, c, m, b, q, co)
+        cmd = command.ffmpeg_libvorbis(i, o, t)
         print(cmd)
         self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
                                      universal_newlines=True)
         self._audio_progress()
 
-    def _mkvtoolnix_progress(self, mode):
+    def _mkvtoolnix_progress(self):
         GLib.idle_add(self.pbar.set_fraction, 0)
-        if mode == 'x':
-            GLib.idle_add(self.pbar.set_text, 'Extracting tracks...')
-        elif mode == 'm':
-            GLib.idle_add(self.pbar.set_text, 'Merging tracks...')
+        GLib.idle_add(self.pbar.set_text, 'Merging tracks...')
         while self.proc.poll() == None:
             line = self.proc.stdout.readline()
             if 'Progress:' in line:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import pyanimenc.conf as conf
 import pyanimenc.vpy as vpy
 from gi.repository import Gio, Gtk
@@ -8,7 +9,7 @@ from pyanimenc.vpy import vpy
 
 class ScriptCreatorWindow(Gtk.Window):
 
-    def __init__(self, vs):
+    def __init__(self):
         Gtk.Window.__init__(self, title='pyanimscript')
         self.set_default_size(640, 520)
 
@@ -62,7 +63,7 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        s = vpy(self.source, conf.vs)
+        s = vpy(self.source)
         self.tbuffer.set_text(s)
 
     def on_open_clicked(self, button):
@@ -83,7 +84,7 @@ class ScriptCreatorWindow(Gtk.Window):
 
         if response == Gtk.ResponseType.OK:
             o = self.save_fcdlg.get_filename()
-            if not re.search('\.vpy$', o):
+            if not o.endswith('.vpy'):
                 o = o + '.vpy'
 
             s = self.tbuffer.get_text(self.tbuffer.get_start_iter(),
