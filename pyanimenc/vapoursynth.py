@@ -8,7 +8,7 @@ from pyanimenc.filters import FilterDialog
 class VapourSynthDialog(Gtk.Dialog):
 
     def __init__(self, parent):
-        Gtk.Dialog.__init__(self, 'VapourSynth settings', parent, 0,
+        Gtk.Dialog.__init__(self, 'VapourSynth filters', parent, 0,
                             use_header_bar=1)
 
         add_button = Gtk.Button()
@@ -20,7 +20,14 @@ class VapourSynthDialog(Gtk.Dialog):
         hbar = self.get_header_bar()
         hbar.pack_start(add_button)
 
-        self.box = self.get_content_area()
+        box = self.get_content_area()
+
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        vport = Gtk.Viewport()
+        vport.add(self.box)
+        self.scrwin = Gtk.ScrolledWindow()
+        self.scrwin.add(vport)
+        box.pack_start(self.scrwin, True, True, 0)
 
         self._update_filters()
 
@@ -115,6 +122,12 @@ class VapourSynthDialog(Gtk.Dialog):
             remove_button.connect('clicked', self.on_remove_clicked, i)
 
         self.box.pack_start(grid, True, True, 0)
+
+        if len(conf.filters) <= 6:
+            self.scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
+            self.resize(1, 1)
+        else:
+            self.scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
 
         self.show_all()
 

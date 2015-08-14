@@ -104,7 +104,7 @@ class ChapterEditorWindow(Gtk.Window):
 
     def __init__(self):
         Gtk.Window.__init__(self, title='pyanimchap')
-        self.set_default_size(640, 520)
+        self.set_default_size(640, 0)
 
         self.lang = 'und'
         self.ordered = False
@@ -121,12 +121,9 @@ class ChapterEditorWindow(Gtk.Window):
         self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         vport = Gtk.Viewport()
         vport.add(self.box)
-        scrwin = Gtk.ScrolledWindow()
-        scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
-        scrwin.set_overlay_scrolling(False)
-        scrwin.add(vport)
-
-        self.add(scrwin)
+        self.scrwin = Gtk.ScrolledWindow()
+        self.scrwin.add(vport)
+        self.add(self.scrwin)
 
         #--Header Bar--#
         hbar = Gtk.HeaderBar()
@@ -348,7 +345,15 @@ class ChapterEditorWindow(Gtk.Window):
                 down_button.set_sensitive(False)
 
             self.box.pack_start(grid, False, True, 0)
-            self.box.show_all()
+
+
+        if len(self.chapters) <= 3:
+            self.scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
+            self.resize(640, 1)
+        else:
+            self.scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
+
+        self.show_all()
 
     def on_open_clicked(self, button):
         response = self.open_fcdlg.run()
