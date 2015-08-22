@@ -69,7 +69,7 @@ def audio_transform():
         cmd.append('-ar {}'.format(r))
     if c:
         cmd.append('-ac {}'.format(c))
-    if t and (n != 0 or d != 1):
+    if t != [0, 0] and (n != 0 or d != 1):
         f = Decimal(t[0]) * Decimal(d) / Decimal(n)
         l = Decimal(t[1]) * Decimal(d) / Decimal(n)
         cmd.append('-af atrim={}:{}'.format(f, l))

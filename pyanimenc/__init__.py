@@ -4,6 +4,7 @@ import os
 import re
 import pyanimenc.command as command
 import pyanimenc.conf as conf
+import shutil
 import subprocess
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -90,10 +91,6 @@ class MainWindow(Gtk.Window):
         conf_icon = Gio.ThemedIcon(name='applications-system-symbolic')
         queue_icon = Gio.ThemedIcon(name='list-add-symbolic')
 
-        in_file_label = Gtk.Label('File')
-        in_file_label.set_property('hexpand', True)
-        in_folder_label = Gtk.Label('Folder')
-        in_folder_label.set_property('hexpand', True)
         vid_label = Gtk.Label('Video Codec')
         vid_label.set_property('hexpand', True)
         aud_label = Gtk.Label('Audio Codec')
@@ -101,13 +98,9 @@ class MainWindow(Gtk.Window):
 
         hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
-        in_file_button = Gtk.Button('Select File')
-        in_file_button.set_property('hexpand', True)
-        in_file_button.connect('clicked', self.on_input_clicked, 'file')
-
-        in_folder_button = Gtk.Button('Select Folder')
-        in_folder_button.set_property('hexpand', True)
-        in_folder_button.connect('clicked', self.on_input_clicked, 'folder')
+        input_button = Gtk.Button('Input')
+        input_button.set_property('hexpand', True)
+        input_button.connect('clicked', self.on_input_clicked)
 
         self.venc_cbtext = Gtk.ComboBoxText()
         self.venc_cbtext.set_property('hexpand', True)
@@ -117,41 +110,40 @@ class MainWindow(Gtk.Window):
         iconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
         iconf_button = Gtk.Button()
         iconf_button.set_image(iconf_image)
-        iconf_button.set_property('hexpand', True)
         iconf_button.connect('clicked', self.on_conf_clicked, 'input')
         vconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
         vconf_button = Gtk.Button()
         vconf_button.set_image(vconf_image)
-        vconf_button.set_property('hexpand', True)
         vconf_button.connect('clicked', self.on_conf_clicked, 'video')
         aconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
         aconf_button = Gtk.Button()
         aconf_button.set_image(aconf_image)
-        aconf_button.set_property('hexpand', True)
         aconf_button.connect('clicked', self.on_conf_clicked, 'audio')
 
-        queue_image = Gtk.Image.new_from_gicon(queue_icon, Gtk.IconSize.BUTTON)
-        self.queue_button = Gtk.Button()
+        self.queue_button = Gtk.Button('Queue')
         self.queue_button.set_property('hexpand', True)
-        self.queue_button.set_image(queue_image)
         self.queue_button.set_sensitive(False)
         self.queue_button.connect('clicked', self.on_queue_clicked)
 
-        input_grid.attach(in_file_button, 0, 0, 1, 1)
-        input_grid.attach(in_folder_button, 1, 0, 1, 1)
-        input_grid.attach(iconf_button, 0, 1, 2, 1)
-        input_grid.attach(vid_label, 0, 2, 1, 1)
-        input_grid.attach(aud_label, 1, 2, 1, 1)
-        input_grid.attach_next_to(self.venc_cbtext, vid_label,
+        ibox = Gtk.Box(spacing=6)
+        ibox.pack_start(input_button, True, True, 0)
+        ibox.pack_start(iconf_button, False, True, 0)
+        vbox = Gtk.Box(spacing=6)
+        vbox.pack_start(self.venc_cbtext, True, True, 0)
+        vbox.pack_start(vconf_button, False, True, 0)
+        abox = Gtk.Box(spacing=6)
+        abox.pack_start(self.aenc_cbtext, True, True, 0)
+        abox.pack_start(aconf_button, False, True, 0)
+
+        input_grid.attach(ibox, 0, 0, 1, 1)
+        input_grid.attach(self.queue_button, 1, 0, 1, 1)
+        input_grid.attach(vid_label, 0, 1, 1, 1)
+        input_grid.attach(aud_label, 1, 1, 1, 1)
+        input_grid.attach_next_to(vbox, vid_label,
                                   Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach_next_to(vconf_button, self.venc_cbtext,
+        input_grid.attach_next_to(abox, aud_label,
                                   Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach_next_to(self.aenc_cbtext, aud_label,
-                                  Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach_next_to(aconf_button, self.aenc_cbtext,
-                                  Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach(self.queue_button, 0, 5, 2, 1)
-        input_grid.attach(hsep, 0, 6, 2, 1)
+        input_grid.attach(hsep, 0, 3, 2, 1)
 
         scrwin = Gtk.ScrolledWindow()
         scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
@@ -296,41 +288,24 @@ class MainWindow(Gtk.Window):
             t = t[:3]
         self.tracks[path][i] = t
 
-    def on_input_clicked(self, button, m):
-        if m == 'file':
-            dlg = Gtk.FileChooserDialog('Open File', self,
-                                        Gtk.FileChooserAction.OPEN,
-                                        ('Cancel',
-                                         Gtk.ResponseType.CANCEL,
-                                         'Open', Gtk.ResponseType.OK))
-            dlg.add_filter(conf.vflt)
-        elif m == 'folder':
-            dlg = Gtk.FileChooserDialog('Open Folder', self,
-                                        Gtk.FileChooserAction.SELECT_FOLDER,
-                                        ('Cancel',
-                                         Gtk.ResponseType.CANCEL,
-                                         'Open', Gtk.ResponseType.OK))
+    def on_input_clicked(self, button):
+        dlg = Gtk.FileChooserDialog('Select File(s)', self,
+                                    Gtk.FileChooserAction.OPEN,
+                                    ('Cancel',
+                                     Gtk.ResponseType.CANCEL,
+                                     'Open', Gtk.ResponseType.OK))
+        dlg.set_property('select-multiple', True)
+        dlg.add_filter(conf.vflt)
         dlg.set_current_folder(self.wdir)
 
         response = dlg.run()
 
         if response == Gtk.ResponseType.OK:
-            self.files = []
             self.data = []
             self.tracks.clear()
 
-            if m == 'file':
-                path = dlg.get_filename()
-                self.wdir, f = os.path.split(path)
-                self.files.append(f)
-            elif m == 'folder':
-                self.wdir = dlg.get_filename()
-
-                # Keep video files only
-                for f in os.listdir(self.wdir):
-                    if os.path.splitext(f)[1].lstrip('.') in conf.vext:
-                        self.files.append(f)
-                self.files.sort()
+            self.wdir = dlg.get_current_folder()
+            self.files = dlg.get_filenames()
 
             self._get_tracks()
 
@@ -342,7 +317,7 @@ class MainWindow(Gtk.Window):
         # Get file infos
         for i in range(len(self.files)):
             f = self.files[i]
-            d = MediaInfo.parse('/'.join([self.wdir, f]))
+            d = MediaInfo.parse(f)
             self.data.append(d)
 
         # Pick reference tracks
@@ -462,28 +437,29 @@ class MainWindow(Gtk.Window):
                                      track_type, codec, title, language])
 
     def on_queue_clicked(self, button):
-        if not os.path.isdir(self.wdir + '/out'):
-            os.mkdir(self.wdir + '/out')
-
         for i in range(len(self.files)):
             vtrack = []
             atracks = []
             stracks = []
 
-            file = self.files[i]
-            input = '/'.join([self.wdir, file])
-            file_name = os.path.splitext(file)[0]
-            out_name = '/out/'.join([self.wdir, file_name])
+            in_dnx = self.files[i]
+            in_nx = os.path.basename(in_dnx)
+            in_dn, in_x = os.path.splitext(in_dnx)
+            in_d, in_n = os.path.split(in_dn)
+            tmp_d = in_dn + '.tmp'
+
+            if not os.path.isdir(tmp_d):
+                os.mkdir(tmp_d)
 
             # Preserve UID for Matroska segment linking
-            if file.endswith('.mkv'):
+            if in_x == '.mkv':
                 uid = self.data[i].tracks[0].other_unique_id[0]
                 uid = re.findall('0x[^)]*', uid)[0].lstrip('0x')
             else:
                 uid = ''
 
             self.worker.submit(self._wait)
-            job = self.queue_tstore.append(None, [None, file, '', 'Waiting'])
+            job = self.queue_tstore.append(None, [None, in_nx, '', 'Waiting'])
 
             for j in range(len(self.tracks)):
                 track = self.tracks[j]
@@ -500,22 +476,22 @@ class MainWindow(Gtk.Window):
                         k = self.venc_cbtext.get_active_text()
                         x = conf.VENCS[k]
 
-                        in_vpy = out_name + '.vpy'
-                        self.worker.submit(self._vpy, input, in_vpy)
+                        in_vpy = tmp_d + '/' + in_n + '.vpy'
+                        self.worker.submit(self._vpy, in_dnx, in_vpy)
 
                         if x[0].startswith('x264'):
                             ext = conf.x264['container']
-                            output = '.'.join([out_name, ext])
+                            out = tmp_d + '/' + in_n + '.' + ext
                             future = self.worker.submit(self._x264,
                                                         in_vpy,
-                                                        output,
+                                                        out,
                                                         x[0])
                         elif x[0].startswith('x265'):
                             ext = conf.x265['container']
-                            output = '.'.join([out_name, ext])
+                            out = tmp_d + '/' + in_n + '.' + ext
                             future = self.worker.submit(self._x265,
                                                         in_vpy,
-                                                        output,
+                                                        out,
                                                         x[0],
                                                         x[1])
 
@@ -524,94 +500,94 @@ class MainWindow(Gtk.Window):
                                                        x[0],
                                                        'Waiting'])
 
-                        vtrack = [0, output, title, language]
+                        vtrack = [0, out, title, language]
                     else:
-                        vtrack = [j, input, title, language]
+                        vtrack = [j, in_dnx, title, language]
 
                 elif track_type == 'Audio' and enable:
                     if encode:
                         # Encode audio
                         k = self.aenc_cbtext.get_active_text()
                         x = conf.AENCS[k]
-                        o = '_'.join([out_name, str(j)])
+                        o = '_'.join([in_n, str(j)])
 
                         if x[0] == 'faac' or x[1] == 'libfaac':
                             ext = conf.faac['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'faac':
                                 future = self.worker.submit(self._faac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._libfaac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                         elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
                             ext = conf.fdkaac['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'fdkaac':
                                 future = self.worker.submit(self._fdkaac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._libfdk_aac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                         elif x[0] == 'flac' or x[1] == 'native-flac':
                             ext = conf.flac['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'flac':
                                 future = self.worker.submit(self._flac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._native_flac,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                         elif x[0] == 'lame' or x[1] == 'libmp3lame':
                             ext = conf.mp3['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'lame':
                                 future = self.worker.submit(self._lame,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._libmp3lame,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                         elif x[0] == 'opusenc' or x[1] == 'libopus':
                             ext = conf.opus['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'opusenc':
                                 future = self.worker.submit(self._opusenc,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._libopus,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                         elif x[0] == 'oggenc' or x[1] == 'libvorbis':
                             ext = conf.vorbis['container']
-                            output = '.'.join([o, ext])
+                            out = tmp_d + '/' + o + '.' + ext
                             if x[0] == 'oggenc':
                                 future = self.worker.submit(self._oggenc,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._libvorbis,
-                                                            input,
-                                                            output,
+                                                            in_dnx,
+                                                            out,
                                                             j)
 
                         self.queue_tstore.append(job, [future,
@@ -619,22 +595,22 @@ class MainWindow(Gtk.Window):
                                                        x[0],
                                                        'Waiting'])
 
-                        atracks.append([0, output, title, language])
+                        atracks.append([0, out, title, language])
                     else:
-                        atracks.append([j, input, title, language])
+                        atracks.append([j, in_dnx, title, language])
 
                 elif track_type == 'Subtitle' and enable:
-                    stracks.append([j, input, title, language])
+                    stracks.append([j, in_dnx, title, language])
 
             # Merge tracks
-            output = out_name + '.mkv'
-            future = self.worker.submit(self._merge, input, output,
+            out = in_dn + '_new.mkv'
+            future = self.worker.submit(self._merge, in_dnx, out,
                                         vtrack, atracks, stracks, uid)
 
             self.queue_tstore.append(job, [future, '', 'merge', 'Waiting'])
 
             # Clean up
-            self.worker.submit(self._clean, self.wdir)
+            self.worker.submit(self._clean, tmp_d)
 
             self.worker.submit(self._update_queue)
 
@@ -803,14 +779,8 @@ class MainWindow(Gtk.Window):
         self._mkvtoolnix_progress()
 
     def _clean(self, d):
-        print('Clean leftovers...')
-        for f in os.listdir(d):
-            if f.endswith('.ffindex'):
-                os.remove(d + '/' + f)
-        d = d + '/out'
-        for f in os.listdir(d):
-            if not f.endswith('.mkv'):
-                os.remove(d + '/' + f)
+        print('Delete temporary files...')
+        shutil.rmtree(d)
 
         Glid.add(self.pbar.set_fraction, 0)
         Glib.add(self.pbar.set_text, 'Ready')

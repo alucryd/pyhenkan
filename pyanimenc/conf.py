@@ -76,7 +76,7 @@ sflt = Gtk.FileFilter()
 sflt.set_name('VapourSynth scripts')
 sflt.add_pattern('*.vpy')
 
-vext = ['3gp', 'avi', 'flv', 'mkv', 'mp4', 'ogm', 'webm']
+vext = ['3gp', 'avi', 'flv', 'm2ts', 'mkv', 'mp4', 'ogm', 'webm']
 vflt = Gtk.FileFilter()
 vflt.set_name('Video files')
 for ext in vext:
@@ -90,7 +90,7 @@ for ext in aext:
     aflt.add_pattern('*.' + ext)
 
 #--Default Settings--#
-filters = [['Source', 'FFMpegSource', OrderedDict()]]
+filters = [['Source', 'LWLibavSource', OrderedDict()]]
 
 video = {'width':  0,
          'height': 0,
