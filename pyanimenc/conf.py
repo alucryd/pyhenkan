@@ -7,6 +7,7 @@ from gi.repository import Gtk
 
 #--Constants--#
 VENCS = OrderedDict()
+VENCS_NOTFOUND = []
 VENCS['AVC (x264)'] = ['x264', 8]
 VENCS['AVC (x264, High10)'] = ['x264', 10]
 VENCS['HEVC (x265)'] = ['x265', 8]
@@ -20,6 +21,7 @@ APROC = OrderedDict()
 APROC['SoX Resampler (FFmpeg, libsoxr)'] = ['ffmpeg', 'libsoxr']
 
 AENCS = OrderedDict()
+AENCS_NOTFOUND = []
 AENCS['AAC (FFmpeg, libfaac)'] = ['ffmpeg', 'libfaac']
 AENCS['AAC (faac)'] = ['faac', '']
 AENCS['AAC (FFmpeg, libfdk_aac)'] = ['ffmpeg', 'libfdk-aac']
@@ -204,13 +206,19 @@ for key in VENCS:
         venc = '{}-{}bit'.format(venc, vdepth)
         VENCS[key][0] = venc
         if not find_enc(venc, vdepth):
-            VENCS.pop(key)
+            VENCS_NOTFOUND.append(key)
+
+for key in VENCS_NOTFOUND:
+    VENCS.pop(key)
 
 for key in AENCS:
     aenc = AENCS[key][0]
     alib = AENCS[key][1]
     if not find_enc(aenc, alib):
-        AENCS.pop(key)
+        AENCS_NOTFOUND.append(key)
+
+for key in AENCS_NOTFOUND:
+    AENCS.pop(key)
 
 for key in ADECS:
     adec = ADECS[key][0]
