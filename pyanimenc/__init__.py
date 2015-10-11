@@ -454,7 +454,9 @@ class MainWindow(Gtk.Window):
             # Preserve UID for Matroska segment linking
             if in_x == '.mkv':
                 uid = self.data[i].tracks[0].other_unique_id[0]
-                uid = re.findall('0x[^)]*', uid)[0].lstrip('0x')
+                uid = re.findall('0x[^)]*', uid)[0].replace('0x', '')
+                # Mediainfo strips leading zeroes...
+                uid = uid.rjust(32, '0')
             else:
                 uid = ''
 
