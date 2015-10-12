@@ -71,7 +71,7 @@ def audio_transform():
         cmd.append('-ac {}'.format(c))
     if t != [0, 0] and (n != 0 or d != 1):
         f = Decimal(t[0]) * Decimal(d) / Decimal(n)
-        l = Decimal(t[1]) * Decimal(d) / Decimal(n)
+        l = Decimal(t[1] + 1) * Decimal(d) / Decimal(n)
         cmd.append('-af atrim={}:{}'.format(f, l))
 
     return cmd
@@ -276,11 +276,12 @@ def oggenc(i, o, t=0):
 
 def merge(i, o, vt, at=[], st=[], uid=''):
     # [[id, filename, title, language]...]
-    x = 'mkvmerge -o "{}" -D -A -S -T "{}"'.format(o, i)
-    v = '-A -S -M -T -d {} --no-global-tags --no-chapters '
-    v = v + '--track-name {}:"{}" --language {}:"{}" "{}"'
-    v = v.format(vt[0], vt[0], vt[2], vt[0], vt[3], vt[1])
-    cmd = [x, v]
+    cmd = ['mkvmerge -o "{}" -D -A -S -T "{}"'.format(o, i)]
+    if vt:
+        v = '-A -S -M -T -d {} --no-global-tags --no-chapters '
+        v = v + '--track-name {}:"{}" --language {}:"{}" "{}"'
+        v = v.format(vt[0], vt[0], vt[2], vt[0], vt[3], vt[1])
+        cmd.append(v)
     if at:
         for t in at:
             a = '-D -S -M -T -a {} --no-global-tags --no-chapters '

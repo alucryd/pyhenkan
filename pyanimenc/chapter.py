@@ -13,25 +13,28 @@ class Chapters:
         self.fpsnum = fpsnum
         self.fpsden = fpsden
 
-    def frame_to_time(self, frames):
-        time = Decimal(frames) * Decimal(self.fpsden) / Decimal(self.fpsnum)
-        hours = int(time // 3600)
-        minutes = int((time - hours * 3600) // 60)
-        seconds = round(time - hours * 3600 - minutes * 60, 3)
-        return '{:0>2d}:{:0>2d}:{:0>12.9f}'.format(hours, minutes, seconds)
+    def frame_to_time(self, f, end=False):
+        if end:
+            f = f + 1
+        t = Decimal(f) * Decimal(self.fpsden) / Decimal(self.fpsnum)
+        h = int(t // 3600)
+        m = int((t - h * 3600) // 60)
+        s = round(t - h * 3600 - m * 60, 3)
+        return '{:0>2d}:{:0>2d}:{:0>12.9f}'.format(h, m, s)
 
-    def time_to_frame(self, time):
-        hours, minutes, seconds = time.split(':')
-        s = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-        f = round(Decimal(s) * Decimal(self.fpsnum) / Decimal(self.fpsden))
-
+    def time_to_frame(self, t, end=False):
+        h, m, s = t.split(':')
+        t = int(h) * 3600 + int(m) * 60 + float(s)
+        f = round(Decimal(t) * Decimal(self.fpsnum) / Decimal(self.fpsden))
+        if end:
+            f = f - 1
         return f
 
     def _atom(self, chapter):
         atom = etree.Element('ChapterAtom')
         uid = etree.SubElement(atom, 'ChapterUID')
         uid.text = str(randrange(1000000000))
-        if self.ordered:
+        if self.ordered and chapter[4]:
             seg_uid = etree.SubElement(atom, 'ChapterSegmentUID', format='hex')
             seg_uid.text = chapter[4]
         display = etree.SubElement(atom, 'ChapterDisplay')
@@ -47,7 +50,7 @@ class Chapters:
         if self.ordered:
             end = etree.SubElement(atom, 'ChapterTimeEnd')
             if self.frame:
-                end.text = self.frame_to_time(chapter[3])
+                end.text = self.frame_to_time(chapter[3], True)
             else:
                 end.text = chapter[3]
         return atom
@@ -377,7 +380,7 @@ class ChapterEditorWindow(Gtk.Window):
 
         if response == Gtk.ResponseType.OK:
             o = self.save_fcdlg.get_filename()
-            if not re.search('\.xml$', o):
+            if not o.endswith('.xml'):
                 o = o + '.xml'
             c = Chapters(self.ordered, self.frame, self.fpsnum, self.fpsden)
             c = c.build(self.chapters)
@@ -425,10 +428,10 @@ class ChapterEditorWindow(Gtk.Window):
         for chapter in self.chapters:
             if self.frame:
                 chapter[2] = c.time_to_frame(chapter[2])
-                chapter[3] = c.time_to_frame(chapter[3])
+                chapter[3] = c.time_to_frame(chapter[3], True)
             else:
                 chapter[2] = c.frame_to_time(chapter[2])
-                chapter[3] = c.frame_to_time(chapter[3])
+                chapter[3] = c.frame_to_time(chapter[3], True)
 
         self._update_entries()
 

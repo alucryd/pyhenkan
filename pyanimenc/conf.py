@@ -118,12 +118,12 @@ audio = {'channel': 0,
 faac = {'mode': 'VBR',
         'bitrate': 128,
         'quality': 100,
-        'container': 'm4a'}
+        'container': 'aac'}
 
 fdkaac = {'mode': 'VBR',
           'bitrate': 128,
           'quality': 4,
-          'container': 'm4a'}
+          'container': 'aac'}
 
 flac = {'compression': 8,
         'container': 'flac'}
