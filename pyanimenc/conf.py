@@ -6,6 +6,8 @@ from collections import OrderedDict
 from gi.repository import Gtk
 
 #--Constants--#
+VCONTS = ['mkv']
+
 VENCS = OrderedDict()
 VENCS_NOTFOUND = []
 VENCS['AVC (x264)'] = ['x264', 8]

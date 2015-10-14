@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import pyanimenc.conf as conf
 from decimal import Decimal
 
@@ -24,12 +25,12 @@ def x264(i, o, x='x264'):
            '--crf', str(q),
            '--demuxer', 'y4m']
     if p != 'none':
-        enc = enc + ['--preset', p]
+        enc += ['--preset', p]
     if t != 'none':
-        enc = enc + ['--tune', t]
+        enc += ['--tune', t]
     if a:
         enc.append(a)
-    enc = enc + ['--output', '"{}" -'.format(o)]
+    enc += ['--output', '"{}" -'.format(o)]
     enc = ' '.join(enc)
     cmd = ' | '.join([dec, enc])
     return cmd
@@ -46,12 +47,12 @@ def x265(i, o, x='x265', d=8):
            '--crf', str(q),
            '--y4m']
     if p != 'none':
-        enc = enc + ['--preset', p]
+        enc += ['--preset', p]
     if t != 'none':
-        enc = enc + ['--tune', t]
+        enc += ['--tune', t]
     if a:
         enc.append(a)
-    enc = enc + ['--output', '"{}" -'.format(o)]
+    enc += ['--output', '"{}" -'.format(o)]
     enc = ' '.join(enc)
     cmd = ' | '.join([dec, enc])
     return cmd
@@ -82,7 +83,7 @@ def ffmpeg_libfaac(i, o, t=0):
     q = conf.faac['quality']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libfaac'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     if m == 'ABR':
         cmd.append('-b {}'.format(b))
     elif m == 'VBR':
@@ -97,7 +98,7 @@ def faac(i, o, t=0):
     q = conf.faac['quality']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['faac']
@@ -116,7 +117,7 @@ def ffmpeg_libfdk_aac(i, o, t=0):
     q = conf.fdkaac['quality']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libfdk_aac'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     if m == 'CBR':
         cmd.append('-b {}'.format(b))
     elif m == 'VBR':
@@ -131,7 +132,7 @@ def fdkaac(i, o, t=0):
     q = conf.fdkaac['quality']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f caf -')
     dec = ' '.join(dec)
     enc = ['fdkaac --silent']
@@ -148,7 +149,7 @@ def ffmpeg_flac(i, o, t=0):
     c = conf.flac['compression']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c flac'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     cmd.append('-compression_level {}'.format(c))
     cmd.append('"{}"'.format(o))
     cmd = ' '.join(cmd)
@@ -158,7 +159,7 @@ def flac(i, o, t=0):
     c = conf.flac['compression']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = 'flac --silent -{} -o "{}" -'.format(c, o)
@@ -171,7 +172,7 @@ def ffmpeg_libmp3lame(i, o, t=0):
     q = conf.mp3['quality']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libmp3lame'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     if m == 'CBR':
         cmd.append('-b {}'.format(b))
     elif m == 'ABR':
@@ -188,7 +189,7 @@ def lame(i, o, t=0):
     q = conf.mp3['quality']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['lame --silent']
@@ -208,7 +209,7 @@ def ffmpeg_libopus(i, o, t=0):
     b = conf.opus['bitrate']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libopus'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     cmd.append('-b {}'.format(b * 1000))
     if m == 'CBR':
         cmd.append('-vbr off')
@@ -223,7 +224,7 @@ def opusenc(i, o, t=0):
     b = conf.opus['bitrate']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['opusenc --quiet --bitrate {}'.format(b)]
@@ -242,7 +243,7 @@ def ffmpeg_libvorbis(i, o, t=0):
     q = conf.vorbis['quality']
 
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libvorbis'.format(i, t)]
-    cmd = cmd + audio_transform()
+    cmd += audio_transform()
     if m == 'CBR':
         cmd.append('-b {} -m {} -M {}'.format(b, b, b))
     elif m == 'ABR':
@@ -259,7 +260,7 @@ def oggenc(i, o, t=0):
     q = conf.vorbis['quality']
 
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec = dec + audio_transform()
+    dec += audio_transform()
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['oggenc --quiet -b {}'.format(b)]

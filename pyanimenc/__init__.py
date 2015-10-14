@@ -49,6 +49,10 @@ class MainWindow(Gtk.Window):
         tools_popover = Gtk.Popover()
         tools_popover.add(tools_box)
 
+        open_button = Gtk.Button('Open')
+        open_button.set_property('hexpand', True)
+        open_button.connect('clicked', self.on_open_clicked)
+
         tools_mbutton = Gtk.MenuButton()
         tools_mbutton.set_label('Tools')
         tools_mbutton.set_direction(Gtk.ArrowType.DOWN)
@@ -59,6 +63,7 @@ class MainWindow(Gtk.Window):
         about_button.set_label('About')
         about_button.connect('clicked', self.on_about_clicked)
 
+        hbar.pack_start(open_button)
         hbar.pack_start(tools_mbutton)
         hbar.pack_end(about_button)
 
@@ -98,19 +103,47 @@ class MainWindow(Gtk.Window):
 
         hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
-        input_button = Gtk.Button('Input')
-        input_button.set_property('hexpand', True)
-        input_button.connect('clicked', self.on_input_clicked)
-
         self.venc_cbtext = Gtk.ComboBoxText()
         self.venc_cbtext.set_property('hexpand', True)
         self.aenc_cbtext = Gtk.ComboBoxText()
         self.aenc_cbtext.set_property('hexpand', True)
 
-        iconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
-        iconf_button = Gtk.Button()
-        iconf_button.set_image(iconf_image)
-        iconf_button.connect('clicked', self.on_conf_clicked, 'input')
+        vpyconf_button = Gtk.Button('VapourSynth filters')
+        vpyconf_button.connect('clicked', self.on_conf_clicked, 'input')
+
+        fname_label = Gtk.Label('Filename')
+        fname_label.set_property('hexpand', True)
+        suffix_label = Gtk.Label('Suffix')
+        suffix_label.set_property('hexpand', True)
+        cont_label = Gtk.Label('Container')
+        cont_label.set_property('hexpand', True)
+        cont_label.set_property('margin_left', 6)
+        cont_label.set_property('margin_right', 6)
+        self.out_name_entry = Gtk.Entry()
+        self.out_name_entry.set_sensitive(False)
+        self.out_name_entry.set_property('hexpand', True)
+        self.out_suffix_entry = Gtk.Entry()
+        self.out_suffix_entry.set_text('_new')
+        self.out_suffix_entry.set_property('hexpand', True)
+        out_dot_label = Gtk.Label('.')
+        self.out_cont_cbtext = Gtk.ComboBoxText()
+        self.out_cont_cbtext.set_property('hexpand', True)
+        for cont in conf.VCONTS:
+            self.out_cont_cbtext.append_text(cont)
+        self.out_cont_cbtext.set_active(0)
+
+        out_grid = Gtk.Grid()
+        out_grid.set_row_homogeneous(True)
+        out_grid.set_column_spacing(6)
+        out_grid.set_row_spacing(6)
+        out_grid.attach(fname_label, 0, 0, 1, 1)
+        out_grid.attach(self.out_name_entry, 0, 1, 1, 1)
+        out_grid.attach(suffix_label, 1, 0, 1, 1)
+        out_grid.attach(self.out_suffix_entry, 1, 1, 1, 1)
+        out_grid.attach(out_dot_label, 2, 1, 1, 1)
+        out_grid.attach(cont_label, 3, 0, 1, 1)
+        out_grid.attach(self.out_cont_cbtext, 3, 1, 1, 1)
+
         vconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
         vconf_button = Gtk.Button()
         vconf_button.set_image(vconf_image)
@@ -125,9 +158,6 @@ class MainWindow(Gtk.Window):
         self.queue_button.set_sensitive(False)
         self.queue_button.connect('clicked', self.on_queue_clicked)
 
-        ibox = Gtk.Box(spacing=6)
-        ibox.pack_start(input_button, True, True, 0)
-        ibox.pack_start(iconf_button, False, True, 0)
         vbox = Gtk.Box(spacing=6)
         vbox.pack_start(self.venc_cbtext, True, True, 0)
         vbox.pack_start(vconf_button, False, True, 0)
@@ -135,15 +165,15 @@ class MainWindow(Gtk.Window):
         abox.pack_start(self.aenc_cbtext, True, True, 0)
         abox.pack_start(aconf_button, False, True, 0)
 
-        input_grid.attach(ibox, 0, 0, 1, 1)
-        input_grid.attach(self.queue_button, 1, 0, 1, 1)
-        input_grid.attach(vid_label, 0, 1, 1, 1)
-        input_grid.attach(aud_label, 1, 1, 1, 1)
-        input_grid.attach_next_to(vbox, vid_label,
+        input_grid.attach(vpyconf_button, 0, 0, 1, 1)
+        input_grid.attach_next_to(vbox, vpyconf_button,
                                   Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach_next_to(abox, aud_label,
+        input_grid.attach_next_to(abox, vbox,
                                   Gtk.PositionType.BOTTOM, 1, 1)
         input_grid.attach(hsep, 0, 3, 2, 1)
+        input_grid.attach(out_grid, 1, 0, 1, 2)
+        input_grid.attach_next_to(self.queue_button, out_grid,
+                                  Gtk.PositionType.BOTTOM, 1, 1)
 
         scrwin = Gtk.ScrolledWindow()
         scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
@@ -288,7 +318,7 @@ class MainWindow(Gtk.Window):
             t = t[:3]
         self.tracks[path][i] = t
 
-    def on_input_clicked(self, button):
+    def on_open_clicked(self, button):
         dlg = Gtk.FileChooserDialog('Select File(s)', self,
                                     Gtk.FileChooserAction.OPEN,
                                     ('Cancel',
@@ -306,6 +336,15 @@ class MainWindow(Gtk.Window):
 
             self.wdir = dlg.get_current_folder()
             self.files = dlg.get_filenames()
+
+            if len(self.files) > 1:
+                self.out_name_entry.set_text('')
+                self.out_name_entry.set_sensitive(False)
+            else:
+                # Get the filename without extension
+                out_name = os.path.splitext(os.path.basename(self.files[0]))[0]
+                self.out_name_entry.set_text(out_name)
+                self.out_name_entry.set_sensitive(True)
 
             self._get_tracks()
 
@@ -605,14 +644,26 @@ class MainWindow(Gtk.Window):
                     stracks.append([j, in_dnx, title, language])
 
             # Merge tracks
-            out = in_dn + '_new.mkv'
+            name = self.out_name_entry.get_text()
+            suffix = self.out_suffix_entry.get_text()
+            cont = self.out_cont_cbtext.get_active_text()
+
+            if len(self.files) == 1 and name:
+                out = '/'.join([in_d, name])
+            else:
+                out = in_dn
+            # Do not overwrite source files in batch mode
+            if len(self.files) > 1 and not suffix:
+                suffix = '_new'
+            out += '.'.join([suffix, cont])
+
             future = self.worker.submit(self._merge, in_dnx, out,
                                         vtrack, atracks, stracks, uid)
 
             self.queue_tstore.append(job, [future, '', 'merge', 'Waiting'])
 
             # Clean up
-            self.worker.submit(self._clean, tmp_d)
+            #self.worker.submit(self._clean, tmp_d)
 
             self.worker.submit(self._update_queue)
 
