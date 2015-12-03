@@ -18,7 +18,8 @@ from pymediainfo import MediaInfo
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gio, GLib, GObject, Gtk
+gi.require_version('Notify', '0.7')
+from gi.repository import Gio, GLib, GObject, Gtk, Notify
 
 VERSION = '0.1b1'
 AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
@@ -40,6 +41,13 @@ class MainWindow(Gtk.Window):
         self.lock.acquire()
         # Mark as idle, this will be useful later
         self.idle = True
+
+        # Notification
+        Notify.init('pyanimenc')
+        self.notification = Notify.Notification.new('pyanimenc',
+                                                    '',
+                                                    'dialog-information')
+        self.notification.set_urgency(1)
 
         # --Header Bar-- #
         tools_sccr_button = Gtk.Button()
@@ -881,49 +889,38 @@ class MainWindow(Gtk.Window):
             self.lock.acquire()
 
     def _update_queue(self):
-        njobs = len(self.queue_tstore)
-        for i in range(njobs):
-            path = Gtk.TreePath(i)
-            job = self.queue_tstore.get_iter(path)
-            future = self.queue_tstore.get_value(job, 0)
-            status = self.queue_tstore.get_value(job, 3)
-            if self.queue_tstore.iter_has_child(job):
-                nsteps = self.queue_tstore.iter_n_children(job)
-                for j in range(nsteps):
-                    path = Gtk.TreePath([i, j])
-                    step = self.queue_tstore.get_iter(path)
-                    future = self.queue_tstore.get_value(step, 0)
-                    status = self.queue_tstore.get_value(step, 3)
-                    # Mark done children as such
-                    if future.done() and status != 'Failed':
-                        GLib.idle_add(self.queue_tstore.set_value, step, 3,
-                                      'Done')
-                        # Mark parent as done if all children are
-                        if j == nsteps - 1:
-                            GLib.idle_add(self.queue_tstore.set_value, job, 3,
-                                          'Done')
-                            # Mark as idle if child was the last job
-                            if i == njobs - 1:
-                                self.idle = True
-                    # Mark running child as such
-                    elif future.running():
-                        GLib.idle_add(self.queue_tstore.set_value, step, 3,
-                                      'Running')
-                        # Mark parent as running if a child is
-                        GLib.idle_add(self.queue_tstore.set_value, job, 3,
-                                      'Running')
-            else:
-                # Mark done jobs as such
-                if future.done() and status != 'Failed':
-                    GLib.idle_add(self.queue_tstore.set_value, job, 3,
-                                  'Done')
-                    # Mark as idle if job was the last
-                    if i == njobs - 1:
-                        self.idle = True
-                # Mark running job as such
-                elif future.running():
-                    GLib.idle_add(self.queue_tstore.set_value, job, 3,
-                                  'Running')
+        tstore = self.queue_tstore
+        for job in tstore:
+            status = tstore.get_value(job.iter, 3)
+            filename = tstore.get_value(job.iter, 1)
+            new_status = self._mark_steps(job)
+            GLib.idle_add(tstore.set_value, job.iter, 3, new_status)
+            if new_status == 'Done' and not job.next:
+                # Mark as idle if it was the last job
+                GLib.idle_add(self._notify, 'Jobs done')
+                self.idle = True
+            elif new_status == 'Running' and new_status != status:
+                GLib.idle_add(self._notify, 'Processing ' + filename)
+
+    def _mark_steps(self, job):
+        tstore = self.queue_tstore
+        for step in job.iterchildren():
+            future = tstore.get_value(step.iter, 0)
+            status = tstore.get_value(step.iter, 3)
+            if future.done() and status != 'Failed':
+                # Mark done steps as such
+                GLib.idle_add(tstore.set_value, step.iter, 3, 'Done')
+                if not step.next:
+                    # Mark job as done if all steps are
+                    return 'Done'
+            elif future.running():
+                # Mark running step as such
+                GLib.idle_add(tstore.set_value, step.iter, 3, 'Running')
+                return 'Running'
+
+    def _notify(self, text):
+        self.notification.update('pyanimenc', text)
+        self.notification.show()
 
     def _merge(self, i, o, vt, at, st, mt, uid):
         print('Merge...')
@@ -1158,6 +1155,7 @@ class AboutDialog(Gtk.AboutDialog):
 
 
 def on_delete_event(self, event):
+    Notify.uninit()
     self.lock.release()
     Gtk.main_quit()
 
