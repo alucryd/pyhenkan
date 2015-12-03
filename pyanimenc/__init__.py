@@ -21,7 +21,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Notify', '0.7')
 from gi.repository import Gio, GLib, GObject, Gtk, Notify
 
-VERSION = '0.1b1'
+VERSION = '0.1.0'
 AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 
 

@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
+
 from setuptools import setup
 
 setup(
     name='pyanimenc',
-    version='0.1b1',
+    version='0.1.0',
     packages=['pyanimenc'],
     url='https://github.com/alucryd/pyanimenc',
     license='GPL3',
