@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-import os
-import pyanimenc.conf as conf
 from decimal import Decimal
+
 
 def info(i):
     cmd = 'vspipe "{}" - -i'.format(i)
     return cmd
+
 
 def preview(i):
     dec = 'vspipe "{}" - -y'.format(i)
@@ -14,12 +14,8 @@ def preview(i):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def x264(i, o, x='x264'):
-    q = conf.x264['quality']
-    p = conf.x264['preset']
-    t = conf.x264['tune']
-    a = conf.x264['arguments']
 
+def x264(i, o, x, q, p, t, a):
     dec = 'vspipe "{}" - -y'.format(i)
     enc = [x,
            '--crf', str(q),
@@ -35,12 +31,8 @@ def x264(i, o, x='x264'):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def x265(i, o, x='x265', d=8):
-    q = conf.x265['quality']
-    p = conf.x265['preset']
-    t = conf.x265['tune']
-    a = conf.x265['arguments']
 
+def x265(i, o, x, d, q, p, t, a):
     dec = 'vspipe "{}" - -y'.format(i)
     enc = [x,
            '--output-depth', str(d),
@@ -57,13 +49,9 @@ def x265(i, o, x='x265', d=8):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def audio_transform():
-    r = conf.audio['rate']
-    c = conf.audio['channel']
-    n = conf.video['fpsnum']
-    d = conf.video['fpsden']
-    t = conf.trim
 
+def audio_transform(at):
+    r, c, n, d, t = at
     cmd = []
 
     if r:
@@ -77,13 +65,10 @@ def audio_transform():
 
     return cmd
 
-def ffmpeg_libfaac(i, o, t=0):
-    m = conf.faac['mode']
-    b = conf.faac['bitrate']
-    q = conf.faac['quality']
 
+def ffmpeg_libfaac(i, o, t, m, b, q, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libfaac'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     if m == 'ABR':
         cmd.append('-b {}'.format(b))
     elif m == 'VBR':
@@ -92,13 +77,10 @@ def ffmpeg_libfaac(i, o, t=0):
     cmd = ' '.join(cmd)
     return cmd
 
-def faac(i, o, t=0):
-    m = conf.faac['mode']
-    b = conf.faac['bitrate']
-    q = conf.faac['quality']
 
+def faac(i, o, t, m, b, q, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['faac']
@@ -111,13 +93,10 @@ def faac(i, o, t=0):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def ffmpeg_libfdk_aac(i, o, t=0):
-    m = conf.fdkaac['mode']
-    b = conf.fdkaac['bitrate']
-    q = conf.fdkaac['quality']
 
+def ffmpeg_libfdk_aac(i, o, t, m, b, q, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libfdk_aac'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     if m == 'CBR':
         cmd.append('-b {}'.format(b))
     elif m == 'VBR':
@@ -126,13 +105,10 @@ def ffmpeg_libfdk_aac(i, o, t=0):
     cmd = ' '.join(cmd)
     return cmd
 
-def fdkaac(i, o, t=0):
-    m = conf.fdkaac['mode']
-    b = conf.fdkaac['bitrate']
-    q = conf.fdkaac['quality']
 
+def fdkaac(i, o, t, m, b, q, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f caf -')
     dec = ' '.join(dec)
     enc = ['fdkaac --silent']
@@ -145,34 +121,29 @@ def fdkaac(i, o, t=0):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def ffmpeg_flac(i, o, t=0):
-    c = conf.flac['compression']
 
+def ffmpeg_flac(i, o, t, c, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c flac'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     cmd.append('-compression_level {}'.format(c))
     cmd.append('"{}"'.format(o))
     cmd = ' '.join(cmd)
     return cmd
 
-def flac(i, o, t=0):
-    c = conf.flac['compression']
 
+def flac(i, o, t, c, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = 'flac --silent -{} -o "{}" -'.format(c, o)
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def ffmpeg_libmp3lame(i, o, t=0):
-    m = conf.mp3['mode']
-    b = conf.mp3['bitrate']
-    q = conf.mp3['quality']
 
+def ffmpeg_libmp3lame(i, o, t, m, b, q, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libmp3lame'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     if m == 'CBR':
         cmd.append('-b {}'.format(b))
     elif m == 'ABR':
@@ -183,13 +154,10 @@ def ffmpeg_libmp3lame(i, o, t=0):
     cmd = ' '.join(cmd)
     return cmd
 
-def lame(i, o, t=0):
-    m = conf.mp3['mode']
-    b = conf.mp3['bitrate']
-    q = conf.mp3['quality']
 
+def lame(i, o, t, m, b, q, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['lame --silent']
@@ -204,12 +172,10 @@ def lame(i, o, t=0):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def ffmpeg_libopus(i, o, t=0):
-    m = conf.opus['mode']
-    b = conf.opus['bitrate']
 
+def ffmpeg_libopus(i, o, t, m, b, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libopus'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     cmd.append('-b {}'.format(b * 1000))
     if m == 'CBR':
         cmd.append('-vbr off')
@@ -219,12 +185,10 @@ def ffmpeg_libopus(i, o, t=0):
     cmd = ' '.join(cmd)
     return cmd
 
-def opusenc(i, o, t=0):
-    m = conf.opus['mode']
-    b = conf.opus['bitrate']
 
+def opusenc(i, o, t, m, b, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['opusenc --quiet --bitrate {}'.format(b)]
@@ -237,13 +201,10 @@ def opusenc(i, o, t=0):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def ffmpeg_libvorbis(i, o, t=0):
-    m = conf.vorbis['mode']
-    b = conf.vorbis['bitrate']
-    q = conf.vorbis['quality']
 
+def ffmpeg_libvorbis(i, o, t, m, b, q, at):
     cmd = ['ffmpeg -y -i "{}" -map 0:{} -c libvorbis'.format(i, t)]
-    cmd += audio_transform()
+    cmd += audio_transform(at)
     if m == 'CBR':
         cmd.append('-b {} -m {} -M {}'.format(b, b, b))
     elif m == 'ABR':
@@ -254,13 +215,10 @@ def ffmpeg_libvorbis(i, o, t=0):
     cmd = ' '.join(cmd)
     return cmd
 
-def oggenc(i, o, t=0):
-    m = conf.vorbis['mode']
-    b = conf.vorbis['bitrate']
-    q = conf.vorbis['quality']
 
+def oggenc(i, o, t, m, b, q, at):
     dec = ['ffmpeg -i "{}" -map 0:{}'.format(i, t)]
-    dec += audio_transform()
+    dec += audio_transform(at)
     dec.append('-f wav -')
     dec = ' '.join(dec)
     enc = ['oggenc --quiet -b {}'.format(b)]
@@ -275,26 +233,33 @@ def oggenc(i, o, t=0):
     cmd = ' | '.join([dec, enc])
     return cmd
 
-def merge(i, o, vt, at=[], st=[], uid=''):
+
+def merge(i, o, vt, at=[], st=[], mt=[], uid=''):
     # [[id, filename, title, language]...]
-    cmd = ['mkvmerge -o "{}" -D -A -S -T "{}"'.format(o, i)]
+    cmd = ['mkvmerge -o "{}" -D -A -S -B -T "{}"'.format(o, i)]
     if vt:
-        v = '-A -S -M -T -d {} --no-global-tags --no-chapters '
-        v = v + '--track-name {}:"{}" --language {}:"{}" "{}"'
+        v = '-A -S -B -T -M -d {} --no-global-tags --no-chapters '
+        v += '--track-name {}:"{}" --language {}:"{}" "{}"'
         v = v.format(vt[0], vt[0], vt[2], vt[0], vt[3], vt[1])
         cmd.append(v)
     if at:
         for t in at:
-            a = '-D -S -M -T -a {} --no-global-tags --no-chapters '
-            a = a + '--track-name {}:"{}" --language {}:"{}" "{}"'
+            a = '-D -S -B -T -M -a {} --no-global-tags --no-chapters '
+            a += '--track-name {}:"{}" --language {}:"{}" "{}"'
             a = a.format(t[0], t[0], t[2], t[0], t[3], t[1])
             cmd.append(a)
     if st:
         for t in st:
-            s = '-D -A -M -T -s {} --no-global-tags --no-chapters '
-            s = s + '--track-name {}:"{}" --language {}:"{}" "{}"'
+            s = '-D -A -B -T -M -s {} --no-global-tags --no-chapters '
+            s += '--track-name {}:"{}" --language {}:"{}" "{}"'
             s = s.format(t[0], t[0], t[2], t[0], t[3], t[1])
             cmd.append(s)
+    if mt:
+        for t in mt:
+            m = '-D -A -S -T -M -b {} --no-global-tags --no-chapters '
+            m += '--track-name {}:"{}" --language {}:"{}" "{}"'
+            m = m.format(t[0], t[0], t[2], t[0], t[3], t[1])
+            cmd.append(m)
     if uid:
         u = '--segment-uid ' + uid
         cmd.append(u)

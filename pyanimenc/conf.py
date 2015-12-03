@@ -3,9 +3,12 @@
 import os
 import subprocess
 from collections import OrderedDict
+
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
-#--Constants--#
+# --Constants--#
 VCONTS = ['mkv']
 
 VENCS = OrderedDict()
@@ -75,7 +78,7 @@ FILTERS['Denoise'] = DENOISE_FLTS
 FILTERS['Deband'] = DEBAND_FLTS
 FILTERS['Misc'] = MISC_FLTS
 
-#--File Filters--#
+# --File Filters--#
 sflt = Gtk.FileFilter()
 sflt.set_name('VapourSynth scripts')
 sflt.add_pattern('*.vpy')
@@ -93,13 +96,13 @@ aflt.set_name('Audio files')
 for ext in aext:
     aflt.add_pattern('*.' + ext)
 
-#--Default Settings--#
+# --Default Settings--#
 filters = [['Source', 'LWLibavSource', OrderedDict()]]
 
-video = {'width':  0,
+video = {'width': 0,
          'height': 0,
-         'fpsnum':  0,
-         'fpsden':  1}
+         'fpsnum': 0,
+         'fpsden': 1}
 
 x264 = {'quality': 18,
         'preset': 'medium',
@@ -146,6 +149,7 @@ vorbis = {'mode': 'VBR',
 
 trim = [0, 0]
 
+
 def find_enc(x, y=''):
     path = os.environ['PATH'].split(':')
     for p in path:
@@ -160,6 +164,7 @@ def find_enc(x, y=''):
                 return True
     return False
 
+
 def find_ffmpeg(y):
     proc = subprocess.Popen('ffmpeg -buildconf',
                             shell=True,
@@ -172,6 +177,7 @@ def find_ffmpeg(y):
             return True
         line = proc.stdout.readline()
     return False
+
 
 def find_x264(x, y):
     cmd = [x, '--version']
@@ -187,6 +193,7 @@ def find_x264(x, y):
         line = proc.stdout.readline()
     return False
 
+
 def find_x265(x, y):
     cmd = [x, '--output-depth', str(y), '--version']
     cmd = ' '.join(cmd)
@@ -200,6 +207,7 @@ def find_x265(x, y):
             return True
         line = proc.stderr.readline()
     return False
+
 
 for key in VENCS:
     venc = VENCS[key][0]

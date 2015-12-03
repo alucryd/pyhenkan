@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
 from decimal import Decimal
-from gi.repository import Gio, Gtk
-from lxml import etree
 from random import randrange
 
-class Chapters:
+from lxml import etree
 
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, Gtk
+
+
+class Chapters:
     def __init__(self, ordered=False, frame=False, fpsnum=24000, fpsden=1001):
         self.ordered = ordered
         self.frame = frame
@@ -15,7 +19,7 @@ class Chapters:
 
     def frame_to_time(self, f, end=False):
         if end:
-            f = f + 1
+            f += 1
         t = Decimal(f) * Decimal(self.fpsden) / Decimal(self.fpsnum)
         h = int(t // 3600)
         m = int((t - h * 3600) // 60)
@@ -27,7 +31,7 @@ class Chapters:
         t = int(h) * 3600 + int(m) * 60 + float(s)
         f = round(Decimal(t) * Decimal(self.fpsnum) / Decimal(self.fpsden))
         if end:
-            f = f - 1
+            f -= 1
         return f
 
     def _atom(self, chapter):
@@ -101,10 +105,10 @@ class Chapters:
 
                 chapters.append([title, lang, start, end, uid])
 
-        return (ordered, chapters)
+        return ordered, chapters
+
 
 class ChapterEditorWindow(Gtk.Window):
-
     def __init__(self):
         Gtk.Window.__init__(self, title='pyanimchap')
         self.set_default_size(640, 0)
@@ -128,7 +132,7 @@ class ChapterEditorWindow(Gtk.Window):
         self.scrwin.add(vport)
         self.add(self.scrwin)
 
-        #--Header Bar--#
+        # --Header Bar--#
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
         hbar.set_property('title', 'pyanimchap')
@@ -161,7 +165,7 @@ class ChapterEditorWindow(Gtk.Window):
 
         self.set_titlebar(hbar)
 
-        #--Open/Save--#
+        # --Open/Save--#
         cflt = Gtk.FileFilter()
         cflt.set_name('XML Chapter')
         cflt.add_pattern('*.xml')
@@ -178,7 +182,7 @@ class ChapterEditorWindow(Gtk.Window):
                                                  'Save', Gtk.ResponseType.OK))
         self.save_fcdlg.add_filter(cflt)
 
-        #--Settings--#
+        # --Settings--#
         settings_grid = Gtk.Grid()
         settings_grid.set_property('margin', 6)
         settings_grid.set_column_spacing(6)
@@ -231,7 +235,7 @@ class ChapterEditorWindow(Gtk.Window):
         settings_grid.show_all()
         settings_popover.add(settings_grid)
 
-        #--Entries--#
+        # --Entries--#
         self._update_entries()
 
     def _update_entries(self):
@@ -348,7 +352,6 @@ class ChapterEditorWindow(Gtk.Window):
                 down_button.set_sensitive(False)
 
             self.box.pack_start(grid, False, True, 0)
-
 
         if len(self.chapters) <= 3:
             self.scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)

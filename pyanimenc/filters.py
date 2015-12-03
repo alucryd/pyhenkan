@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import pyanimenc.conf as conf
+
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
 class FilterDialog(Gtk.Dialog):
-
     def __init__(self, parent, flt, i):
         Gtk.Dialog.__init__(self, flt + ' settings', parent, 0,
                             use_header_bar=True)
@@ -298,11 +300,11 @@ class FilterDialog(Gtk.Dialog):
         self.tt_spin.set_value(flt.get('temporal_threshold', 7))
         self.st_spin.set_value(flt.get('spatial_threshold', 7))
         p = flt.get('planes', [0, 1, 2])
-        if not 0 in p:
+        if 0 not in p:
             self.y_check.set_active(False)
-        if not 1 in p:
+        if 1 not in p:
             self.u_check.set_active(False)
-        if not 2 in p:
+        if 2 not in p:
             self.v_check.set_active(False)
 
         self.grid.attach(tt_label, 0, 0, 1, 1)
@@ -543,7 +545,7 @@ class FilterDialog(Gtk.Dialog):
         self.grainc_spin = Gtk.SpinButton()
         self.grainc_spin.set_adjustment(grainc_adj)
         self.grainc_spin.set_property('hexpand', True)
-        self.depth_spin= Gtk.SpinButton()
+        self.depth_spin = Gtk.SpinButton()
         self.depth_spin.set_adjustment(depth_adj)
         self.depth_spin.set_property('hexpand', True)
 
@@ -637,17 +639,17 @@ class FilterDialog(Gtk.Dialog):
         else:
             if 'grainc' in flt:
                 flt.pop('grainc')
-        if od!= 8:
+        if od != 8:
             flt['output_depth'] = od
         else:
             if 'output_depth' in flt:
                 flt.pop('output_depth')
-        if da!= 3 and od != 16:
+        if da != 3 and od != 16:
             flt['dither_algo'] = da
         else:
             if 'dither_algo' in flt:
                 flt.pop('dither_algo')
-        if sm!= 2:
+        if sm != 2:
             flt['sample_mode'] = sm
         else:
             if 'sample_mode' in flt:

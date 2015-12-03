@@ -1,12 +1,51 @@
 #!/usr/bin/env python3
 
-import pyanimenc.conf as conf
 from collections import OrderedDict
-from gi.repository import Gio, Gtk
+
+import pyanimenc.conf as conf
 from pyanimenc.filters import FilterDialog
 
-class VapourSynthDialog(Gtk.Dialog):
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, Gtk
 
+
+class VapourSynthScript:
+    def __init__(self):
+        self.map = {'Source': '',
+                    'FFMpegSource': 'ffms2.Source',
+                    'LibavSMASHSource': 'lsmas.LibavSMASHSource',
+                    'LWLibavSource': 'lsmas.LWLibavSource',
+                    'Crop': 'std.',
+                    'Resize': 'resize.',
+                    'Denoise': '',
+                    'FluxSmoothT': 'flux.SmoothT',
+                    'FluxSmoothST': 'flux.SmoothST',
+                    'RemoveGrain': 'rgvs.RemoveGrain',
+                    'TemporalSoften': 'focus.TemporalSoften',
+                    'Deband': '',
+                    'f3kdb': 'f3kdb.Deband',
+                    'Misc': 'std.'}
+
+    def script(self, source, filters):
+        s = ['import vapoursynth as vs', 'core = vs.get_core()']
+        for f in filters:
+            line = 'clip = core.'
+            if f[0] == 'Source':
+                args = ['"{}"'.format(source)]
+            else:
+                args = ['clip']
+            line += self.map[f[0]] + self.map.get(f[1], f[1]) + '({})'
+            if f[2]:
+                args += ['='.join([key, str(f[2][key])]) for key in f[2]]
+            print(args)
+            s.append(line.format(', '.join(args)))
+        s.append('clip.set_output()')
+        s = '\n'.join(s)
+        return s
+
+
+class VapourSynthDialog(Gtk.Dialog):
     def __init__(self, parent):
         Gtk.Dialog.__init__(self, 'VapourSynth filters', parent, 0,
                             use_header_bar=1)
@@ -88,8 +127,8 @@ class VapourSynthDialog(Gtk.Dialog):
                             name_cbtext.set_active(k)
                             conf_button.set_sensitive(True)
 
-                        k = k + 1
-                j = j + 1
+                        k += 1
+                j += 1
 
             if i == 0:
                 type_cbtext.set_sensitive(False)

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 
-import pyanimenc.conf as conf
 from collections import OrderedDict
+
+import pyanimenc.conf as conf
+
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gio, Gtk
 
-class EncoderDialog(Gtk.Dialog):
 
+class EncoderDialog(Gtk.Dialog):
     def __init__(self, parent, x):
         if x[0] == 'ffmpeg':
             n = x[1]
@@ -45,7 +49,7 @@ class EncoderDialog(Gtk.Dialog):
             self._hbar('mp3')
             self._mp3()
             self.connect('delete-event', self._update_mp3)
-        if n == 'opusenc'or n == 'libopus':
+        if n == 'opusenc' or n == 'libopus':
             self._hbar('opus')
             self._opus()
             self.connect('delete-event', self._update_opus)
@@ -156,13 +160,13 @@ class EncoderDialog(Gtk.Dialog):
         k = self.resamplers.index(r)
         for chk in self.channels:
             if not ch == self.channels[chk]:
-                i = i + 1
+                i += 1
             else:
                 self.channel_check.set_active(True)
                 self.channel_cbtext.set_active(i)
         for srk in self.rates:
             if not sr == self.rates[srk]:
-                j = j + 1
+                j += 1
             else:
                 self.rate_check.set_active(True)
                 self.rate_cbtext.set_active(j)
@@ -710,4 +714,3 @@ class EncoderDialog(Gtk.Dialog):
     def on_channel_toggled(self, check):
         s = self.channel_check.get_active()
         self.channel_cbtext.set_sensitive(s)
-

@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 
 import os
+
 import pyanimenc.conf as conf
-import pyanimenc.vpy as vpy
+from pyanimenc.vapoursynth import VapourSynthDialog, VapourSynthScript
+
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gio, Gtk
-from pyanimenc.vapoursynth import VapourSynthDialog
-from pyanimenc.vpy import vpy
 
 class ScriptCreatorWindow(Gtk.Window):
-
     def __init__(self):
         Gtk.Window.__init__(self, title='pyanimscript')
         self.set_default_size(640, 520)
 
         self.source = ''
 
-        #--Header Bar--#
+        # --Header Bar--#
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
         hbar.set_property('title', 'pyanimscript')
@@ -38,7 +39,7 @@ class ScriptCreatorWindow(Gtk.Window):
 
         self.set_titlebar(hbar)
 
-        #--Open/Save--#
+        # --Open/Save--#
         self.open_fcdlg = Gtk.FileChooserDialog('Open Video File', self,
                                                 Gtk.FileChooserAction.OPEN,
                                                 ('Cancel',
@@ -53,7 +54,7 @@ class ScriptCreatorWindow(Gtk.Window):
                                                  'Save', Gtk.ResponseType.OK))
         self.save_fcdlg.add_filter(conf.sflt)
 
-        #--Textview--#
+        # --Textview--#
         self.tbuffer = Gtk.TextBuffer()
         tview = Gtk.TextView()
         tview.set_buffer(self.tbuffer)
@@ -63,7 +64,7 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        s = vpy(self.source)
+        s = VapourSynthScript().script(self.source, conf.filters)
         self.tbuffer.set_text(s)
 
     def on_open_clicked(self, button):
@@ -85,7 +86,7 @@ class ScriptCreatorWindow(Gtk.Window):
         if response == Gtk.ResponseType.OK:
             o = self.save_fcdlg.get_filename()
             if not o.endswith('.vpy'):
-                o = o + '.vpy'
+                o += '.vpy'
 
             s = self.tbuffer.get_text(self.tbuffer.get_start_iter(),
                                       self.tbuffer.get_end_iter(),
