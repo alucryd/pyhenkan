@@ -30,17 +30,21 @@ class MainWindow(Gtk.Window):
         Gtk.Window.__init__(self, title='pyanimenc')
         self.set_default_size(800, 600)
 
+        self.connect('delete-event', self.on_delete_event)
+
         # Set default working directory
         self.wdir = os.environ['HOME']
 
-        # Set up single worker thread
-        self.worker = ThreadPoolExecutor(max_workers=1)
         # Initialize a lock and acquire it
         # Any subsequent acquire() will block the calling thread
         self.lock = Lock()
         self.lock.acquire()
         # Mark as idle, this will be useful later
         self.idle = True
+        self.waitlist = []
+        # Set up single worker thread and lock it
+        self.worker = ThreadPoolExecutor(max_workers=1)
+        self.worker.submit(self._wait)
 
         # Notification
         Notify.init('pyanimenc')
@@ -266,28 +270,32 @@ class MainWindow(Gtk.Window):
 
         self.queue_tselection = queue_tview.get_selection()
 
-        queue_start_button = Gtk.Button()
-        queue_start_button.set_label('Start')
-        queue_start_button.connect('clicked', self.on_start_clicked)
+        self.queue_start_button = Gtk.Button()
+        self.queue_start_button.set_label('Start')
+        self.queue_start_button.connect('clicked', self.on_start_clicked)
+        self.queue_start_button.set_sensitive(False)
 
-        queue_stop_button = Gtk.Button()
-        queue_stop_button.set_label('Stop')
-        queue_stop_button.connect('clicked', self.on_stop_clicked)
+        self.queue_stop_button = Gtk.Button()
+        self.queue_stop_button.set_label('Stop')
+        self.queue_stop_button.connect('clicked', self.on_stop_clicked)
+        self.queue_stop_button.set_sensitive(False)
 
-        queue_del_button = Gtk.Button()
-        queue_del_button.set_label('Delete')
-        queue_del_button.connect('clicked', self.on_del_clicked)
+        self.queue_del_button = Gtk.Button()
+        self.queue_del_button.set_label('Delete')
+        self.queue_del_button.connect('clicked', self.on_del_clicked)
+        self.queue_del_button.set_sensitive(False)
 
-        queue_clr_button = Gtk.Button()
-        queue_clr_button.set_label('Clear')
-        queue_clr_button.connect('clicked', self.on_clr_clicked)
+        self.queue_clr_button = Gtk.Button()
+        self.queue_clr_button.set_label('Clear')
+        self.queue_clr_button.connect('clicked', self.on_clr_clicked)
+        self.queue_clr_button.set_sensitive(False)
 
         queue_ctl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                 spacing=6)
-        queue_ctl_box.pack_start(queue_start_button, True, True, 0)
-        queue_ctl_box.pack_start(queue_stop_button, True, True, 0)
-        queue_ctl_box.pack_start(queue_del_button, True, True, 0)
-        queue_ctl_box.pack_start(queue_clr_button, True, True, 0)
+        queue_ctl_box.pack_start(self.queue_start_button, True, True, 0)
+        queue_ctl_box.pack_start(self.queue_stop_button, True, True, 0)
+        queue_ctl_box.pack_start(self.queue_del_button, True, True, 0)
+        queue_ctl_box.pack_start(self.queue_clr_button, True, True, 0)
 
         # --Notebook--#
         input_label = Gtk.Label('Input')
@@ -543,7 +551,6 @@ class MainWindow(Gtk.Window):
             else:
                 uid = ''
 
-            self.worker.submit(self._wait)
             job = self.queue_tstore.append(None, [None, in_nx, '', 'Waiting'])
 
             for j in range(len(self.tracks)):
@@ -565,10 +572,15 @@ class MainWindow(Gtk.Window):
                         flts = copy.deepcopy(conf.filters)
 
                         in_vpy = tmp_d + '/' + in_n + '.vpy'
-                        self.worker.submit(self._vpy,
-                                           in_dnx,
-                                           in_vpy,
-                                           flts)
+                        future = self.worker.submit(self._vpy,
+                                                    in_dnx,
+                                                    in_vpy,
+                                                    flts)
+
+                        self.queue_tstore.append(job, [future,
+                                                       '',
+                                                       'vpy',
+                                                       'Waiting'])
 
                         if x[0].startswith('x264'):
                             cfg = conf.x264
@@ -778,7 +790,17 @@ class MainWindow(Gtk.Window):
             # Clean up
             self.worker.submit(self._clean, tmp_d)
 
+            # Update queue
             self.worker.submit(self._update_queue)
+
+            # Add a wait job after each encoding job
+            future = self.worker.submit(self._wait)
+            self.waitlist.append(future)
+
+            if self.idle:
+                self.queue_start_button.set_sensitive(True)
+                self.queue_del_button.set_sensitive(True)
+                self.queue_clr_button.set_sensitive(True)
 
     def on_conf_clicked(self, button, t):
         if t == 'input':
@@ -797,92 +819,78 @@ class MainWindow(Gtk.Window):
 
     def on_start_clicked(self, button):
         if len(self.queue_tstore):
+            self.queue_stop_button.set_sensitive(True)
+            self.queue_del_button.set_sensitive(False)
+            self.queue_clr_button.set_sensitive(False)
             print('Start processing...')
-            if self.idle:
-                self.idle = False
-                self.lock.release()
+            self.idle = False
+            self.lock.release()
 
     def on_stop_clicked(self, button):
-        if not self.idle:
-            print('Stop processing...')
-            self.idle = True
-            # Wait for the process to terminate
-            while self.proc.poll() is None:
-                self.proc.terminate()
+        tstore = self.queue_tstore
+        self.idle = True
+        print('Stop processing...')
+        # Wait for the process to terminate
+        while self.proc.poll() is None:
+            self.proc.terminate()
 
-            njobs = len(self.queue_tstore)
-            for i in range(njobs):
-                path = Gtk.TreePath(i)
-                job = self.queue_tstore.get_iter(path)
-                status = self.queue_tstore.get_value(job, 3)
-                if status == 'Running':
-                    if self.queue_tstore.iter_has_child(job):
-                        nsteps = self.queue_tstore.iter_n_children(job)
-                        for j in range(nsteps):
-                            path = Gtk.TreePath([i, j])
-                            step = self.queue_tstore.get_iter(path)
-                            future = self.queue_tstore.get_value(step, 0)
-                            # Mark children as failed
-                            self.queue_tstore.set_value(step, 3, 'Failed')
-                            # Cancel pending children
-                            if not future.done():
-                                future.cancel()
-                    # Mark job as failed
-                    self.queue_tstore.set_value(job, 3, 'Failed')
+        for job in tstore:
+            status = tstore.get_value(job.iter, 3)
+            if status == 'Running':
+                for step in job.iterchildren():
+                    future = tstore.get_value(step.iter, 0)
+                    # Cancel and mark steps as failed
+                    if not future.done():
+                        tstore.set_value(step.iter, 3, 'Failed')
+                        future.cancel()
+                # Mark job as failed
+                tstore.set_value(job.iter, 3, 'Failed')
 
-            self.pbar.set_fraction(0)
-            self.pbar.set_text('Ready')
+        self.pbar.set_fraction(0)
+        self.pbar.set_text('Ready')
+        self.queue_stop_button.set_sensitive(False)
+        self.queue_clr_button.set_sensitive(True)
 
     def on_del_clicked(self, button):
-        job = self.queue_tselection.get_selected()[1]
-        if job is not None:
-            # If child, select parent instead
-            if self.queue_tstore.iter_depth(job) == 1:
-                job = self.queue_tstore.iter_parent(job)
-            # If parent, delete all children
-            if self.queue_tstore.iter_has_child(job):
-                nsteps = self.queue_tstore.iter_n_children(job)
-                for i in range(nsteps):
-                    step = self.queue_tstore.iter_nth_child(job, 0)
-                    future = self.queue_tstore.get_value(step, 0)
-                    # Cancel and delete child only if not running
-                    if not future.running():
-                        future.cancel()
-                        self.queue_tstore.remove(step)
-                # Delete parent only when all children are
-                if not self.queue_tstore.iter_has_child(job):
-                    self.queue_tstore.remove(job)
-            else:
-                future = self.queue_tstore.get_value(job, 0)
-                # Cancel and delete job only if not running
-                if not future.running():
-                    future.cancel()
-                    self.queue_tstore.remove(job)
+        tstore, job = self.queue_tselection.get_selected()
+        # If child, select parent instead
+        if tstore.iter_depth(job) == 1:
+            job = tstore.iter_parent(job)
+        status = tstore.get_value(job, 3)
+        while tstore.iter_has_child(job):
+            step = tstore.iter_nth_child(job, 0)
+            future = tstore.get_value(step, 0)
+            # Cancel pending step
+            if not future.done():
+                future.cancel()
+            tstore.remove(step)
+        # Cancel associated wait job
+        if status not in ['Done', 'Failed']:
+            idx = tstore.get_path(job).get_indices()[0]
+            self.waitlist[idx].cancel()
+        # Delete job
+        tstore.remove(job)
+
+        if not len(tstore):
+            self.queue_start_button.set_sensitive(False)
+            self.queue_del_button.set_sensitive(False)
+            self.queue_clr_button.set_sensitive(False)
 
     def on_clr_clicked(self, button):
-        # Don't clear when jobs are running
-        if self.idle:
-            njobs = len(self.queue_tstore)
-            for i in range(njobs):
-                path = Gtk.TreePath(i)
-                job = self.queue_tstore.get_iter(path)
-                # Clear children before parents
-                if self.queue_tstore.iter_has_child(job):
-                    nsteps = self.queue_tstore.iter_n_children(job)
-                    for j in range(nsteps):
-                        path = Gtk.TreePath([i, j])
-                        step = self.queue_tstore.get_iter(path)
-                        future = self.queue_tstore.get_value(step, 0)
-                        # Cancel pending children before deleting them
-                        if not future.done():
-                            future.cancel()
-                else:
-                    future = self.queue_tstore.get_value(job, 0)
-                    # Cancel pending jobs before deleting them
-                    if not future.done():
-                        future.cancel()
-            # Clear queue
-            self.queue_tstore.clear()
+        tstore = self.queue_tstore
+        for job in tstore:
+            # Cancel jobs before clearing them
+            for step in job.iterchildren():
+                future = tstore.get_value(step.iter, 0)
+                future.cancel()
+            for future in self.waitlist:
+                future.cancel()
+        # Clear queue
+        tstore.clear()
+
+        self.queue_start_button.set_sensitive(False)
+        self.queue_del_button.set_sensitive(False)
+        self.queue_clr_button.set_sensitive(False)
 
     def _wait(self):
         if self.idle:
@@ -899,6 +907,9 @@ class MainWindow(Gtk.Window):
                 # Mark as idle if it was the last job
                 GLib.idle_add(self._notify, 'Jobs done')
                 self.idle = True
+                self.queue_start_button.set_sensitive(False)
+                self.queue_stop_button.set_sensitive(False)
+                self.queue_clr_button.set_sensitive(True)
             elif new_status == 'Running' and new_status != status:
                 GLib.idle_add(self._notify, 'Processing ' + filename)
 
@@ -907,7 +918,9 @@ class MainWindow(Gtk.Window):
         for step in job.iterchildren():
             future = tstore.get_value(step.iter, 0)
             status = tstore.get_value(step.iter, 3)
-            if future.done() and status != 'Failed':
+            if status == 'Failed':
+                return 'Failed'
+            elif future.done():
                 # Mark done steps as such
                 GLib.idle_add(tstore.set_value, step.iter, 3, 'Done')
                 if not step.next:
@@ -917,6 +930,8 @@ class MainWindow(Gtk.Window):
                 # Mark running step as such
                 GLib.idle_add(tstore.set_value, step.iter, 3, 'Running')
                 return 'Running'
+            else:
+                return 'Waiting'
 
     def _notify(self, text):
         self.notification.update('pyanimenc', text)
@@ -1142,6 +1157,20 @@ class MainWindow(Gtk.Window):
             GLib.idle_add(self.pbar.set_text, 'Ready')
         GLib.idle_add(self.pbar.set_fraction, 0)
 
+    def on_delete_event(event, self, widget):
+        tstore = self.queue_tstore
+        # Cancel all jobs
+        for job in tstore:
+            for step in job.iterchildren():
+                future = tstore.get_value(step.iter, 0)
+                if not future.done():
+                    future.cancel()
+        for future in self.waitlist:
+            future.cancel()
+        Notify.uninit()
+        self.lock.release()
+        Gtk.main_quit()
+
 
 class AboutDialog(Gtk.AboutDialog):
     def __init__(self, parent):
@@ -1153,18 +1182,7 @@ class AboutDialog(Gtk.AboutDialog):
         self.set_property('license-type', Gtk.License.GPL_3_0)
         self.set_property('website', 'https://github.com/alucryd/pyanimenc')
 
-
-def on_delete_event(self, event):
-    Notify.uninit()
-    self.lock.release()
-    Gtk.main_quit()
-
-
-win = MainWindow()
-win.connect('delete-event', on_delete_event)
-
-win.show_all()
-
+MainWindow().show_all()
 Gtk.main()
 
 # vim: ts=4 sw=4 et:

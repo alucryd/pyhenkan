@@ -38,7 +38,6 @@ class VapourSynthScript:
             line += self.map[f[0]] + self.map.get(f[1], f[1]) + '({})'
             if f[2]:
                 args += ['='.join([key, str(f[2][key])]) for key in f[2]]
-            print(args)
             s.append(line.format(', '.join(args)))
         s.append('clip.set_output()')
         s = '\n'.join(s)
