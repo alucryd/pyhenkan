@@ -25,7 +25,8 @@ class VapourSynthScript:
                     'TemporalSoften': 'focus.TemporalSoften',
                     'Deband': '',
                     'f3kdb': 'f3kdb.Deband',
-                    'Misc': 'std.'}
+                    'Misc': 'std.',
+                    'ImageMagick': 'imwri.'}
 
     def script(self, source, filters):
         s = ['import vapoursynth as vs', 'core = vs.get_core()']

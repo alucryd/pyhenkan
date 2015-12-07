@@ -9,9 +9,7 @@ def info(i):
 
 
 def preview(i):
-    dec = 'vspipe "{}" - -y'.format(i)
-    enc = 'mpv -'
-    cmd = ' | '.join([dec, enc])
+    cmd = 'vspipe "{}" /dev/null'.format(i)
     return cmd
 
 
