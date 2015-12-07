@@ -12,9 +12,9 @@ import pyanimenc.command as command
 import pyanimenc.conf as conf
 from pyanimenc.chapter import ChapterEditorWindow
 from pyanimenc.encoders import EncoderDialog
+from pyanimenc.mediainfo import Parse
 from pyanimenc.script import ScriptCreatorWindow
 from pyanimenc.vapoursynth import VapourSynthDialog, VapourSynthScript
-from pymediainfo import MediaInfo
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -197,7 +197,8 @@ class MainWindow(Gtk.Window):
                                   Gtk.PositionType.BOTTOM, 1, 1)
 
         # (enable, enable_edit, encode, encode_edit, type, codec, name, lang)
-        self.tracks = Gtk.ListStore(bool, bool, bool, bool, str, str, str, str)
+        self.track_lstore = Gtk.ListStore(bool, bool, bool, bool,
+                                          str, str, str, str)
 
         enable_crtoggle = Gtk.CellRendererToggle()
         enable_crtoggle.connect('toggled', self.on_cell_toggled, 0)
@@ -214,9 +215,9 @@ class MainWindow(Gtk.Window):
         type_tvcolumn = Gtk.TreeViewColumn('Type', type_crtext, text=4,
                                            sensitive=0)
 
-        codec_crtext = Gtk.CellRendererText()
-        codec_tvcolumn = Gtk.TreeViewColumn('Codec', codec_crtext, text=5,
-                                            sensitive=0)
+        format_crtext = Gtk.CellRendererText()
+        format_tvcolumn = Gtk.TreeViewColumn('Format', format_crtext, text=5,
+                                             sensitive=0)
 
         title_crtext = Gtk.CellRendererText()
         title_crtext.connect('edited', self.on_cell_edited, 6)
@@ -229,11 +230,11 @@ class MainWindow(Gtk.Window):
         lang_tvcolumn = Gtk.TreeViewColumn('Language', lang_crtext, text=7,
                                            editable=0, sensitive=0)
 
-        tview = Gtk.TreeView(self.tracks)
+        tview = Gtk.TreeView(self.track_lstore)
         tview.append_column(enable_tvcolumn)
         tview.append_column(encode_tvcolumn)
         tview.append_column(type_tvcolumn)
-        tview.append_column(codec_tvcolumn)
+        tview.append_column(format_tvcolumn)
         tview.append_column(title_tvcolumn)
         tview.append_column(lang_tvcolumn)
 
@@ -348,14 +349,26 @@ class MainWindow(Gtk.Window):
         self.about_dlg.hide()
 
     def on_cell_toggled(self, crtoggle, path, i):
-        self.tracks[path][i] = not self.tracks[path][i]
+        v = not self.track_lstore[path][i]
+        self.track_lstore[path][i] = v
 
-    def on_cell_edited(self, crtext, path, t, i):
-        # Language is a 3 letter code
-        # TODO: write a custom cell renderer for this
-        if i == 4:
-            t = t[:3]
-        self.tracks[path][i] = t
+        t = self.tracklist[int(path)]
+        if i == 0:
+            t.enable = v
+        elif i == 2:
+            t.encode = v
+
+    def on_cell_edited(self, crtext, path, v, i):
+        self.track_lstore[path][i] = v
+
+        t = self.tracklist[int(path)]
+        if i == 6:
+            t.title = v
+        elif i == 7:
+            # Language is a 3 letter code
+            # TODO: write a custom cell renderer for this
+            v = v[:3]
+            t.lang = v
 
     def on_open_clicked(self, button):
         dlg = Gtk.FileChooserDialog('Select File(s)', self,
@@ -370,8 +383,7 @@ class MainWindow(Gtk.Window):
         response = dlg.run()
 
         if response == Gtk.ResponseType.OK:
-            self.data = []
-            self.tracks.clear()
+            self.track_lstore.clear()
 
             self.wdir = dlg.get_current_folder()
             self.files = dlg.get_filenames()
@@ -385,33 +397,25 @@ class MainWindow(Gtk.Window):
                 self.out_name_entry.set_text(out_name)
                 self.out_name_entry.set_sensitive(True)
 
-            self._get_mediainfo()
+            self.tracklist = Parse(self.files[0]).get_tracklist()
 
-            # Pick reference tracks
-            tracks_ref = self.data[0].tracks
-
-            self._check_consistency(tracks_ref)
-            self._get_tracks(tracks_ref)
-
-            self.queue_button.set_sensitive(True)
+            if self._check_consistency():
+                self._populate_lstore()
+                self.queue_button.set_sensitive(True)
 
         dlg.destroy()
 
-    def _get_mediainfo(self):
-        # Get file info
-        for i in range(len(self.files)):
-            f = self.files[i]
-            d = MediaInfo.parse(f)
-            self.data.append(d)
-
-    def _check_consistency(self, tracks_ref):
+    def _check_consistency(self):
         # Make sure tracks are identical across files
         dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO,
                                    Gtk.ButtonsType.OK, 'Track Mismatch')
 
-        for i in range(1, len(self.data)):
-            tracks = self.data[i].tracks
-            o = os.path.basename(self.files[0])
+        tracks_ref = self.tracklist
+        o = os.path.basename(self.files[0])
+
+        # Include first file in the loop for single files to pass the test
+        for i in range(len(self.files)):
+            tracks = Parse(self.files[i]).get_tracklist()
             f = os.path.basename(self.files[i])
 
             if len(tracks) != len(tracks_ref):
@@ -423,111 +427,60 @@ class MainWindow(Gtk.Window):
                 dialog.format_secondary_text(t)
                 dialog.run()
 
-            # First track contains general information, skip it
-            for j in range(1, len(tracks)):
-                codec_ref = tracks_ref[j].codec
-                language_ref = tracks_ref[j].language
-                channels_ref = tracks_ref[j].channel_s
-                codec = tracks[j].codec
-                language = tracks[j].language
-                channels = tracks[j].channel_s
+            else:
+                for j in range(len(tracks)):
+                    ty_ref = tracks_ref[j].type
+                    ty = tracks[j].type
+                    fo_ref = tracks_ref[j].format
+                    fo = tracks[j].format
+                    la_ref = tracks_ref[j].lang
+                    la = tracks[j].lang
+                    if ty_ref == 'Audio':
+                        ch_ref = tracks_ref[j].channels
+                        ch = tracks[j].channels
 
-                if codec != codec_ref:
-                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                         'different codecs. Please make sure all files '
-                         'share the same layout.'
-                         ).format(o, str(j), codec_ref, f, str(j), codec)
+                    if ty != ty_ref:
+                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                             'different types. Please make sure all files '
+                             'share the same layout.'
+                             ).format(o, str(j), ty_ref, f, str(j), ty)
+                    elif fo != fo_ref:
+                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                             'different formats. Please make sure all files '
+                             'share the same layout.'
+                             ).format(o, str(j), fo_ref, f, str(j), fo)
+                    elif la != la_ref:
+                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                             'different languages. Please make sure all files '
+                             'share the same layout.'
+                             ).format(o, str(j), la_ref, f, str(j), la)
+                    elif ty_ref == 'Audio' and ch != ch_ref:
+                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
+                             'different channels. Please make sure all files '
+                             'share the same layout.'
+                             ).format(o, str(j), ch_ref, f, str(j), ch)
+                    else:
+                        return True
 
                     dialog.format_secondary_text(t)
                     dialog.run()
-
-                elif language != language_ref:
-                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                         'different languages. Please make sure all files '
-                         'share the same layout.'
-                         ).format(o, str(j), language_ref, f, str(j), language)
-
-                    dialog.format_secondary_text(t)
-                    dialog.run()
-
-                elif channels != channels_ref:
-                    t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                         'different channels. Please make sure all files '
-                         'share the same layout.'
-                         ).format(o, str(j), channels_ref, f, str(j), channels)
-
-                    dialog.format_secondary_text(t)
-                    dialog.run()
-
-                dialog.hide()
+                    dialog.hide()
 
         dialog.destroy()
 
-    def _get_tracks(self, tracks_ref):
-        for i in range(1, len(tracks_ref)):
-            enable = True
-            enable_edit = True
-            encode = True
-            encode_edit = True
+        return False
 
-            track = tracks_ref[i]
-            track_type = track.track_type
-
-            if track.codec_family:
-                codec = track.codec_family
-            # Sometimes codec_family is not available, use codec instead
-            elif track.codec:
-                codec = track.codec.rpartition('/')[2]
-            # Sometimes there's no codec either
-            else:
-                codec = ''
-
-            if track.title:
-                title = track.title
-            else:
-                title = ''
-
-            # other_language is a list, we want the 3 letter code
-            if track.other_language:
-                language = track.other_language[3]
-            else:
-                language = 'und'
-
-            if track_type == 'Video':
-                conf.video['width'] = track.width
-                conf.video['height'] = track.height
-                # TODO: add more frame rates
-                if track.frame_rate_mode == 'CFR':
-                    if track.frame_rate == '23.976':
-                        conf.video['fpsnum'] = 24000
-                        conf.video['fpsden'] = 1001
-                    elif track.frame_rate == '29.970':
-                        conf.fpsnum = 30000
-                        conf.fpsden = 1001
-
-            elif track_type == 'Audio':
-                pass
-            # channels = track.channel_s
-            # sampling_rate = track.sampling_rate
-            #    if channels == '1':
-            #        channels = '1.0'
-            #    elif channels == '2':
-            #        channels = '2.0'
-            #    elif channels == '5':
-            #        channels = '5.0'
-            #    elif channels == '6':
-            #        channels = '5.1'
-            #    elif channels == '7':
-            #        channels = '6.1'
-            #    elif channels == '8':
-            #        channels = '7.1'
-
-            else:
-                encode = False
-                encode_edit = False
-
-            self.tracks.append([enable, enable_edit, encode, encode_edit,
-                                track_type, codec, title, language])
+    def _populate_lstore(self):
+        for t in self.tracklist:
+            enable = t.enable
+            enable_edit = False if t.type == 'Video' else True
+            encode = t.encode
+            track_type = t.type
+            codec = t.format
+            title = t.title
+            lang = t.lang
+            self.track_lstore.append([enable, enable_edit, encode, encode,
+                                      track_type, codec, title, lang])
 
     def on_queue_clicked(self, button):
         for i in range(len(self.files)):
@@ -544,26 +497,15 @@ class MainWindow(Gtk.Window):
 
             # Preserve UID for Matroska segment linking
             if in_x == '.mkv':
-                uid = self.data[i].tracks[0].other_unique_id[0]
-                uid = re.findall('0x[^)]*', uid)[0].replace('0x', '')
-                # Mediainfo strips leading zeroes...
-                uid = uid.rjust(32, '0')
+                uid = Parse(in_dnx).get_uid()
             else:
                 uid = ''
 
             job = self.queue_tstore.append(None, [None, in_nx, '', 'Waiting'])
 
-            for j in range(len(self.tracks)):
-                track = self.tracks[j]
-                enable = track[0]
-                encode = track[2]
-                track_type = track[4]
-                # codec = track[5]
-                title = track[6]
-                language = track[7]
-
-                if track_type == 'Video' and enable:
-                    if encode:
+            for t in self.tracklist:
+                if t.type == 'Video' and t.enable:
+                    if t.encode:
                         # Encode video
                         k = self.venc_cbtext.get_active_text()
                         x = conf.VENCS[k]
@@ -613,16 +555,16 @@ class MainWindow(Gtk.Window):
                                                        x[0],
                                                        'Waiting'])
 
-                        vtrack = [0, out, title, language]
+                        vtrack = [0, out, t.title, t.lang]
                     else:
-                        vtrack = [j, in_dnx, title, language]
+                        vtrack = [t.id, in_dnx, t.title, t.lang]
 
-                elif track_type == 'Audio' and enable:
-                    if encode:
+                elif t.type == 'Audio' and t.enable:
+                    if t.encode:
                         # Encode audio
                         k = self.aenc_cbtext.get_active_text()
                         x = conf.AENCS[k]
-                        o = '_'.join([in_n, str(j)])
+                        o = '_'.join([in_n, str(t.id)])
                         at = [conf.audio['rate'], conf.audio['channel'],
                               conf.video['fpsnum'], conf.video['fpsden'],
                               conf.trim]
@@ -635,7 +577,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._faac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -644,7 +586,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._libfaac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -657,7 +599,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._fdkaac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -666,7 +608,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._libfdk_aac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -679,14 +621,14 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._flac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['compression'],
                                                             at)
                             elif x[0] == 'ffmpeg':
                                 future = self.worker.submit(self._native_flac,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['compression'],
                                                             at)
                         elif x[0] == 'lame' or x[1] == 'libmp3lame':
@@ -697,7 +639,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._lame,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -706,7 +648,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._libmp3lame,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -719,7 +661,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._opusenc,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             at)
@@ -727,7 +669,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._libopus,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             at)
@@ -739,7 +681,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._oggenc,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -748,7 +690,7 @@ class MainWindow(Gtk.Window):
                                 future = self.worker.submit(self._libvorbis,
                                                             in_dnx,
                                                             out,
-                                                            j,
+                                                            t.id,
                                                             cfg['mode'],
                                                             cfg['bitrate'],
                                                             cfg['quality'],
@@ -759,14 +701,14 @@ class MainWindow(Gtk.Window):
                                                        x[0],
                                                        'Waiting'])
 
-                        atracks.append([0, out, title, language])
+                        atracks.append([0, out, t.title, t.lang])
                     else:
-                        atracks.append([j, in_dnx, title, language])
+                        atracks.append([t.id, in_dnx, t.title, t.lang])
 
-                elif track_type == 'Text' and enable:
-                    stracks.append([j, in_dnx, title, language])
-                elif track_type == 'Menu' and enable:
-                    mtracks.append([j, in_dnx, title, language])
+                elif t.type == 'Text' and t.enable:
+                    stracks.append([t.id, in_dnx, t.title, t.lang])
+                elif t.type == 'Menu' and t.enable:
+                    mtracks.append([t.id, in_dnx, t.title, t.lang])
 
             # Merge tracks
             name = self.out_name_entry.get_text()
