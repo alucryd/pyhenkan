@@ -1,9 +1,9 @@
 import re
 import subprocess
 
-import pyanimenc.conf as conf
-from pyanimenc.queue import Queue
-from pyanimenc.vapoursynth import VapourSynthScript
+import pyhenkan.conf as conf
+from pyhenkan.queue import Queue
+from pyhenkan.vapoursynth import VapourSynthScript
 
 from decimal import Decimal
 from gi.repository import GLib

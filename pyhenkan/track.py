@@ -1,5 +1,5 @@
-from pyanimenc.queue import Queue
-from pyanimenc.transcode import Transcode
+from pyhenkan.queue import Queue
+from pyhenkan.transcode import Transcode
 
 
 class Track:

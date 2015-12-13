@@ -32,7 +32,7 @@ class Queue:
             # Running proc
             self.proc = None
 
-            Notify.init('pyanimenc')
+            Notify.init('pyhenkan')
             Queue.__init = True
 
     def wait(self):
@@ -75,7 +75,7 @@ class Queue:
                 return 'Waiting'
 
     def _notify(self, text):
-        n = Notify.Notification.new('pyanimenc', text, 'dialog-information')
+        n = Notify.Notification.new('pyhenkan', text, 'dialog-information')
         n.set_urgency(1)
         n.show()
 

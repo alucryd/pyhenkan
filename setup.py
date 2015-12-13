@@ -3,10 +3,10 @@
 from setuptools import setup
 
 setup(
-    name='pyanimenc',
+    name='pyhenkan',
     version='0.1.0',
-    packages=['pyanimenc'],
-    url='https://github.com/alucryd/pyanimenc',
+    packages=['pyhenkan'],
+    url='https://github.com/alucryd/pyhenkan',
     license='GPL3',
     author='Maxime Gauduin',
     author_email='alucryd@gmail.com',
@@ -30,11 +30,11 @@ setup(
         'setuptools',
     ],
     data_files=[
-        ('/usr/share/applications', ['data/pyanimenc.desktop']),
-        ('/usr/share/pixmaps', ['data/pyanimenc.png']),
+        ('/usr/share/applications', ['data/pyhenkan.desktop']),
+        ('/usr/share/pixmaps', ['data/pyhenkan.png']),
     ],
     entry_points={'gui_scripts': [
-        'pyanimenc = pyanimenc',
+        'pyhenkan = pyhenkan',
     ],
     },
 )

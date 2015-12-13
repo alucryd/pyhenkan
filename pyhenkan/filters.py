@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import pyanimenc.conf as conf
+import pyhenkan.conf as conf
 
 import gi
 gi.require_version('Gtk', '3.0')

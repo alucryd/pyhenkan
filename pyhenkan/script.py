@@ -5,10 +5,10 @@ import subprocess
 import tempfile
 from collections import OrderedDict
 
-import pyanimenc.conf as conf
-from pyanimenc.mediafile import MediaFile
-from pyanimenc.transcode import Transcode
-from pyanimenc.vapoursynth import VapourSynthDialog, VapourSynthScript
+import pyhenkan.conf as conf
+from pyhenkan.mediafile import MediaFile
+from pyhenkan.transcode import Transcode
+from pyhenkan.vapoursynth import VapourSynthDialog, VapourSynthScript
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -144,7 +144,7 @@ class PreviewWindow(Gtk.Window):
         self.trans = Transcode(self.source.tracklist[0], None)
 
         self.tempdir = tempfile.gettempdir()
-        basename = '/'.join([self.tempdir, 'pyanimenc-preview'])
+        basename = '/'.join([self.tempdir, 'pyhenkan-preview'])
         self.png = basename + '%d.png'
         self.vpy = basename + '.vpy'
 

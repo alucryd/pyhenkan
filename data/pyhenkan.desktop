@@ -1,10 +1,10 @@
 [Desktop Entry]
 Encoding=UTF-8
 Type=Application
-Name=pyanimenc
+Name=pyhenkan
 Comment=Audio/Video Transcoding Frontend
-Exec=pyanimenc
-Icon=pyanimenc
+Exec=pyhenkan
+Icon=pyhenkan
 Terminal=false
 StartupNotify=false
 Categories=AudioVideo;

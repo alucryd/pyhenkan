@@ -3,13 +3,13 @@
 import copy
 import os
 
-import pyanimenc.conf as conf
-from pyanimenc.chapter import ChapterEditorWindow
-from pyanimenc.encoders import EncoderDialog
-from pyanimenc.mediafile import MediaFile
-from pyanimenc.queue import Queue
-from pyanimenc.script import ScriptCreatorWindow
-from pyanimenc.vapoursynth import VapourSynthDialog
+import pyhenkan.conf as conf
+from pyhenkan.chapter import ChapterEditorWindow
+from pyhenkan.encoders import EncoderDialog
+from pyhenkan.mediafile import MediaFile
+from pyhenkan.queue import Queue
+from pyhenkan.script import ScriptCreatorWindow
+from pyhenkan.vapoursynth import VapourSynthDialog
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -22,7 +22,7 @@ AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 
 class MainWindow(Gtk.Window):
     def __init__(self):
-        Gtk.Window.__init__(self, title='pyanimenc')
+        Gtk.Window.__init__(self, title='pyhenkan')
         self.set_default_size(800, 600)
 
         self.connect('delete-event', self.on_delete_event)
@@ -64,7 +64,7 @@ class MainWindow(Gtk.Window):
 
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
-        hbar.set_property('title', 'pyanimenc')
+        hbar.set_property('title', 'pyhenkan')
         hbar.pack_start(open_button)
         hbar.pack_start(tools_mbutton)
         hbar.pack_end(about_button)
@@ -585,16 +585,16 @@ class AboutDialog(Gtk.AboutDialog):
         Gtk.Dialog.__init__(self, parent)
 
         pixbuf = GdkPixbuf.Pixbuf
-        logo = pixbuf.new_from_file('/usr/share/pixmaps/pyanimenc.png')
+        logo = pixbuf.new_from_file('/usr/share/pixmaps/pyhenkan.png')
         logo = logo.scale_simple(64, 64, GdkPixbuf.InterpType.BILINEAR)
 
-        self.set_program_name('pyanimenc')
+        self.set_program_name('pyhenkan')
         self.set_logo(logo)
         self.set_version(VERSION)
         self.set_comments('Python Transcoding Tools')
         self.set_copyright('Copyright © 2014-2015 Maxime Gauduin')
         self.set_license_type(Gtk.License.GPL_3_0)
-        self.set_website('https://github.com/alucryd/pyanimenc')
+        self.set_website('https://github.com/alucryd/pyhenkan')
 
 MainWindow().show_all()
 Gtk.main()

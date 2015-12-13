@@ -2,8 +2,8 @@
 
 from collections import OrderedDict
 
-import pyanimenc.conf as conf
-from pyanimenc.filters import FilterDialog
+import pyhenkan.conf as conf
+from pyhenkan.filters import FilterDialog
 
 import gi
 gi.require_version('Gtk', '3.0')

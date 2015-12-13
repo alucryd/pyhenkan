@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import pyanimenc.conf as conf
+import pyhenkan.conf as conf
 
 from collections import OrderedDict
 

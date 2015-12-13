@@ -2,10 +2,10 @@ import os
 import re
 import shutil
 
-import pyanimenc.conf as conf
-from pyanimenc.queue import Queue
-from pyanimenc.mux import Mux
-from pyanimenc.track import VideoTrack, AudioTrack, TextTrack, MenuTrack
+import pyhenkan.conf as conf
+from pyhenkan.queue import Queue
+from pyhenkan.mux import Mux
+from pyhenkan.track import VideoTrack, AudioTrack, TextTrack, MenuTrack
 
 from pymediainfo import MediaInfo
 from gi.repository import GLib
