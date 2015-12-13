@@ -5,8 +5,9 @@ import subprocess
 import tempfile
 from collections import OrderedDict
 
-import pyanimenc.command as command
 import pyanimenc.conf as conf
+from pyanimenc.mediafile import MediaFile
+from pyanimenc.transcode import Transcode
 from pyanimenc.vapoursynth import VapourSynthDialog, VapourSynthScript
 
 import gi
@@ -21,7 +22,7 @@ class ScriptCreatorWindow(Gtk.Window):
 
         # Set default working directory
         self.wdir = os.environ['HOME']
-        self.source = ''
+        self.source = None
 
         # --Header Bar-- #
         open_button = Gtk.Button('Open')
@@ -80,7 +81,7 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        s = VapourSynthScript().script(self.source, conf.filters)
+        s = VapourSynthScript().script(self.source.path, conf.filters)
         self.tbuffer.set_text(s)
 
     def on_open_clicked(self, button):
@@ -90,7 +91,8 @@ class ScriptCreatorWindow(Gtk.Window):
             if self.source:
                 self.preview_win.destroy()
 
-            self.source = self.open_fcdlg.get_filename()
+            f = self.open_fcdlg.get_filename()
+            self.source = MediaFile(f)
 
             self._update_buffer()
             self.save_button.set_sensitive(True)
@@ -101,7 +103,9 @@ class ScriptCreatorWindow(Gtk.Window):
         self.open_fcdlg.hide()
 
     def on_save_clicked(self, button):
-        o = os.path.splitext(self.source)[0] + '.vpy'
+        o = '.'.join([self.source.bname,  'vpy'])
+        o = '/'.join([self.source.dname, o])
+
         self.save_fcdlg.set_filename(o)
 
         response = self.save_fcdlg.run()
@@ -137,15 +141,17 @@ class PreviewWindow(Gtk.Window):
         Gtk.Window.__init__(self, title='Preview')
 
         self.source = source
+        self.trans = Transcode(self.source.tracklist[0], None)
 
         self.tempdir = tempfile.gettempdir()
         basename = '/'.join([self.tempdir, 'pyanimenc-preview'])
         self.png = basename + '%d.png'
         self.vpy = basename + '.vpy'
-        self._vpy(conf.filters)
 
-        d = self._info()
+        self.trans.script(self.vpy, conf.filters)
+        d = self.trans.info()
         self.frame = round((d - 1) / 2)
+
         self.image = Gtk.Image()
 
         scrwin = Gtk.ScrolledWindow()
@@ -216,31 +222,10 @@ class PreviewWindow(Gtk.Window):
         flts = conf.filters + [['Resize', 'Bilinear', args_res],
                                ['Misc', 'Trim', args_trim],
                                ['ImageMagick', 'Write', args_imwri]]
-        self._vpy(flts)
 
-        cmd = command.preview(self.vpy)
-        subprocess.run(cmd, shell=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       universal_newlines=True)
+        self.trans.script(self.vpy, flts)
+        self.trans.preview()
 
         self.image.set_from_file(self.png.replace('%d', str(0)))
-
-    def _vpy(self, flts):
-        s = VapourSynthScript().script(self.source, flts)
-        with open(self.vpy, 'w') as f:
-            f.write(s)
-
-    def _info(self):
-        cmd = command.info(self.vpy)
-        proc = subprocess.Popen(cmd, shell=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL,
-                                universal_newlines=True)
-        while proc.poll() is None:
-            line = proc.stdout.readline()
-            # Get the frame total
-            if 'Frames:' in line:
-                dur = int(line.split(' ')[1])
-        return dur
 
 # vim: ts=4 sw=4 et:

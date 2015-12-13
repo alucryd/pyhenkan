@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from decimal import Decimal
 from random import randrange
 

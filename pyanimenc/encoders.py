@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from collections import OrderedDict
-
 import pyanimenc.conf as conf
+
+from collections import OrderedDict
 
 import gi
 gi.require_version('Gtk', '3.0')

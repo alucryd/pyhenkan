@@ -2,24 +2,19 @@
 
 import copy
 import os
-import re
-import shutil
-import subprocess
-from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
 
-import pyanimenc.command as command
 import pyanimenc.conf as conf
 from pyanimenc.chapter import ChapterEditorWindow
 from pyanimenc.encoders import EncoderDialog
-from pyanimenc.mediainfo import Parse
+from pyanimenc.mediafile import MediaFile
+from pyanimenc.queue import Queue
 from pyanimenc.script import ScriptCreatorWindow
-from pyanimenc.vapoursynth import VapourSynthDialog, VapourSynthScript
+from pyanimenc.vapoursynth import VapourSynthDialog
 
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Notify', '0.7')
-from gi.repository import Gio, GLib, GObject, Gtk, Notify
+from gi.repository import GdkPixbuf, Gio, Gtk, Notify
 
 VERSION = '0.1.0'
 AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
@@ -34,24 +29,6 @@ class MainWindow(Gtk.Window):
 
         # Set default working directory
         self.wdir = os.environ['HOME']
-
-        # Initialize a lock and acquire it
-        # Any subsequent acquire() will block the calling thread
-        self.lock = Lock()
-        self.lock.acquire()
-        # Mark as idle, this will be useful later
-        self.idle = True
-        self.waitlist = []
-        # Set up single worker thread and lock it
-        self.worker = ThreadPoolExecutor(max_workers=1)
-        self.worker.submit(self._wait)
-
-        # Notification
-        Notify.init('pyanimenc')
-        self.notification = Notify.Notification.new('pyanimenc',
-                                                    '',
-                                                    'dialog-information')
-        self.notification.set_urgency(1)
 
         # --Header Bar-- #
         tools_sccr_button = Gtk.Button()
@@ -243,7 +220,7 @@ class MainWindow(Gtk.Window):
         scrwin.add(tview)
 
         # --Queue-- #
-        self.queue_tstore = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
+        self.queue = Queue()
 
         qexp_crpixbuf = Gtk.CellRendererPixbuf()
         qexp_crpixbuf.set_property('is-expander', True)
@@ -258,7 +235,7 @@ class MainWindow(Gtk.Window):
         qsta_crtext = Gtk.CellRendererText()
         qsta_tvcolumn = Gtk.TreeViewColumn('Status', qsta_crtext, text=3)
 
-        queue_tview = Gtk.TreeView(self.queue_tstore)
+        queue_tview = Gtk.TreeView(self.queue.tstore)
         queue_tview.append_column(qexp_tvcolumn)
         queue_tview.append_column(qin_tvcolumn)
         queue_tview.append_column(qcod_tvcolumn)
@@ -350,25 +327,30 @@ class MainWindow(Gtk.Window):
 
     def on_cell_toggled(self, crtoggle, path, i):
         v = not self.track_lstore[path][i]
-        self.track_lstore[path][i] = v
 
-        t = self.tracklist[int(path)]
-        if i == 0:
-            t.enable = v
-        elif i == 2:
-            t.encode = v
+        for f in self.files:
+            t = f.tracklist[int(path)]
+
+            if i == 0:
+                t.enable = v
+            elif i == 2:
+                t.encode = v
+
+        self.track_lstore[path][i] = v
 
     def on_cell_edited(self, crtext, path, v, i):
-        self.track_lstore[path][i] = v
+        for f in self.files:
+            t = f.tracklist[int(path)]
 
-        t = self.tracklist[int(path)]
-        if i == 6:
-            t.title = v
-        elif i == 7:
-            # Language is a 3 letter code
-            # TODO: write a custom cell renderer for this
-            v = v[:3]
-            t.lang = v
+            if i == 6:
+                t.title = v
+            elif i == 7:
+                # Language is a 3 letter code
+                # TODO: write a custom cell renderer for this
+                v = v[:3]
+                t.lang = v
+
+        self.track_lstore[path][i] = v
 
     def on_open_clicked(self, button):
         dlg = Gtk.FileChooserDialog('Select File(s)', self,
@@ -383,23 +365,22 @@ class MainWindow(Gtk.Window):
         response = dlg.run()
 
         if response == Gtk.ResponseType.OK:
+            self.files = []
             self.track_lstore.clear()
 
             self.wdir = dlg.get_current_folder()
-            self.files = dlg.get_filenames()
+            for f in dlg.get_filenames():
+                self.files.append(MediaFile(f))
 
             if len(self.files) > 1:
                 self.out_name_entry.set_text('')
                 self.out_name_entry.set_sensitive(False)
             else:
                 # Get the filename without extension
-                out_name = os.path.splitext(os.path.basename(self.files[0]))[0]
-                self.out_name_entry.set_text(out_name)
+                self.out_name_entry.set_text(self.files[0].name)
                 self.out_name_entry.set_sensitive(True)
 
-            self.tracklist = Parse(self.files[0]).get_tracklist()
-
-            if self._check_consistency():
+            if len(self.files) == 1 or self._check_consistency():
                 self._populate_lstore()
                 self.queue_button.set_sensitive(True)
 
@@ -410,68 +391,35 @@ class MainWindow(Gtk.Window):
         dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO,
                                    Gtk.ButtonsType.OK, 'Track Mismatch')
 
-        tracks_ref = self.tracklist
-        o = os.path.basename(self.files[0])
+        f_ref = self.files[0]
+        t_ref = f_ref.tracklist
 
-        # Include first file in the loop for single files to pass the test
-        for i in range(len(self.files)):
-            tracks = Parse(self.files[i]).get_tracklist()
-            f = os.path.basename(self.files[i])
-
-            if len(tracks) != len(tracks_ref):
-                t = ('{} ({} tracks) and {} ({} tracks) differ from each '
-                     'other. Please make sure all files share the same '
-                     'layout.'
-                     ).format(o, str(len(tracks_ref)), f, str(len(tracks)))
-
-                dialog.format_secondary_text(t)
+        for f in self.files:
+            m = f.compare(f_ref)
+            if m:
+                dialog.format_secondary_text(m)
                 dialog.run()
+                dialog.destroy()
 
-            else:
-                for j in range(len(tracks)):
-                    ty_ref = tracks_ref[j].type
-                    ty = tracks[j].type
-                    fo_ref = tracks_ref[j].format
-                    fo = tracks[j].format
-                    la_ref = tracks_ref[j].lang
-                    la = tracks[j].lang
-                    if ty_ref == 'Audio':
-                        ch_ref = tracks_ref[j].channels
-                        ch = tracks[j].channels
+                return False
 
-                    if ty != ty_ref:
-                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                             'different types. Please make sure all files '
-                             'share the same layout.'
-                             ).format(o, str(j), ty_ref, f, str(j), ty)
-                    elif fo != fo_ref:
-                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                             'different formats. Please make sure all files '
-                             'share the same layout.'
-                             ).format(o, str(j), fo_ref, f, str(j), fo)
-                    elif la != la_ref:
-                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                             'different languages. Please make sure all files '
-                             'share the same layout.'
-                             ).format(o, str(j), la_ref, f, str(j), la)
-                    elif ty_ref == 'Audio' and ch != ch_ref:
-                        t = ('{} (track {}: {}) and {} (track {}: {}) have '
-                             'different channels. Please make sure all files '
-                             'share the same layout.'
-                             ).format(o, str(j), ch_ref, f, str(j), ch)
-                    else:
-                        return True
-
-                    dialog.format_secondary_text(t)
+            for i in range(len(f.tracklist)):
+                t = f.tracklist[i]
+                t_ref = f_ref.tracklist[i]
+                m = t.compare(t_ref)
+                if m:
+                    dialog.format_secondary_text(m)
                     dialog.run()
-                    dialog.hide()
+                    dialog.destroy()
+
+                    return False
 
         dialog.destroy()
 
-        return False
+        return True
 
     def _populate_lstore(self):
-        for t in self.tracklist:
+        for t in self.files[0].tracklist:
             enable = t.enable
             enable_edit = False if t.type == 'Video' else True
             encode = t.encode
@@ -483,266 +431,52 @@ class MainWindow(Gtk.Window):
                                       track_type, codec, title, lang])
 
     def on_queue_clicked(self, button):
-        for i in range(len(self.files)):
-            vtrack = []
-            atracks = []
-            stracks = []
-            mtracks = []
-
-            in_dnx = self.files[i]
-            in_nx = os.path.basename(in_dnx)
-            in_dn, in_x = os.path.splitext(in_dnx)
-            in_d, in_n = os.path.split(in_dn)
-            tmp_d = in_dn + '.tmp'
-
-            # Preserve UID for Matroska segment linking
-            if in_x == '.mkv':
-                uid = Parse(in_dnx).get_uid()
-            else:
-                uid = ''
-
-            job = self.queue_tstore.append(None, [None, in_nx, '', 'Waiting'])
-
-            for t in self.tracklist:
-                if t.type == 'Video' and t.enable:
-                    if t.encode:
-                        # Encode video
-                        k = self.venc_cbtext.get_active_text()
-                        x = conf.VENCS[k]
-                        # Create a local copy, otherwise all jobs will use the
-                        # latest filter settings at runtime
-                        flts = copy.deepcopy(conf.filters)
-
-                        in_vpy = tmp_d + '/' + in_n + '.vpy'
-                        future = self.worker.submit(self._vpy,
-                                                    in_dnx,
-                                                    in_vpy,
-                                                    flts)
-
-                        self.queue_tstore.append(job, [future,
-                                                       '',
-                                                       'vpy',
-                                                       'Waiting'])
-
-                        if x[0].startswith('x264'):
-                            cfg = conf.x264
-                            ext = cfg['container']
-                            out = tmp_d + '/' + in_n + '.' + ext
-                            future = self.worker.submit(self._x264,
-                                                        in_vpy,
-                                                        out,
-                                                        x[0],
-                                                        cfg['quality'],
-                                                        cfg['preset'],
-                                                        cfg['tune'],
-                                                        cfg['arguments'])
-                        elif x[0].startswith('x265'):
-                            cfg = conf.x265
-                            ext = cfg['container']
-                            out = tmp_d + '/' + in_n + '.' + ext
-                            future = self.worker.submit(self._x265,
-                                                        in_vpy,
-                                                        out,
-                                                        x[0],
-                                                        x[1],
-                                                        cfg['quality'],
-                                                        cfg['preset'],
-                                                        cfg['tune'],
-                                                        cfg['arguments'])
-
-                        self.queue_tstore.append(job, [future,
-                                                       '',
-                                                       x[0],
-                                                       'Waiting'])
-
-                        vtrack = [0, out, t.title, t.lang]
-                    else:
-                        vtrack = [t.id, in_dnx, t.title, t.lang]
-
-                elif t.type == 'Audio' and t.enable:
-                    if t.encode:
-                        # Encode audio
-                        k = self.aenc_cbtext.get_active_text()
-                        x = conf.AENCS[k]
-                        o = '_'.join([in_n, str(t.id)])
-                        at = [conf.audio['rate'], conf.audio['channel'],
-                              conf.video['fpsnum'], conf.video['fpsden'],
-                              conf.trim]
-
-                        if x[0] == 'faac' or x[1] == 'libfaac':
-                            cfg = conf.faac
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'faac':
-                                future = self.worker.submit(self._faac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._libfaac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                        elif x[0] == 'fdkaac' or x[1] == 'libfdk-aac':
-                            cfg = conf.fdkaac
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'fdkaac':
-                                future = self.worker.submit(self._fdkaac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._libfdk_aac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                        elif x[0] == 'flac' or x[1] == 'native-flac':
-                            cfg = conf.flac
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'flac':
-                                future = self.worker.submit(self._flac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['compression'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._native_flac,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['compression'],
-                                                            at)
-                        elif x[0] == 'lame' or x[1] == 'libmp3lame':
-                            cfg = conf.mp3
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'lame':
-                                future = self.worker.submit(self._lame,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._libmp3lame,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                        elif x[0] == 'opusenc' or x[1] == 'libopus':
-                            cfg = conf.opus
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'opusenc':
-                                future = self.worker.submit(self._opusenc,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._libopus,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            at)
-                        elif x[0] == 'oggenc' or x[1] == 'libvorbis':
-                            cfg = conf.vorbis
-                            ext = cfg['container']
-                            out = tmp_d + '/' + o + '.' + ext
-                            if x[0] == 'oggenc':
-                                future = self.worker.submit(self._oggenc,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-                            elif x[0] == 'ffmpeg':
-                                future = self.worker.submit(self._libvorbis,
-                                                            in_dnx,
-                                                            out,
-                                                            t.id,
-                                                            cfg['mode'],
-                                                            cfg['bitrate'],
-                                                            cfg['quality'],
-                                                            at)
-
-                        self.queue_tstore.append(job, [future,
-                                                       '',
-                                                       x[0],
-                                                       'Waiting'])
-
-                        atracks.append([0, out, t.title, t.lang])
-                    else:
-                        atracks.append([t.id, in_dnx, t.title, t.lang])
-
-                elif t.type == 'Text' and t.enable:
-                    stracks.append([t.id, in_dnx, t.title, t.lang])
-                elif t.type == 'Menu' and t.enable:
-                    mtracks.append([t.id, in_dnx, t.title, t.lang])
-
-            # Merge tracks
+        for f in self.files:
             name = self.out_name_entry.get_text()
+            if name:
+                f.oname = name
             suffix = self.out_suffix_entry.get_text()
+            if suffix:
+                f.osuffix = suffix
             cont = self.out_cont_cbtext.get_active_text()
+            f.ocont = cont
 
-            if len(self.files) == 1 and name:
-                out = '/'.join([in_d, name])
-            else:
-                out = in_dn
-            # Do not overwrite source files in batch mode
-            if len(self.files) > 1 and not suffix:
-                suffix = 'new'
-            out = '.'.join(['_'.join([out, suffix]), cont])
+            for t in f.tracklist:
+                if t.type == 'Video' and t.enable and t.encode:
+                    k = self.venc_cbtext.get_active_text()
+                    x = conf.VENCS[k]
+                    t.codec = x
+                    # This needs a deep copy
+                    t.filters = copy.deepcopy(conf.filters)
+                elif t.type == 'Audio' and t.enable and t.encode:
+                    k = self.aenc_cbtext.get_active_text()
+                    x = conf.AENCS[k]
+                    t.codec = x
+                    t.filters = [conf.audio['rate'], conf.audio['channel'],
+                                 conf.video['fpsnum'], conf.video['fpsden'],
+                                 conf.trim]
 
-            future = self.worker.submit(self._merge, in_dnx, out,
-                                        vtrack, atracks, stracks, mtracks, uid)
-
-            self.queue_tstore.append(job, [future, '', 'merge', 'Waiting'])
+            f.process(self.pbar)
 
             # Clean up
-            self.worker.submit(self._clean, tmp_d)
+            self.queue.worker.submit(f.clean, self.pbar)
 
             # Update queue
-            self.worker.submit(self._update_queue)
+            self.queue.worker.submit(self.queue.update)
 
             # Add a wait job after each encoding job
-            future = self.worker.submit(self._wait)
-            self.waitlist.append(future)
+            future = self.queue.worker.submit(self.queue.wait)
+            self.queue.waitlist.append(future)
 
-            if self.idle:
+            if self.queue.idle:
                 self.queue_start_button.set_sensitive(True)
                 self.queue_del_button.set_sensitive(True)
                 self.queue_clr_button.set_sensitive(True)
+
+            # Create new MediaFile instances
+                for i in range(len(self.files)):
+                    f = self.files[i]
+                    self.files[i] = MediaFile(f.path)
 
     def on_conf_clicked(self, button, t):
         if t == 'input':
@@ -760,33 +494,32 @@ class MainWindow(Gtk.Window):
         dlg.destroy()
 
     def on_start_clicked(self, button):
-        if len(self.queue_tstore):
+        if len(self.queue.tstore):
             self.queue_stop_button.set_sensitive(True)
             self.queue_del_button.set_sensitive(False)
             self.queue_clr_button.set_sensitive(False)
             print('Start processing...')
-            self.idle = False
-            self.lock.release()
+            self.queue.idle = False
+            self.queue.lock.release()
 
     def on_stop_clicked(self, button):
-        tstore = self.queue_tstore
         self.idle = True
         print('Stop processing...')
         # Wait for the process to terminate
         while self.proc.poll() is None:
             self.proc.terminate()
 
-        for job in tstore:
-            status = tstore.get_value(job.iter, 3)
+        for job in self.queue.tstore:
+            status = self.queue.tstore.get_value(job.iter, 3)
             if status == 'Running':
                 for step in job.iterchildren():
-                    future = tstore.get_value(step.iter, 0)
+                    future = self.queue.tstore.get_value(step.iter, 0)
                     # Cancel and mark steps as failed
                     if not future.done():
-                        tstore.set_value(step.iter, 3, 'Failed')
+                        self.queue.tstore.set_value(step.iter, 3, 'Failed')
                         future.cancel()
                 # Mark job as failed
-                tstore.set_value(job.iter, 3, 'Failed')
+                self.queue.tstore.set_value(job.iter, 3, 'Failed')
 
         self.pbar.set_fraction(0)
         self.pbar.set_text('Ready')
@@ -794,335 +527,74 @@ class MainWindow(Gtk.Window):
         self.queue_clr_button.set_sensitive(True)
 
     def on_del_clicked(self, button):
-        tstore, job = self.queue_tselection.get_selected()
+        job = self.queue_tselection.get_selected()[1]
         # If child, select parent instead
-        if tstore.iter_depth(job) == 1:
-            job = tstore.iter_parent(job)
-        status = tstore.get_value(job, 3)
-        while tstore.iter_has_child(job):
-            step = tstore.iter_nth_child(job, 0)
-            future = tstore.get_value(step, 0)
+        if self.queue.store.iter_depth(job) == 1:
+            job = self.queue.tstore.iter_parent(job)
+        status = self.queue.tstore.get_value(job, 3)
+        while self.queue.tstore.iter_has_child(job):
+            step = self.queue.tstore.iter_nth_child(job, 0)
+            future = self.queue.tstore.get_value(step, 0)
             # Cancel pending step
             if not future.done():
                 future.cancel()
-            tstore.remove(step)
+            self.queue.tstore.remove(step)
         # Cancel associated wait job
         if status not in ['Done', 'Failed']:
-            idx = tstore.get_path(job).get_indices()[0]
+            idx = self.queue.store.get_path(job).get_indices()[0]
             self.waitlist[idx].cancel()
         # Delete job
-        tstore.remove(job)
+        self.queue.tstore.remove(job)
 
-        if not len(tstore):
+        if not len(self.queue.tstore):
             self.queue_start_button.set_sensitive(False)
             self.queue_del_button.set_sensitive(False)
             self.queue_clr_button.set_sensitive(False)
 
     def on_clr_clicked(self, button):
-        tstore = self.queue_tstore
-        for job in tstore:
+        for job in self.queue.tstore:
             # Cancel jobs before clearing them
             for step in job.iterchildren():
-                future = tstore.get_value(step.iter, 0)
+                future = self.queue.tstore.get_value(step.iter, 0)
                 future.cancel()
             for future in self.waitlist:
                 future.cancel()
         # Clear queue
-        tstore.clear()
+        self.queue.tstore.clear()
 
         self.queue_start_button.set_sensitive(False)
         self.queue_del_button.set_sensitive(False)
         self.queue_clr_button.set_sensitive(False)
 
-    def _wait(self):
-        if self.idle:
-            self.lock.acquire()
-
-    def _update_queue(self):
-        tstore = self.queue_tstore
-        for job in tstore:
-            status = tstore.get_value(job.iter, 3)
-            filename = tstore.get_value(job.iter, 1)
-            new_status = self._mark_steps(job)
-            GLib.idle_add(tstore.set_value, job.iter, 3, new_status)
-            if new_status == 'Done' and not job.next:
-                # Mark as idle if it was the last job
-                GLib.idle_add(self._notify, 'Jobs done')
-                self.idle = True
-                self.queue_start_button.set_sensitive(False)
-                self.queue_stop_button.set_sensitive(False)
-                self.queue_clr_button.set_sensitive(True)
-            elif new_status == 'Running' and new_status != status:
-                GLib.idle_add(self._notify, 'Processing ' + filename)
-
-    def _mark_steps(self, job):
-        tstore = self.queue_tstore
-        for step in job.iterchildren():
-            future = tstore.get_value(step.iter, 0)
-            status = tstore.get_value(step.iter, 3)
-            if status == 'Failed':
-                return 'Failed'
-            elif future.done():
-                # Mark done steps as such
-                GLib.idle_add(tstore.set_value, step.iter, 3, 'Done')
-                if not step.next:
-                    # Mark job as done if all steps are
-                    return 'Done'
-            elif future.running():
-                # Mark running step as such
-                GLib.idle_add(tstore.set_value, step.iter, 3, 'Running')
-                return 'Running'
-            else:
-                return 'Waiting'
-
-    def _notify(self, text):
-        self.notification.update('pyanimenc', text)
-        self.notification.show()
-
-    def _merge(self, i, o, vt, at, st, mt, uid):
-        print('Merge...')
-        self._update_queue()
-
-        cmd = command.merge(i, o, vt, at, st, mt, uid)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._mkvtoolnix_progress()
-
-    def _clean(self, d):
-        print('Delete temporary files...')
-        shutil.rmtree(d)
-
-        GLib.add(self.pbar.set_fraction, 0)
-        GLib.add(self.pbar.set_text, 'Ready')
-
-    def _vpy(self, i, o, flts):
-        print('Create VapourSynth script...')
-        s = VapourSynthScript().script(i, flts)
-
-        print('Write ' + o)
-        tmp_d = os.path.dirname(o)
-        if not os.path.isdir(tmp_d):
-            os.mkdir(tmp_d)
-        with open(o, 'w') as f:
-            f.write(s)
-
-    def _info(self, i):
-        cmd = command.info(i)
-        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                                     universal_newlines=True)
-        GLib.idle_add(self.pbar.set_fraction, 0)
-        GLib.idle_add(self.pbar.set_text, 'Encoding video...')
-        while self.proc.poll() is None:
-            line = self.proc.stdout.readline()
-            # Get the frame total
-            if 'Frames:' in line:
-                dur = int(line.split(' ')[1])
-        return dur
-
-    def _x264(self, i, o, x, q, p, t, a):
-        print('Encode video...')
-        self._update_queue()
-        dur = self._info(i)
-        cmd = command.x264(i, o, x, q, p, t, a)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._video_progress(dur)
-
-    def _x265(self, i, o, x, d, q, p, t, a):
-        print('Encode video...')
-        self._update_queue()
-        dur = self._info(i)
-        cmd = command.x265(i, o, x, d, q, p, t, a)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._video_progress(dur)
-
-    def _faac(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.faac(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _libfaac(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_libfaac(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _fdkaac(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.fdkaac(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _libfdk_aac(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_libfdk_aac(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _flac(self, i, o, t, c, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.flac(i, o, t, c, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _native_flac(self, i, o, t, c, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_flac(i, o, t, c, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _lame(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.lame(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _libmp3lame(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_libmp3lame(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _opusenc(self, i, o, t, m, b, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.opusenc(i, o, t, m, b, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _libopus(self, i, o, t, m, b, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_libopus(i, o, t, m, b, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _oggenc(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.oggenc(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _libvorbis(self, i, o, t, m, b, q, at):
-        print('Encode audio...')
-        self._update_queue()
-        cmd = command.ffmpeg_libvorbis(i, o, t, m, b, q, at)
-        print(cmd)
-        self.proc = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE,
-                                     universal_newlines=True)
-        self._audio_progress()
-
-    def _mkvtoolnix_progress(self):
-        GLib.idle_add(self.pbar.set_fraction, 0)
-        GLib.idle_add(self.pbar.set_text, 'Merging tracks...')
-        while self.proc.poll() is None:
-            line = self.proc.stdout.readline()
-            if 'Progress:' in line:
-                f = int(re.findall('[0-9]+', line)[0]) / 100
-                GLib.idle_add(self.pbar.set_fraction, f)
-        if self.proc.poll() < 0:
-            GLib.idle_add(self.pbar.set_text, 'Failed')
-        else:
-            GLib.idle_add(self.pbar.set_text, 'Ready')
-        GLib.idle_add(self.pbar.set_fraction, 0)
-
-    def _video_progress(self, duration):
-        while self.proc.poll() is None:
-            line = self.proc.stderr.readline()
-            # Get the current frame
-            if re.match('^[0-9]+ ', line):
-                position = int(line.split(' ')[0])
-                f = round(position / duration, 2)
-                GLib.idle_add(self.pbar.set_fraction, f)
-        if self.proc.poll() < 0:
-            GLib.idle_add(self.pbar.set_text, 'Failed')
-        else:
-            GLib.idle_add(self.pbar.set_text, 'Ready')
-        GLib.idle_add(self.pbar.set_fraction, 0)
-
-    def _audio_progress(self):
-        GLib.idle_add(self.pbar.set_fraction, 0)
-        GLib.idle_add(self.pbar.set_text, 'Encoding audio...')
-        while self.proc.poll() is None:
-            line = self.proc.stderr.readline()
-            # Get the clip duration
-            if 'Duration:' in line:
-                d = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
-                h, m, s = d.split(':')
-                d = int(h) * 3600 + int(m) * 60 + int(s)
-            # Get the current timestamp
-            if 'time=' in line:
-                p = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
-                h, m, s = p.split(':')
-                p = int(h) * 3600 + int(m) * 60 + int(s)
-                f = round(p / d, 2)
-                GLib.idle_add(self.pbar.set_fraction, f)
-        if self.proc.poll() < 0:
-            GLib.idle_add(self.pbar.set_text, 'Failed')
-        else:
-            GLib.idle_add(self.pbar.set_text, 'Ready')
-        GLib.idle_add(self.pbar.set_fraction, 0)
-
     def on_delete_event(event, self, widget):
-        tstore = self.queue_tstore
         # Cancel all jobs
-        for job in tstore:
+        for job in self.queue.tstore:
             for step in job.iterchildren():
-                future = tstore.get_value(step.iter, 0)
+                future = self.queue.tstore.get_value(step.iter, 0)
                 if not future.done():
                     future.cancel()
-        for future in self.waitlist:
+        for future in self.queue.waitlist:
             future.cancel()
         Notify.uninit()
-        self.lock.release()
+        self.queue.lock.release()
         Gtk.main_quit()
 
 
 class AboutDialog(Gtk.AboutDialog):
     def __init__(self, parent):
         Gtk.Dialog.__init__(self, parent)
-        self.set_property('program-name', 'pyanimenc')
-        self.set_property('version', VERSION)
-        self.set_property('comments', 'Python Transcoding Tools')
-        self.set_property('copyright', 'Copyright © 2014-2015 Maxime Gauduin')
-        self.set_property('license-type', Gtk.License.GPL_3_0)
-        self.set_property('website', 'https://github.com/alucryd/pyanimenc')
+
+        pixbuf = GdkPixbuf.Pixbuf
+        logo = pixbuf.new_from_file('/usr/share/pixmaps/pyanimenc.png')
+        logo = logo.scale_simple(64, 64, GdkPixbuf.InterpType.BILINEAR)
+
+        self.set_program_name('pyanimenc')
+        self.set_logo(logo)
+        self.set_version(VERSION)
+        self.set_comments('Python Transcoding Tools')
+        self.set_copyright('Copyright © 2014-2015 Maxime Gauduin')
+        self.set_license_type(Gtk.License.GPL_3_0)
+        self.set_website('https://github.com/alucryd/pyanimenc')
 
 MainWindow().show_all()
 Gtk.main()

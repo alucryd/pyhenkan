@@ -6,6 +6,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
+
 class FilterDialog(Gtk.Dialog):
     def __init__(self, parent, flt, i):
         Gtk.Dialog.__init__(self, flt + ' settings', parent, 0,
