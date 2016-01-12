@@ -30,6 +30,7 @@ class Mux:
         cmd = ['mkvmerge -o "{}" -D -A -S -B -T "{}"'.format(o, i)]
 
         for t in self.mediafile.tracklist:
+            f = ''
             if t.type == 'Video' and t.enable:
                 f = '-A -S -B -T -M -d {} --no-global-tags --no-chapters '
                 f += '--track-name {}:"{}" --language {}:"{}" "{}"'
@@ -42,9 +43,11 @@ class Mux:
             elif t.type == 'Menu' and t.enable:
                 f = '-D -A -S -T -M -b {} --no-global-tags --no-chapters '
                 f += '--track-name {}:"{}" --language {}:"{}" "{}"'
-            f = f.format(t.id, t.id, t.title, t.id, t.lang,
-                         t.tmpfilepath if t.tmpfilepath else t.file.path)
-            cmd.append(f)
+            if f:
+                f = f.format(t.id, t.id, t.title, t.id,
+                             t.lang if t.lang else 'und',
+                             t.tmpfilepath if t.tmpfilepath else t.file.path)
+                cmd.append(f)
 
         if uid:
             u = '--segment-uid ' + uid

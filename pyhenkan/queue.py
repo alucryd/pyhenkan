@@ -22,13 +22,15 @@ class Queue:
             # Set up single worker thread
             self.idle = True
             self.worker = ThreadPoolExecutor(max_workers=1)
-            self.worker.submit(self.wait)
             # Initialize a thread lock and acquire it
             self.lock = Lock()
             self.lock.acquire()
             # Future lists
             self.tstore = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
             self.waitlist = []
+            # Lock the queue
+            future = self.worker.submit(self.wait)
+            self.waitlist.append(future)
             # Running proc
             self.proc = None
 

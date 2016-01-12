@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-
 import os
-import subprocess
 import tempfile
-from collections import OrderedDict
 
-import pyhenkan.conf as conf
 from pyhenkan.mediafile import MediaFile
+from pyhenkan.plugin import Bilinear, ImageMagickWrite, Trim
 from pyhenkan.transcode import Transcode
-from pyhenkan.vapoursynth import VapourSynthDialog, VapourSynthScript
+from pyhenkan.vapoursynth import VapourSynth
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -18,11 +14,11 @@ from gi.repository import Gio, Gtk
 class ScriptCreatorWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title='pyanimscript')
-        self.set_default_size(640, 520)
+        self.set_default_size(640, 480)
 
-        # Set default working directory
         self.wdir = os.environ['HOME']
         self.source = None
+        self.vsynth = None
 
         # --Header Bar-- #
         open_button = Gtk.Button('Open')
@@ -53,13 +49,23 @@ class ScriptCreatorWindow(Gtk.Window):
         self.set_titlebar(hbar)
 
         # --Open/Save--#
+        sflt = Gtk.FileFilter()
+        sflt.set_name('VapourSynth scripts')
+        sflt.add_pattern('*.vpy')
+
+        vext = ['3gp', 'avi', 'flv', 'm2ts', 'mkv', 'mp4', 'ogm', 'webm']
+        vflt = Gtk.FileFilter()
+        vflt.set_name('Video files')
+        for ext in vext:
+            vflt.add_pattern('*.' + ext)
+
         self.open_fcdlg = Gtk.FileChooserDialog('Open Video File', self,
                                                 Gtk.FileChooserAction.OPEN,
                                                 ('Cancel',
                                                  Gtk.ResponseType.CANCEL,
                                                  'Open', Gtk.ResponseType.OK))
         self.open_fcdlg.set_current_folder(self.wdir)
-        self.open_fcdlg.add_filter(conf.vflt)
+        self.open_fcdlg.add_filter(vflt)
 
         self.save_fcdlg = Gtk.FileChooserDialog('Save VapourSynth Script',
                                                 self,
@@ -68,7 +74,7 @@ class ScriptCreatorWindow(Gtk.Window):
                                                  Gtk.ResponseType.CANCEL,
                                                  'Save', Gtk.ResponseType.OK))
         self.save_fcdlg.set_current_folder(self.wdir)
-        self.save_fcdlg.add_filter(conf.sflt)
+        self.save_fcdlg.add_filter(sflt)
 
         # --Textview--#
         self.tbuffer = Gtk.TextBuffer()
@@ -81,8 +87,8 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        s = VapourSynthScript().script(self.source.path, conf.filters)
-        self.tbuffer.set_text(s)
+        script = self.vsynth.get_script()
+        self.tbuffer.set_text(script)
 
     def on_open_clicked(self, button):
         response = self.open_fcdlg.run()
@@ -93,6 +99,7 @@ class ScriptCreatorWindow(Gtk.Window):
 
             f = self.open_fcdlg.get_filename()
             self.source = MediaFile(f)
+            self.vsynth = VapourSynth(self.source)
 
             self._update_buffer()
             self.save_button.set_sensitive(True)
@@ -129,11 +136,9 @@ class ScriptCreatorWindow(Gtk.Window):
         self.preview_win.show_all()
 
     def on_settings_clicked(self, button):
-        dlg = VapourSynthDialog(self)
-        dlg.run()
+        self.vsynth.show_dialog(self)
         if self.source:
             self._update_buffer()
-        dlg.destroy()
 
 
 class PreviewWindow(Gtk.Window):
@@ -148,7 +153,7 @@ class PreviewWindow(Gtk.Window):
         self.png = basename + '%d.png'
         self.vpy = basename + '.vpy'
 
-        self.trans.script(self.vpy, conf.filters)
+        self.trans.script(self.vpy, self.source.filters)
         d = self.trans.info()
         self.frame = round((d - 1) / 2)
 
@@ -211,17 +216,15 @@ class PreviewWindow(Gtk.Window):
         self.refresh()
 
     def refresh(self):
-        args_trim = OrderedDict()
-        args_trim['first'] = self.frame
-        args_trim['last'] = self.frame
-        args_res = OrderedDict()
-        args_res['format'] = 'vs.RGB24'
-        args_imwri = OrderedDict()
-        args_imwri['imgformat'] = '"PNG"'
-        args_imwri['filename'] = '"' + self.png + '"'
-        flts = conf.filters + [['Resize', 'Bilinear', args_res],
-                               ['Misc', 'Trim', args_trim],
-                               ['ImageMagick', 'Write', args_imwri]]
+        bilinear = Bilinear()
+        bilinear.format = 'vs.RGB24'
+        trim = Trim()
+        trim.first = self.frame
+        trim.last = self.frame
+        imw = ImageMagickWrite()
+        imw.imgformat = 'PNG'
+        imw.filename = self.png
+        flts = self.source.filters + [bilinear, trim, imw]
 
         self.trans.script(self.vpy, flts)
         self.trans.preview()

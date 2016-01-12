@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
-import copy
 import os
 
-import pyhenkan.conf as conf
+from collections import OrderedDict
+
+import pyhenkan.codec as codec
 from pyhenkan.chapter import ChapterEditorWindow
-from pyhenkan.encoders import EncoderDialog
 from pyhenkan.mediafile import MediaFile
 from pyhenkan.queue import Queue
 from pyhenkan.script import ScriptCreatorWindow
-from pyhenkan.vapoursynth import VapourSynthDialog
+from pyhenkan.vapoursynth import VapourSynth
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -23,14 +23,34 @@ AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 class MainWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title='pyhenkan')
-        self.set_default_size(800, 600)
+        self.set_default_size(640, 480)
 
         self.connect('delete-event', self.on_delete_event)
 
         # Set default working directory
         self.wdir = os.environ['HOME']
 
-        # --Header Bar-- #
+        # --File Filters--#
+        self.vconts = ['mkv']
+
+        self.sflt = Gtk.FileFilter()
+        self.sflt.set_name('VapourSynth scripts')
+        self.sflt.add_pattern('*.vpy')
+
+        vext = ['3gp', 'avi', 'flv', 'm2ts', 'mkv', 'mp4', 'ogm', 'webm']
+        self.vflt = Gtk.FileFilter()
+        self.vflt.set_name('Video files')
+        for ext in vext:
+            self.vflt.add_pattern('*.' + ext)
+
+        aext = ['aac', 'ac3', 'dts', 'flac', 'm4a', 'mka', 'mp3', 'mpc', 'ogg',
+                'opus', 'thd', 'wav', 'wv']
+        self.aflt = Gtk.FileFilter()
+        self.aflt.set_name('Audio files')
+        for ext in aext:
+            self.aflt.add_pattern('*.' + ext)
+
+        # -- Header Bar -- #
         tools_sccr_button = Gtk.Button()
         tools_sccr_button.set_label('Script Creator')
         tools_sccr_button.connect('clicked', self.on_sccr_clicked)
@@ -71,7 +91,7 @@ class MainWindow(Gtk.Window):
 
         self.set_titlebar(hbar)
 
-        # --Input-- #
+        # -- Input -- #
         vid_label = Gtk.Label('Video Codec')
         vid_label.set_property('hexpand', True)
 
@@ -94,57 +114,22 @@ class MainWindow(Gtk.Window):
         self.out_name_entry.set_property('hexpand', True)
 
         self.out_suffix_entry = Gtk.Entry()
+        self.out_suffix_entry.set_width_chars(5)
+        self.out_suffix_entry.set_max_width_chars(5)
         self.out_suffix_entry.set_text('new')
-        self.out_suffix_entry.set_property('hexpand', True)
 
         self.out_cont_cbtext = Gtk.ComboBoxText()
         self.out_cont_cbtext.set_property('hexpand', True)
-        for cont in conf.VCONTS:
+        for cont in self.vconts:
             self.out_cont_cbtext.append_text(cont)
         self.out_cont_cbtext.set_active(0)
 
-        out_grid = Gtk.Grid()
-        out_grid.set_row_homogeneous(True)
-        out_grid.set_column_spacing(6)
-        out_grid.set_row_spacing(6)
-        out_grid.attach(fname_label, 0, 0, 1, 1)
-        out_grid.attach(self.out_name_entry, 0, 1, 1, 1)
-        out_grid.attach(out_uscore_label, 1, 1, 1, 1)
-        out_grid.attach(suffix_label, 2, 0, 1, 1)
-        out_grid.attach(self.out_suffix_entry, 2, 1, 1, 1)
-        out_grid.attach(out_dot_label, 3, 1, 1, 1)
-        out_grid.attach(cont_label, 4, 0, 1, 1)
-        out_grid.attach(self.out_cont_cbtext, 4, 1, 1, 1)
-
+        vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
-        self.venc_cbtext = Gtk.ComboBoxText()
-        self.venc_cbtext.set_property('hexpand', True)
-        for x in conf.VENCS:
-            self.venc_cbtext.append_text(x)
-            self.venc_cbtext.set_active(0)
-
-        self.aenc_cbtext = Gtk.ComboBoxText()
-        self.aenc_cbtext.set_property('hexpand', True)
-        for x in conf.AENCS:
-            self.aenc_cbtext.append_text(x)
-            self.aenc_cbtext.set_active(0)
-
-        conf_icon = Gio.ThemedIcon(name='applications-system-symbolic')
-        # queue_icon = Gio.ThemedIcon(name='list-add-symbolic')
-
-        vpyconf_button = Gtk.Button('VapourSynth filters')
-        vpyconf_button.connect('clicked', self.on_conf_clicked, 'input')
-
-        vconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
-        vconf_button = Gtk.Button()
-        vconf_button.set_image(vconf_image)
-        vconf_button.connect('clicked', self.on_conf_clicked, 'video')
-
-        aconf_image = Gtk.Image.new_from_gicon(conf_icon, Gtk.IconSize.BUTTON)
-        aconf_button = Gtk.Button()
-        aconf_button.set_image(aconf_image)
-        aconf_button.connect('clicked', self.on_conf_clicked, 'audio')
+        self.flt_conf_button = Gtk.Button('Filters')
+        self.flt_conf_button.set_sensitive(False)
+        self.flt_conf_button.connect('clicked', self.on_filters_clicked)
 
         self.queue_button = Gtk.Button('Queue')
         self.queue_button.set_property('hexpand', True)
@@ -152,74 +137,38 @@ class MainWindow(Gtk.Window):
         self.queue_button.connect('clicked', self.on_queue_clicked)
 
         vbox = Gtk.Box(spacing=6)
-        vbox.pack_start(self.venc_cbtext, True, True, 0)
-        vbox.pack_start(vconf_button, False, True, 0)
 
-        abox = Gtk.Box(spacing=6)
-        abox.pack_start(self.aenc_cbtext, True, True, 0)
-        abox.pack_start(aconf_button, False, True, 0)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(6)
+        grid.set_row_spacing(6)
+        grid.attach(fname_label, 0, 0, 1, 1)
+        grid.attach(self.out_name_entry, 0, 1, 1, 1)
+        grid.attach(out_uscore_label, 1, 1, 1, 1)
+        grid.attach(suffix_label, 2, 0, 1, 1)
+        grid.attach(self.out_suffix_entry, 2, 1, 1, 1)
+        grid.attach(out_dot_label, 3, 1, 1, 1)
+        grid.attach(cont_label, 4, 0, 1, 1)
+        grid.attach(self.out_cont_cbtext, 4, 1, 1, 1)
+        grid.attach(vsep, 5, 0, 1, 2)
+        grid.attach(self.flt_conf_button, 6, 0, 1, 1)
+        grid.attach(self.queue_button, 6, 1, 1, 1)
+        grid.attach(hsep, 0, 3, 7, 1)
 
-        input_grid = Gtk.Grid()
-        input_grid.set_column_homogeneous(True)
-        input_grid.set_column_spacing(6)
-        input_grid.set_row_spacing(6)
-        input_grid.attach(vpyconf_button, 0, 0, 1, 1)
-        input_grid.attach_next_to(vbox, vpyconf_button,
-                                  Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach_next_to(abox, vbox,
-                                  Gtk.PositionType.BOTTOM, 1, 1)
-        input_grid.attach(hsep, 0, 3, 2, 1)
-        input_grid.attach(out_grid, 1, 0, 1, 2)
-        input_grid.attach_next_to(self.queue_button, out_grid,
-                                  Gtk.PositionType.BOTTOM, 1, 1)
+        tracks_empty_label = Gtk.Label('No input')
+        tracks_empty_label.set_property('hexpand', True)
+        tracks_empty_label.set_property('vexpand', True)
 
-        # (enable, enable_edit, encode, encode_edit, type, codec, name, lang)
-        self.track_lstore = Gtk.ListStore(bool, bool, bool, bool,
-                                          str, str, str, str)
+        self.tracks_grid = Gtk.Grid()
+        self.tracks_grid.set_column_spacing(6)
+        self.tracks_grid.set_row_spacing(6)
+        self.tracks_grid.attach(tracks_empty_label, 0, 0, 1, 1)
 
-        enable_crtoggle = Gtk.CellRendererToggle()
-        enable_crtoggle.connect('toggled', self.on_cell_toggled, 0)
-        enable_tvcolumn = Gtk.TreeViewColumn('Enable', enable_crtoggle,
-                                             active=0, activatable=1)
+        self.tracks_scrwin = Gtk.ScrolledWindow()
+        self.tracks_scrwin.set_policy(Gtk.PolicyType.NEVER,
+                                      Gtk.PolicyType.ALWAYS)
+        self.tracks_scrwin.add(self.tracks_grid)
 
-        encode_crtoggle = Gtk.CellRendererToggle()
-        encode_crtoggle.connect('toggled', self.on_cell_toggled, 2)
-        encode_tvcolumn = Gtk.TreeViewColumn('Encode', encode_crtoggle,
-                                             active=2, activatable=3,
-                                             sensitive=0)
-
-        type_crtext = Gtk.CellRendererText()
-        type_tvcolumn = Gtk.TreeViewColumn('Type', type_crtext, text=4,
-                                           sensitive=0)
-
-        format_crtext = Gtk.CellRendererText()
-        format_tvcolumn = Gtk.TreeViewColumn('Format', format_crtext, text=5,
-                                             sensitive=0)
-
-        title_crtext = Gtk.CellRendererText()
-        title_crtext.connect('edited', self.on_cell_edited, 6)
-        title_tvcolumn = Gtk.TreeViewColumn('Title', title_crtext, text=6,
-                                            editable=0, sensitive=0)
-        title_tvcolumn.set_expand(True)
-
-        lang_crtext = Gtk.CellRendererText()
-        lang_crtext.connect('edited', self.on_cell_edited, 7)
-        lang_tvcolumn = Gtk.TreeViewColumn('Language', lang_crtext, text=7,
-                                           editable=0, sensitive=0)
-
-        tview = Gtk.TreeView(self.track_lstore)
-        tview.append_column(enable_tvcolumn)
-        tview.append_column(encode_tvcolumn)
-        tview.append_column(type_tvcolumn)
-        tview.append_column(format_tvcolumn)
-        tview.append_column(title_tvcolumn)
-        tview.append_column(lang_tvcolumn)
-
-        scrwin = Gtk.ScrolledWindow()
-        scrwin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
-        scrwin.add(tview)
-
-        # --Queue-- #
+        # -- Queue -- #
         self.queue = Queue()
 
         qexp_crpixbuf = Gtk.CellRendererPixbuf()
@@ -247,8 +196,8 @@ class MainWindow(Gtk.Window):
         queue_scrwin.add(queue_tview)
 
         self.queue_tselection = queue_tview.get_selection()
-
         self.queue_start_button = Gtk.Button()
+
         self.queue_start_button.set_label('Start')
         self.queue_start_button.connect('clicked', self.on_start_clicked)
         self.queue_start_button.set_sensitive(False)
@@ -275,14 +224,14 @@ class MainWindow(Gtk.Window):
         queue_ctl_box.pack_start(self.queue_del_button, True, True, 0)
         queue_ctl_box.pack_start(self.queue_clr_button, True, True, 0)
 
-        # --Notebook--#
+        # -- Notebook --#
         input_label = Gtk.Label('Input')
         queue_label = Gtk.Label('Queue')
 
         input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         input_box.set_property('margin', 6)
-        input_box.pack_start(input_grid, False, False, 0)
-        input_box.pack_start(scrwin, True, True, 0)
+        input_box.pack_start(grid, False, False, 0)
+        input_box.pack_start(self.tracks_scrwin, True, True, 0)
 
         queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         queue_box.set_property('margin', 6)
@@ -296,20 +245,20 @@ class MainWindow(Gtk.Window):
         for tab in notebook.get_children():
             notebook.child_set_property(tab, 'tab-expand', True)
 
-        # --Progress Bar--#
+        # -- Progress Bar --#
         self.pbar = Gtk.ProgressBar()
         self.pbar.set_property('margin', 6)
         self.pbar.set_text('Ready')
         self.pbar.set_show_text(True)
 
-        # --Main Box-- #
+        # -- Main Box -- #
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.pack_start(notebook, True, True, 0)
         main_box.pack_start(self.pbar, False, True, 0)
 
         self.add(main_box)
 
-        # --About Dialog-- #
+        # -- About Dialog -- #
         self.about_dlg = AboutDialog(self)
         self.about_dlg.set_transient_for(self)
 
@@ -325,33 +274,6 @@ class MainWindow(Gtk.Window):
         self.about_dlg.run()
         self.about_dlg.hide()
 
-    def on_cell_toggled(self, crtoggle, path, i):
-        v = not self.track_lstore[path][i]
-
-        for f in self.files:
-            t = f.tracklist[int(path)]
-
-            if i == 0:
-                t.enable = v
-            elif i == 2:
-                t.encode = v
-
-        self.track_lstore[path][i] = v
-
-    def on_cell_edited(self, crtext, path, v, i):
-        for f in self.files:
-            t = f.tracklist[int(path)]
-
-            if i == 6:
-                t.title = v
-            elif i == 7:
-                # Language is a 3 letter code
-                # TODO: write a custom cell renderer for this
-                v = v[:3]
-                t.lang = v
-
-        self.track_lstore[path][i] = v
-
     def on_open_clicked(self, button):
         dlg = Gtk.FileChooserDialog('Select File(s)', self,
                                     Gtk.FileChooserAction.OPEN,
@@ -359,18 +281,30 @@ class MainWindow(Gtk.Window):
                                      Gtk.ResponseType.CANCEL,
                                      'Open', Gtk.ResponseType.OK))
         dlg.set_property('select-multiple', True)
-        dlg.add_filter(conf.vflt)
+        dlg.add_filter(self.vflt)
         dlg.set_current_folder(self.wdir)
 
         response = dlg.run()
 
         if response == Gtk.ResponseType.OK:
             self.files = []
-            self.track_lstore.clear()
 
             self.wdir = dlg.get_current_folder()
             for f in dlg.get_filenames():
                 self.files.append(MediaFile(f))
+
+            # TODO find a cleaner way to do this
+            self.workfile = self.files[0]
+            self.tracklist = self.workfile.tracklist
+            # We want these to be edited globally
+            for f in self.files:
+                f.filters = self.workfile.filters
+                f.width = self.workfile.width
+                f.height = self.workfile.height
+                f.fpsnum = self.workfile.fpsnum
+                f.fpsden = self.workfile.fpsden
+                f.first = self.workfile.first
+                f.last = self.workfile.last
 
             if len(self.files) > 1:
                 self.out_name_entry.set_text('')
@@ -380,8 +314,11 @@ class MainWindow(Gtk.Window):
                 self.out_name_entry.set_text(self.files[0].name)
                 self.out_name_entry.set_sensitive(True)
 
-            if len(self.files) == 1 or self._check_consistency():
-                self._populate_lstore()
+            isconsistent = self._check_consistency()
+
+            if len(self.files) == 1 or isconsistent:
+                self._populate_tracklist()
+                self.flt_conf_button.set_sensitive(True)
                 self.queue_button.set_sensitive(True)
 
         dlg.destroy()
@@ -418,17 +355,154 @@ class MainWindow(Gtk.Window):
 
         return True
 
-    def _populate_lstore(self):
-        for t in self.files[0].tracklist:
-            enable = t.enable
-            enable_edit = False if t.type == 'Video' else True
-            encode = t.encode
-            track_type = t.type
-            codec = t.format
-            title = t.title
-            lang = t.lang
-            self.track_lstore.append([enable, enable_edit, encode, encode,
-                                      track_type, codec, title, lang])
+    def _populate_tracklist(self):
+        for child in self.tracks_grid.get_children():
+            self.tracks_grid.remove(child)
+
+        type_label = Gtk.Label('Type')
+        format_label = Gtk.Label('Format')
+        title_label = Gtk.Label('Title')
+        title_label.set_property('hexpand', True)
+        lang_label = Gtk.Label('Language')
+        codec_label = Gtk.Label('Codec')
+
+        self.tracks_grid.attach(type_label, 0, 0, 1, 1)
+        self.tracks_grid.attach(format_label, 1, 0, 1, 1)
+        self.tracks_grid.attach(title_label, 2, 0, 1, 1)
+        self.tracks_grid.attach(lang_label, 3, 0, 1, 1)
+        self.tracks_grid.attach(codec_label, 4, 0, 1, 1)
+
+        for i in range(len(self.tracklist)):
+            t = self.tracklist[i]
+            edit = False if t.type == 'Menu' else True
+
+            type_label = Gtk.Label(t.type)
+
+            format_label = Gtk.Label(t.format)
+
+            title_entry = Gtk.Entry()
+            title_entry.set_property('hexpand', True)
+            title_entry.set_text(t.title)
+            title_entry.set_sensitive(edit)
+            title_entry.connect('changed', self.on_title_changed, i)
+
+            lang_entry = Gtk.Entry()
+            lang_entry.set_max_length(3)
+            lang_entry.set_width_chars(3)
+            lang_entry.set_max_width_chars(3)
+            lang_entry.set_text(t.lang)
+            lang_entry.set_sensitive(edit)
+            lang_entry.connect('changed', self.on_lang_changed, i)
+
+            codec_cbtext = Gtk.ComboBoxText()
+            codec_cbtext.append_text('Disable')
+            codec_cbtext.append_text('Mux')
+            if t.type == 'Video':
+                self._populate_vcodecs()
+                for c in self.vcodecs:
+                    codec_cbtext.append_text(c)
+            elif t.type == 'Audio':
+                self._populate_acodecs()
+                for c in self.acodecs:
+                    codec_cbtext.append_text(c)
+            codec_cbtext.set_active(1)
+            codec_cbtext.connect('changed', self.on_codec_changed, i)
+
+            conf_icon = Gio.ThemedIcon(name='applications-system-symbolic')
+            conf_image = Gtk.Image.new_from_gicon(conf_icon,
+                                                  Gtk.IconSize.BUTTON)
+            conf_button = Gtk.Button()
+            conf_button.set_image(conf_image)
+            conf_button.connect('clicked', self.on_conf_clicked, i)
+
+            codec_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                                 spacing=6)
+            codec_hbox.pack_start(codec_cbtext, True, True, 0)
+            codec_hbox.pack_start(conf_button, False, True, 0)
+
+            self.tracks_grid.attach(type_label, 0, i + 1, 1, 1)
+            self.tracks_grid.attach(format_label, 1, i + 1, 1, 1)
+            self.tracks_grid.attach(title_entry, 2, i + 1, 1, 1)
+            self.tracks_grid.attach(lang_entry, 3, i + 1, 1, 1)
+            self.tracks_grid.attach(codec_hbox, 4, i + 1, 1, 1)
+
+        self.tracks_grid.show_all()
+
+    def _populate_vcodecs(self):
+        self.vcodecs = OrderedDict()
+
+        for d in [8, 10]:
+            x = 'x264'
+            c = codec.X264(x, d)
+            if not c.is_avail():
+                x = '-'.join([x, str(d) + 'bit'])
+                c = codec.X264(x, d)
+            if c.is_avail():
+                k = 'x264 ({}bit)'.format(d)
+                self.vcodecs[k] = c
+
+        for d in [8, 10, 12]:
+            x = 'x265'
+            c = codec.X265(x, d)
+            if not c.is_avail():
+                x = '-'.join([x, str(d) + 'bit'])
+                c = codec.X265(x, d)
+            if c.is_avail():
+                k = 'x265 ({}bit)'.format(d)
+                self.vcodecs[k] = c
+
+    def _populate_acodecs(self):
+        self.acodecs = OrderedDict()
+        self.acodecs['AAC (libfaac)'] = codec.Faac()
+        self.acodecs['AAC (libfdk-aac)'] = codec.Fdkaac()
+        self.acodecs['FLAC (native)'] = codec.Flac()
+        self.acodecs['MP3 (libmp3lame)'] = codec.Lame()
+        self.acodecs['Opus (libopus)'] = codec.Opus()
+        self.acodecs['Vorbis (libvorbis)'] = codec.Vorbis()
+
+        not_found = []
+        for c in self.acodecs:
+            if not self.acodecs[c].is_avail():
+                not_found.append(c)
+
+        for c in not_found:
+            self.acodecs.pop(c)
+
+    def on_title_changed(self, entry, i):
+        title = entry.get_text()
+        for f in self.files:
+            f.tracklist[i].title = title
+
+    def on_lang_changed(self, entry, i):
+        lang = entry.get_text()
+        for f in self.files:
+            f.tracklist[i].lang = lang
+
+    def on_codec_changed(self, cbtext, i):
+        c = cbtext.get_active_text()
+        for f in self.files:
+            t = f.tracklist[i]
+            if c == 'Disable':
+                t.enable = False
+                t.codec = None
+            elif c == 'Mux':
+                t.enable = True
+                t.codec = None
+            else:
+                t.enable = True
+                if t.type == 'Video':
+                    t.codec = self.vcodecs[c]
+                elif t.type == 'Audio':
+                    t.codec = self.acodecs[c]
+                    t.codec.channel = t.channel
+                    t.codec.rate = t.rate
+
+    def on_filters_clicked(self, button):
+        VapourSynth(self.workfile).show_dialog(self)
+
+    def on_conf_clicked(self, button, i):
+        if self.workfile.tracklist[i].codec:
+            self.workfile.tracklist[i].codec.show_dialog(self)
 
     def on_queue_clicked(self, button):
         for f in self.files:
@@ -441,21 +515,6 @@ class MainWindow(Gtk.Window):
             cont = self.out_cont_cbtext.get_active_text()
             f.ocont = cont
 
-            for t in f.tracklist:
-                if t.type == 'Video' and t.enable and t.encode:
-                    k = self.venc_cbtext.get_active_text()
-                    x = conf.VENCS[k]
-                    t.codec = x
-                    # This needs a deep copy
-                    t.filters = copy.deepcopy(conf.filters)
-                elif t.type == 'Audio' and t.enable and t.encode:
-                    k = self.aenc_cbtext.get_active_text()
-                    x = conf.AENCS[k]
-                    t.codec = x
-                    t.filters = [conf.audio['rate'], conf.audio['channel'],
-                                 conf.video['fpsnum'], conf.video['fpsden'],
-                                 conf.trim]
-
             f.process(self.pbar)
 
             # Clean up
@@ -467,31 +526,17 @@ class MainWindow(Gtk.Window):
             # Add a wait job after each encoding job
             future = self.queue.worker.submit(self.queue.wait)
             self.queue.waitlist.append(future)
-
             if self.queue.idle:
                 self.queue_start_button.set_sensitive(True)
                 self.queue_del_button.set_sensitive(True)
                 self.queue_clr_button.set_sensitive(True)
 
-            # Create new MediaFile instances
+            # Create new MediaFile instances and carry settings over
+            # Otherwise they may have changed by the time jobs are processed
                 for i in range(len(self.files)):
-                    f = self.files[i]
-                    self.files[i] = MediaFile(f.path)
-
-    def on_conf_clicked(self, button, t):
-        if t == 'input':
-            dlg = VapourSynthDialog(self)
-        else:
-            if t == 'video':
-                enc = self.venc_cbtext.get_active_text()
-                enc = conf.VENCS[enc]
-            elif t == 'audio':
-                enc = self.aenc_cbtext.get_active_text()
-                enc = conf.AENCS[enc]
-            dlg = EncoderDialog(self, enc)
-
-        dlg.run()
-        dlg.destroy()
+                    self.files[i] = self.files[i].copy()
+                self.workfile = self.files[0]
+                self.tracklist = self.workfile.tracklist
 
     def on_start_clicked(self, button):
         if len(self.queue.tstore):
@@ -506,8 +551,8 @@ class MainWindow(Gtk.Window):
         self.idle = True
         print('Stop processing...')
         # Wait for the process to terminate
-        while self.proc.poll() is None:
-            self.proc.terminate()
+        while self.queue.proc.poll() is None:
+            self.queue.proc.terminate()
 
         for job in self.queue.tstore:
             status = self.queue.tstore.get_value(job.iter, 3)
@@ -529,7 +574,7 @@ class MainWindow(Gtk.Window):
     def on_del_clicked(self, button):
         job = self.queue_tselection.get_selected()[1]
         # If child, select parent instead
-        if self.queue.store.iter_depth(job) == 1:
+        if self.queue.tstore.iter_depth(job) == 1:
             job = self.queue.tstore.iter_parent(job)
         status = self.queue.tstore.get_value(job, 3)
         while self.queue.tstore.iter_has_child(job):
@@ -541,8 +586,8 @@ class MainWindow(Gtk.Window):
             self.queue.tstore.remove(step)
         # Cancel associated wait job
         if status not in ['Done', 'Failed']:
-            idx = self.queue.store.get_path(job).get_indices()[0]
-            self.waitlist[idx].cancel()
+            i = self.queue.tstore.get_path(job).get_indices()[0]
+            self.queue.waitlist[i].cancel()
         # Delete job
         self.queue.tstore.remove(job)
 
@@ -557,7 +602,7 @@ class MainWindow(Gtk.Window):
             for step in job.iterchildren():
                 future = self.queue.tstore.get_value(step.iter, 0)
                 future.cancel()
-            for future in self.waitlist:
+            for future in self.queue.waitlist:
                 future.cancel()
         # Clear queue
         self.queue.tstore.clear()
