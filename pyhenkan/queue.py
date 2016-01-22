@@ -19,9 +19,10 @@ class Queue:
 
     def __init__(self):
         if not Queue.__init:
+            Queue.__init = True
             # Set up single worker thread
             self.idle = True
-            self.worker = ThreadPoolExecutor(max_workers=1)
+            self.executor = ThreadPoolExecutor(max_workers=1)
             # Initialize a thread lock and acquire it
             self.lock = Lock()
             self.lock.acquire()
@@ -29,13 +30,17 @@ class Queue:
             self.tstore = Gtk.TreeStore(GObject.TYPE_PYOBJECT, str, str, str)
             self.waitlist = []
             # Lock the queue
-            future = self.worker.submit(self.wait)
+            future = self.executor.submit(self.wait)
             self.waitlist.append(future)
             # Running proc
             self.proc = None
+            # Progress bar
+            self.pbar = Gtk.ProgressBar()
+            self.pbar.set_property('margin', 6)
+            self.pbar.set_text('Ready')
+            self.pbar.set_show_text(True)
 
             Notify.init('pyhenkan')
-            Queue.__init = True
 
     def wait(self):
         if self.idle:

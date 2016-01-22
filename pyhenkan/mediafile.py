@@ -36,8 +36,6 @@ class MediaFile:
         self.osuffix = 'new'
         self.ocont = ''
 
-        self.queue = Queue()
-
     def copy(self):
         f = MediaFile(self.path)
         f.width = copy.copy(self.width)
@@ -73,28 +71,32 @@ class MediaFile:
 
         return m
 
-    def process(self, pbar):
-        job = self.queue.tstore.append(None, [None, self.bname, '', 'Waiting'])
+    def process(self):
+        print('process')
+        queue = Queue()
 
-        self.queue.worker.submit(self._create_tmpdir)
+        if not os.path.isdir(self.tmpd):
+            os.mkdir(self.tmpd)
+
+        job = queue.tstore.append(None, [None, self.bname, '', 'Waiting'])
 
         for t in self.tracklist:
             if t.type not in ['Text', 'Menu'] and t.enable and t.codec:
-                t.process(job, pbar)
+                future = queue.executor.submit(t.transcode)
+                queue.tstore.append(job, [future, '', t.codec.library,
+                                          'Waiting'])
 
-        future = self.queue.worker.submit(Mux(self, pbar).mux)
-        self.queue.tstore.append(job, [future, '', 'mux', 'Waiting'])
+        future = queue.executor.submit(Mux(self).mux)
+        queue.tstore.append(job, [future, '', 'mux', 'Waiting'])
 
-    def clean(self, pbar):
+    def clean(self):
+        queue = Queue()
+
         print('Delete temporary files...')
         shutil.rmtree(self.tmpd)
 
-        GLib.add(pbar.set_fraction, 0)
-        GLib.add(pbar.set_text, 'Ready')
-
-    def _create_tmpdir(self):
-        if not os.path.isdir(self.tmpd):
-            os.mkdir(self.tmpd)
+        GLib.add(queue.pbar.set_fraction, 0)
+        GLib.add(queue.pbar.set_text, 'Ready')
 
     def _get_uid(self):
         if self.mediainfo.tracks[0].other_unique_id is not None:

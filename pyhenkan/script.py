@@ -1,9 +1,9 @@
 import os
+import subprocess
 import tempfile
 
 from pyhenkan.mediafile import MediaFile
 from pyhenkan.plugin import Bilinear, ImageMagickWrite, Trim
-from pyhenkan.transcode import Transcode
 from pyhenkan.vapoursynth import VapourSynth
 
 import gi
@@ -146,16 +146,22 @@ class PreviewWindow(Gtk.Window):
         Gtk.Window.__init__(self, title='Preview')
 
         self.source = source
-        self.trans = Transcode(self.source.tracklist[0], None)
-
         self.tempdir = tempfile.gettempdir()
         basename = '/'.join([self.tempdir, 'pyhenkan-preview'])
         self.png = basename + '%d.png'
         self.vpy = basename + '.vpy'
 
-        self.trans.script(self.vpy, self.source.filters)
-        d = self.trans.info()
-        self.frame = round((d - 1) / 2)
+        s = VapourSynth(self.source).get_script()
+        with open(self.vpy, 'w') as f:
+            f.write(s)
+
+        # Initialize the preview at the middle of the video
+        # Pick the first video track for now
+        for t in self.source.tracklist:
+            if t.type == 'Video':
+                tf = t.get_total_frame(self.vpy)
+                self.frame = round((tf - 1) / 2)
+                break
 
         self.image = Gtk.Image()
 
@@ -164,7 +170,7 @@ class PreviewWindow(Gtk.Window):
         scrwin.set_min_content_height(480)
         scrwin.add(self.image)
 
-        adj = Gtk.Adjustment(self.frame, 0, d - 1, 1, 10)
+        adj = Gtk.Adjustment(self.frame, 0, tf - 1, 1, 10)
 
         self.spin = Gtk.SpinButton()
         self.spin.set_adjustment(adj)
@@ -172,14 +178,15 @@ class PreviewWindow(Gtk.Window):
         self.spin.connect('value-changed', self.on_spin_changed)
 
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,
-                                              0, d - 1, 1)
+                                              0, tf - 1, 1)
         self.scale.set_property('hexpand', True)
         self.scale.set_property('halign', Gtk.Align.FILL)
         self.scale.set_draw_value(False)
         self.scale.set_value(self.frame)
         self.scale.connect('value-changed', self.on_scale_changed)
 
-        for i in range(0, d, 500):
+        # Add a mark every 500 frame
+        for i in range(0, tf, 500):
             self.scale.add_mark(i, Gtk.PositionType.TOP, str(i))
 
         refresh_button = Gtk.Button('Refresh')
@@ -216,18 +223,28 @@ class PreviewWindow(Gtk.Window):
         self.refresh()
 
     def refresh(self):
-        bilinear = Bilinear()
-        bilinear.format = 'vs.RGB24'
-        trim = Trim()
-        trim.first = self.frame
-        trim.last = self.frame
-        imw = ImageMagickWrite()
-        imw.imgformat = 'PNG'
-        imw.filename = self.png
-        flts = self.source.filters + [bilinear, trim, imw]
+        filters = self.source.filters
+        if not isinstance(filters[len(filters) - 1], ImageMagickWrite):
+            bilinear = Bilinear()
+            bilinear.format = 'vs.RGB24'
+            trim = Trim()
+            trim.first = self.frame
+            trim.last = self.frame
+            imw = ImageMagickWrite()
+            imw.imgformat = 'PNG'
+            imw.filename = self.png
 
-        self.trans.script(self.vpy, flts)
-        self.trans.preview()
+            filters += [bilinear, trim, imw]
+
+        s = VapourSynth(self.source).get_script()
+        with open(self.vpy, 'w') as f:
+            f.write(s)
+
+        cmd = 'vspipe "{}" /dev/null'.format(self.vpy)
+        subprocess.run(cmd, shell=True,
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,
+                       universal_newlines=True)
 
         self.image.set_from_file(self.png.replace('%d', str(0)))
 

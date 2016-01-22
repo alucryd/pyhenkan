@@ -1,13 +1,14 @@
 import re
 import subprocess
 
+from pyhenkan.queue import Queue
+
 from gi.repository import GLib
 
 
 class Mux:
-    def __init__(self, mediafile, pbar):
+    def __init__(self, mediafile):
         self.mediafile = mediafile
-        self.pbar = pbar
         self.proc = None
 
     def mux(self):
@@ -58,15 +59,19 @@ class Mux:
         return cmd
 
     def _mkv_progress(self):
-        GLib.idle_add(self.pbar.set_fraction, 0)
-        GLib.idle_add(self.pbar.set_text, 'Muxing...')
+        queue = Queue()
+
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+        GLib.idle_add(queue.pbar.set_text, 'Muxing...')
         while self.proc.poll() is None:
             line = self.proc.stdout.readline()
             if 'Progress:' in line:
                 f = int(re.findall('[0-9]+', line)[0]) / 100
-                GLib.idle_add(self.pbar.set_fraction, f)
+                GLib.idle_add(queue.pbar.set_fraction, f)
         if self.proc.poll() < 0:
-            GLib.idle_add(self.pbar.set_text, 'Failed')
+            GLib.idle_add(queue.pbar.set_text, 'Failed')
         else:
-            GLib.idle_add(self.pbar.set_text, 'Ready')
-        GLib.idle_add(self.pbar.set_fraction, 0)
+            GLib.idle_add(queue.pbar.set_text, 'Ready')
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+
+# vim: ts=4 sw=4 et:

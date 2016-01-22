@@ -1,5 +1,4 @@
 import io
-import os
 import subprocess
 
 from collections import OrderedDict
@@ -11,309 +10,266 @@ from gi.repository import Gtk
 
 
 class Codec:
-    def __init__(self, binary, library):
-        self.binary = binary
+    def __init__(self, library, dialog):
         self.library = library
+        self.dialog = dialog
+        self.arguments = ''
 
     def is_avail(self):
-        path = os.environ['PATH'].split(':')
-        for p in path:
-            if os.path.isfile('/'.join([p, self.binary])):
+        proc = subprocess.run(['ffmpeg', '-codecs'],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL,
+                              universal_newlines=True)
+        buf = io.StringIO(proc.stdout)
+        line = buf.readline()
+        while line:
+            if self.library in line or self.library in ['aac', 'flac']:
                 return True
+            line = buf.readline()
         return False
 
-    def show_dialog(self, dlg):
+    def show_dialog(self, parent):
+        dlg = self.dialog(self, parent)
         dlg.run()
         dlg.destroy()
 
 
-class X264(Codec):
-    def __init__(self, binary, depth):
-        Codec.__init__(self, binary, '')
-        self.depth = depth
-        self.quality = 18
-        self.preset = 'medium'
-        self.tune = 'none'
-        self.container = '264'
-        self.arguments = ''
+class VideoCodec(Codec):
+    def __init__(self, library, dialog):
+        Codec.__init__(self, library, dialog)
+        self.pixel_format = 'auto'
+        self.color_matrix = ['auto', 'auto']
 
-    def is_avail(self):
-        if super().is_avail():
-            proc = subprocess.run([self.binary, '--version'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.DEVNULL,
-                                  universal_newlines=True)
-            buf = io.StringIO(proc.stdout)
-            line = buf.readline()
-            while line:
-                if '='.join(['bit-depth', str(self.depth)]) in line:
-                    return True
-                line = buf.readline()
-        return False
-
-    def show_dialog(self, parent):
-        dlg = X264Dialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, input, output):
-        dec = 'vspipe "{}" - -y'.format(input)
-        enc = [self.binary,
-               '--crf', str(self.quality),
-               '--demuxer', 'y4m']
-        if self.preset != 'none':
-            enc += ['--preset', self.preset]
-        if self.tune != 'none':
-            enc += ['--tune', self.tune]
+    def get_cmd(self, input, output, settings):
+        dec = ['vspipe', "{}".format(input), '-', '-y']
+        enc = ['ffmpeg', '-y', '-i -', '-c:v', self.library]
+        if self.pixel_format != 'auto':
+            enc += ['-pix_fmt', self.pixel_format]
+        if self.color_matrix != ['auto', 'auto']:
+            enc += ['-vf', 'colormatrix={}:{}'.format(self.color_matrix[0],
+                                                      self.color_matrix[1])]
+        enc += settings
         if self.arguments:
-            enc.append(self.arguments)
-        enc += ['--output', '"{}.{}" -'.format(output, self.container)]
-        enc = ' '.join(enc)
-        cmd = ' | '.join([dec, enc])
+            enc += [self.arguments]
+        enc += ['"{}.{}"'.format(output, self.container)]
+        cmd = dec + ['|'] + enc
         return cmd
 
 
-class X265(Codec):
-    def __init__(self, binary, depth):
-        Codec.__init__(self, binary, '')
-        self.depth = depth
-        self.quality = 18
+class Vpx(VideoCodec):
+    def __init__(self, library, dialog):
+        VideoCodec.__init__(self, library, dialog)
+        self.crf = 10
+        self.preset = 'good'
+        self.cpu_used = 2
+        self.container = 'webm'
+
+    def get_cmd(self, input, output):
+        settings = ['-crf', str(self.crf),
+                    '-b:v', str(0),
+                    '-quality', self.preset]
+        if self.preset != 'best':
+            settings += ['-cpu-used', str(self.cpu_used)]
+        cmd = super().get_cmd(input, output, settings)
+        return cmd
+
+
+class Vp8(Vpx):
+    def __init__(self):
+        Vpx.__init__(self, 'libvpx', Vp8Dialog)
+
+
+class Vp9(Vpx):
+    def __init__(self):
+        Vpx.__init__(self, 'libvpx-vp9', Vp9Dialog)
+
+
+class X264(VideoCodec):
+    def __init__(self):
+        VideoCodec.__init__(self, 'libx264', X264Dialog)
+        self.crf = 18
         self.preset = 'medium'
         self.tune = 'none'
-        self.container = '265'
-        self.arguments = ''
+        self.container = 'mp4'
 
-    def is_avail(self):
-        if super().is_avail():
-            proc = subprocess.run([self.binary, '--version',
-                                   '--output-depth', str(self.depth)],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.PIPE,
-                                  universal_newlines=True)
-            buf = io.StringIO(proc.stderr)
-            tokens = [str(self.depth) + s for s in ['bit', 'bpp']]
-            line = buf.readline()
-            while line:
-                if tokens[0] in line or tokens[1] in line:
-                    return True
-                line = buf.readline()
-        return False
-
-    def show_dialog(self, parent):
-        dlg = X265Dialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, input, output):
-        dec = 'vspipe "{}" - -y'.format(input)
-        enc = [self.binary,
-               '--output-depth', str(self.depth),
-               '--crf', str(self.quality),
-               '--y4m']
+    def get_cmd(self, input, output):
+        settings = ['-crf', str(self.crf)]
         if self.preset != 'none':
-            enc += ['--preset', self.preset]
+            settings += ['-preset', self.preset]
         if self.tune != 'none':
-            enc += ['--tune', self.tune]
-        if self.arguments:
-            enc.append(self.arguments)
-        enc += ['--output', '"{}.{}" -'.format(output, self.container)]
-        enc = ' '.join(enc)
-        cmd = ' | '.join([dec, enc])
+            settings += ['-tune', self.tune]
+        cmd = super().get_cmd(input, output, settings)
+        return cmd
+
+
+class X265(VideoCodec):
+    def __init__(self):
+        VideoCodec.__init__(self, 'libx265', X265Dialog)
+        self.crf = 18
+        self.preset = 'medium'
+        self.container = 'mp4'
+
+    def get_cmd(self, input, output):
+        settings = ['-crf', str(self.crf)]
+        if self.preset != 'none':
+            settings += ['-preset', self.preset]
+        cmd = super().get_cmd(input, output, settings)
         return cmd
 
 
 class AudioCodec(Codec):
-    def __init__(self, binary, library):
-        Codec.__init__(self, binary, library)
+    def __init__(self, library, dialog):
+        Codec.__init__(self, library, dialog)
         self.channel = 0
         self.rate = 0
         self.resampler = 'swr'
 
-    def is_avail(self):
-        if super().is_avail():
-            proc = subprocess.run([self.binary, '-buildconf'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.DEVNULL,
-                                  universal_newlines=True)
-            buf = io.StringIO(proc.stdout)
-            token = '-'.join(['enable', self.library])
-            line = buf.readline()
-            while line:
-                if token in line or self.library == 'flac':
-                    return True
-                line = buf.readline()
-        return False
-
-    def command(self, track):
-        dec = 'ffmpeg -y -i "{}" -map 0:{} -c {}'
-        cmd = [dec.format(track.file.path, track.id,
-                          self.library.replace('-', '_'))]
+    # Try to get rid of all those track.file
+    def get_cmd(self, track, output, settings):
+        cmd = ['ffmpeg', '-y', '-i', track.file.path,
+               '-map 0:{}'.format(track.id),
+               '-c:a', self.library]
         if self.channel != track.channel:
-            cmd.append('-ac {}'.format(self.channel))
+            cmd += ['-ac', str(self.channel)]
         if self.rate != track.rate:
-            cmd.append('-ar {}'.format(self.rate))
+            cmd += ['-ar', str(self.rate)]
         if self.resampler != 'swr':
-            cmd.append('-af aresample=resampler={}'.format(self.resampler))
+            cmd += ['-af', 'aresample=resampler={}'.format(self.resampler)]
         t = [track.file.first, track.file.last]
         n = track.file.fpsnum
         d = track.file.fpsden
         if t != [0, 0] and [n, d] != [0, 1]:
             f = Decimal(t[0]) * Decimal(d) / Decimal(n)
             l = Decimal(t[1] + 1) * Decimal(d) / Decimal(n)
-            cmd.append('-af atrim={}:{}'.format(f, l))
+            cmd += ['-af atrim={}:{}'.format(f, l)]
+        cmd += settings
+        cmd += ['"{}.{}"'.format(output, self.container)]
+        return cmd
+
+
+class Aac(AudioCodec):
+    def __init__(self):
+        AudioCodec.__init__(self, 'aac', AacDialog)
+        self.mode = 'CBR'
+        self.bitrate = 128
+        self.container = 'm4a'
+
+    def get_cmd(self, track, output):
+        settings = ['-b:a', str(self.bitrate)]
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Faac(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libfaac')
+        AudioCodec.__init__(self, 'libfaac', FaacDialog)
         self.mode = 'VBR'
         self.bitrate = 128
         self.quality = 100
-        self.container = 'aac'
+        self.container = 'm4a'
 
-    def show_dialog(self, parent):
-        dlg = FaacDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
+    def get_cmd(self, track, output):
         if self.mode == 'ABR':
-            cmd.append('-b {}'.format(self.bitrate))
+            settings = ['-b:a', str(self.bitrate)]
         elif self.mode == 'VBR':
-            cmd.append('-q {}'.format(self.quality))
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+            settings = ['-q:a', str(self.quality)]
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Fdkaac(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libfdk-aac')
+        AudioCodec.__init__(self, 'libfdk_aac', FdkaacDialog)
         self.mode = 'VBR'
         self.bitrate = 128
         self.quality = 4
-        self.container = 'aac'
+        self.container = 'm4a'
 
-    def show_dialog(self, parent):
-        dlg = FdkaacDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
+    def get_cmd(self, track, output):
         if self.mode == 'CBR':
-            cmd.append('-b {}'.format(self.bitrate))
+            settings = ['-b:a', str(self.bitrate)]
         elif self.mode == 'VBR':
-            cmd.append('-vbr {}'.format(self.quality))
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+            settings = ['-q:a', str(self.quality)]
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Flac(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'flac')
-        self.compression = 8
+        AudioCodec.__init__(self, 'flac', FlacDialog)
         self.container = 'flac'
 
-    def show_dialog(self, parent):
-        dlg = FlacDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
-        cmd.append('-compression_level {}'.format(self.compression))
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+    def get_cmd(self, track, output):
+        cmd = super().get_cmd(track, output, [])
         return cmd
 
 
 class Lame(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libmp3lame')
+        AudioCodec.__init__(self, 'libmp3lame', LameDialog)
         self.mode = 'VBR'
         self.bitrate = 192
         self.quality = 2
         self.container = 'mp3'
 
-    def show_dialog(self, parent):
-        dlg = LameDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
-        if self.mode == 'CBR':
-            cmd.append('-b {}'.format(self.bitrate))
-        elif self.mode == 'ABR':
-            cmd.append('-b {} -abr'.format(self.bitrate))
+    def get_cmd(self, track, output):
+        if self.mode in ['CBR', 'ABR']:
+            settings = ['-b:a', str(self.bitrate)]
         elif self.mode == 'VBR':
-            cmd.append('-compression_level {}'.format(self.quality))
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+            settings = ['-q:a', str(self.quality)]
+        if self.mode == 'ABR':
+            settings += ['-abr']
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Opus(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libopus')
+        AudioCodec.__init__(self, 'libopus', OpusDialog)
         self.mode = 'VBR'
         self.bitrate = 128
         self.container = 'opus'
 
-    def show_dialog(self, parent):
-        dlg = OpusDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
-        cmd.append('-b {}'.format(self.bitrate * 1000))
+    def get_cmd(self, track, output):
+        settings = ['-b:a', str(self.bitrate * 1000)]
         if self.mode == 'CBR':
-            cmd.append('-vbr off')
+            settings += ['-vbr off']
         elif self.mode == 'ABR':
-            cmd.append('-vbr constrained')
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+            settings += ['-vbr constrained']
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Vorbis(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libvorbis')
+        AudioCodec.__init__(self, 'libvorbis', VorbisDialog)
         self.mode = 'VBR'
         self.bitrate = 160
-        self.quality = 5
+        self.quality = 3
         self.container = 'ogg'
 
-    def show_dialog(self, parent):
-        dlg = VorbisDialog(self, parent)
-        super().show_dialog(dlg)
-
-    def command(self, track, output):
-        cmd = super().command(track)
-        if self.mode == 'CBR':
-            cmd.append('-b {} -m {} -M {}'.format(self.bitrate, self.bitrate,
-                                                  self.bitrate))
-        elif self.mode == 'ABR':
-            cmd.append('-b {}'.format(self.bitrate))
+    def get_cmd(self, track, output):
+        if self.mode == 'ABR':
+            settings = ['-b:a', str(self.bitrate)]
         elif self.mode == 'VBR':
-            cmd.append('-q {}'.format(self.quality))
-        cmd.append('"{}.{}"'.format(output, self.container))
-        cmd = ' '.join(cmd)
+            settings = ['-q:a', str(self.quality)]
+        cmd = super().get_cmd(track, output, settings)
         return cmd
 
 
 class Dcadec(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libdcadec')
+        AudioCodec.__init__(self, 'libdcadec', None)
 
 
 class Soxr(AudioCodec):
     def __init__(self):
-        AudioCodec.__init__(self, 'ffmpeg', 'libsoxr')
+        AudioCodec.__init__(self, 'libsoxr', None)
 
 
 class CodecDialog(Gtk.Dialog):
     def __init__(self, codec, parent):
-        title = codec.library if codec.library else codec.binary
-        Gtk.Dialog.__init__(self, title, parent, Gtk.DialogFlags.MODAL)
+        Gtk.Dialog.__init__(self, codec.library, parent, Gtk.DialogFlags.MODAL)
         self.set_default_size(240, 0)
 
         self.codec = codec
@@ -326,16 +282,16 @@ class CodecDialog(Gtk.Dialog):
         box = self.get_content_area()
         box.add(self.grid)
 
-    def quality(self, qualities):
-        self.quality_label = Gtk.Label('Quality')
-        self.quality_label.set_halign(Gtk.Align.START)
+    def crf(self, crfs):
+        self.crf_label = Gtk.Label('CRF')
+        self.crf_label.set_halign(Gtk.Align.START)
 
-        self.quality_spin = Gtk.SpinButton()
-        self.quality_spin.set_property('hexpand', True)
-        self.quality_spin.set_numeric(True)
-        self.quality_spin.set_adjustment(qualities)
-        self.quality_spin.set_value(self.codec.quality)
-        self.quality_spin.connect('value-changed', self.on_quality_changed)
+        self.crf_spin = Gtk.SpinButton()
+        self.crf_spin.set_property('hexpand', True)
+        self.crf_spin.set_numeric(True)
+        self.crf_spin.set_adjustment(crfs)
+        self.crf_spin.set_value(self.codec.crf)
+        self.crf_spin.connect('value-changed', self.on_crf_changed)
 
     def preset(self, presets):
         self.preset_label = Gtk.Label('Preset')
@@ -361,17 +317,16 @@ class CodecDialog(Gtk.Dialog):
         self.tune_cbtext.set_active(i)
         self.tune_cbtext.connect('changed', self.on_tune_changed)
 
-    def container(self, containers):
-        self.container_label = Gtk.Label('Container')
-        self.container_label.set_halign(Gtk.Align.START)
+    def cpu_used(self, cpus_used):
+        self.cpu_used_label = Gtk.Label('CPU Used')
+        self.cpu_used_label.set_halign(Gtk.Align.START)
 
-        self.container_cbtext = Gtk.ComboBoxText()
-        self.container_cbtext.set_property('hexpand', True)
-        for c in containers:
-            self.container_cbtext.append_text(c)
-        i = containers.index(self.codec.container)
-        self.container_cbtext.set_active(i)
-        self.container_cbtext.connect('changed', self.on_container_changed)
+        self.cpu_used_spin = Gtk.SpinButton()
+        self.cpu_used_spin.set_property('hexpand', True)
+        self.cpu_used_spin.set_numeric(True)
+        self.cpu_used_spin.set_adjustment(cpus_used)
+        self.cpu_used_spin.set_value(self.codec.cpu_used)
+        self.cpu_used_spin.connect('value-changed', self.on_cpu_used_changed)
 
     def arguments(self):
         self.arguments_label = Gtk.Label('Custom arguments')
@@ -381,6 +336,76 @@ class CodecDialog(Gtk.Dialog):
         self.arguments_entry.set_property('hexpand', True)
         self.arguments_entry.set_text(self.codec.arguments)
         self.arguments_entry.connect('changed', self.on_arguments_changed)
+
+    def pixel_format(self):
+        pixel_formats = OrderedDict()
+        pixel_formats['Auto'] = 'auto'
+        pixel_formats['YUV 4:2:0 8bit'] = 'yuv420p'
+        pixel_formats['YUV 4:2:2 8bit'] = 'yuv422p'
+        pixel_formats['YUV 4:4:4 8bit'] = 'yuv444p'
+        pixel_formats['YUV 4:2:0 10bit'] = 'yuv420p10le'
+        pixel_formats['YUV 4:2:2 10bit'] = 'yuv422p10le'
+        pixel_formats['YUV 4:4:4 10bit'] = 'yuv444p10le'
+        pixel_formats['YUV 4:2:0 12bit'] = 'yuv420p12le'
+        pixel_formats['YUV 4:2:2 12bit'] = 'yuv422p12le'
+        pixel_formats['YUV 4:4:4 12bit'] = 'yuv444p12le'
+
+        self.pixel_format_label = Gtk.Label('Pixel Format')
+        self.pixel_format_label.set_halign(Gtk.Align.START)
+
+        self.pixel_format_cbtext = Gtk.ComboBoxText()
+        self.pixel_format_cbtext.set_property('hexpand', True)
+        for p in pixel_formats:
+            self.pixel_format_cbtext.append_text(p)
+
+        i = 0
+        for pf in pixel_formats:
+            if pixel_formats[pf] == self.codec.pixel_format:
+                self.pixel_format_cbtext.set_active(i)
+            else:
+                i += 1
+
+        self.pixel_format_cbtext.connect('changed',
+                                         self.on_pixel_format_changed,
+                                         pixel_formats)
+
+    def color_matrix(self):
+        color_matrices = OrderedDict()
+        color_matrices['Auto'] = 'auto'
+        color_matrices['BT.709'] = 'bt709'
+        color_matrices['BT.601'] = 'bt601'
+        color_matrices['SMPTE-240M'] = 'smpte240m'
+        color_matrices['FCC'] = 'fcc'
+
+        self.input_matrix_label = Gtk.Label('Input Matrix')
+        self.input_matrix_label.set_halign(Gtk.Align.START)
+        self.output_matrix_label = Gtk.Label('Output Matrix')
+        self.output_matrix_label.set_halign(Gtk.Align.START)
+
+        self.input_matrix_cbtext = Gtk.ComboBoxText()
+        self.input_matrix_cbtext.set_property('hexpand', True)
+        self.output_matrix_cbtext = Gtk.ComboBoxText()
+        self.output_matrix_cbtext.set_property('hexpand', True)
+        for cm in color_matrices:
+            self.input_matrix_cbtext.append_text(cm)
+            self.output_matrix_cbtext.append_text(cm)
+
+        i = 0
+        for cm in color_matrices:
+            if color_matrices[cm] in self.codec.color_matrix:
+                if color_matrices[cm] == self.codec.color_matrix[0]:
+                    self.input_matrix_cbtext.set_active(i)
+                if color_matrices[cm] == self.codec.color_matrix[1]:
+                    self.output_matrix_cbtext.set_active(i)
+            else:
+                i += 1
+
+        self.input_matrix_cbtext.connect('changed',
+                                         self.on_color_matrix_changed,
+                                         0, color_matrices)
+        self.output_matrix_cbtext.connect('changed',
+                                          self.on_color_matrix_changed,
+                                          1, color_matrices)
 
     def mode(self, modes):
         self.mode_label = Gtk.Label('Mode')
@@ -405,17 +430,16 @@ class CodecDialog(Gtk.Dialog):
         self.bitrate_spin.set_value(self.codec.bitrate)
         self.bitrate_spin.connect('value-changed', self.on_bitrate_changed)
 
-    def compression(self, compressions):
-        self.compression_label = Gtk.Label('Compression')
-        self.compression_label.set_halign(Gtk.Align.START)
+    def quality(self, qualities):
+        self.quality_label = Gtk.Label('Quality')
+        self.quality_label.set_halign(Gtk.Align.START)
 
-        self.compression_spin = Gtk.SpinButton()
-        self.compression_spin.set_property('hexpand', True)
-        self.compression_spin.set_numeric(True)
-        self.compression_spin.set_adjustment(compressions)
-        self.compression_spin.set_value(self.codec.compression)
-        self.compression_spin.connect('value-changed',
-                                      self.on_compression_changed)
+        self.quality_spin = Gtk.SpinButton()
+        self.quality_spin.set_property('hexpand', True)
+        self.quality_spin.set_numeric(True)
+        self.quality_spin.set_adjustment(qualities)
+        self.quality_spin.set_value(self.codec.quality)
+        self.quality_spin.connect('value-changed', self.on_quality_changed)
 
     def channel(self):
         channels = OrderedDict()
@@ -439,10 +463,10 @@ class CodecDialog(Gtk.Dialog):
 
         i = 0
         for c in channels:
-            if not self.codec.channel == channels[c]:
-                i += 1
-            else:
+            if channels[c] == self.codec.channel:
                 self.channel_cbtext.set_active(i)
+            else:
+                i += 1
 
         self.channel_cbtext.connect('changed', self.on_channel_changed,
                                     channels)
@@ -461,14 +485,14 @@ class CodecDialog(Gtk.Dialog):
         if self.codec.library not in ('libopus'):
             rates['44.1 kHz'] = 44100
         rates['48 kHz'] = 48000
-        if self.codec.library not in ('libmp3lame', 'liboups'):
+        if self.codec.library not in ('libmp3lame', 'libopus'):
             rates['64 kHz'] = 64000
         if self.codec.library not in ('libmp3lame', 'libopus'):
             rates['88.2 kHz'] = 88200
         if self.codec.library not in ('libmp3lame', 'libopus'):
             rates['96 kHz'] = 96000
-        if self.codec.library not in ('libfaac', 'libfdk-aac', 'libmp3lame',
-                                      'libopus'):
+        if self.codec.library not in ('aac', 'libfaac', 'libfdk-aac',
+                                      'libmp3lame', 'libopus'):
             rates['192 kHz'] = 192000
 
         self.rate_label = Gtk.Label('Sample Rate')
@@ -481,10 +505,10 @@ class CodecDialog(Gtk.Dialog):
 
         i = 0
         for r in rates:
-            if not self.codec.rate == rates[r]:
-                i += 1
-            else:
+            if rates[r] == self.codec.rate:
                 self.rate_cbtext.set_active(i)
+            else:
+                i += 1
 
         self.rate_cbtext.connect('changed', self.on_rate_changed, rates)
 
@@ -506,20 +530,50 @@ class CodecDialog(Gtk.Dialog):
 
         self.resampler_cbtext.connect('changed', self.on_resampler_changed)
 
-    def on_quality_changed(self, spin):
+    def on_crf_changed(self, spin):
         self.codec.quality = spin.get_value_as_int()
 
     def on_preset_changed(self, cbtext):
         self.codec.preset = cbtext.get_active_text()
 
+        # best libvpx preset implies cpu_used = 0
+        if self.codec.preset == 'best':
+            self.cpu_used_spin.set_sensitive = False
+        else:
+            self.cpu_used_spin.set_sensitive(True)
+
     def on_tune_changed(self, cbtext):
         self.codec.tune = cbtext.get_active_text()
 
-    def on_container_changed(self, cbtext):
-        self.codec.container = cbtext.get_active_text()
+    def on_cpu_used_changed(self, spin):
+        self.codec.cpu_used = spin.get_value_as_int()
 
     def on_arguments_changed(self, entry):
         self.codec.arguments = entry.get_text()
+
+    def on_pixel_format_changed(self, cbtext, pixel_formats):
+        self.codec.pixel_format = pixel_formats[cbtext.get_active_text()]
+
+    def on_color_matrix_changed(self, cbtext, i, color_matrices):
+        color_matrix = color_matrices[cbtext.get_active_text()]
+        self.codec.color_matrix[i] = color_matrix
+
+        # If one matrix is specified, the other must be as well
+        if i == 0:
+            other_matrix_cbtext = self.output_matrix_cbtext
+        elif i == 1:
+            other_matrix_cbtext = self.input_matrix_cbtext
+
+        j = 1 if i == 0 else 0
+        if color_matrix == 'auto':
+            other_matrix_cbtext.set_active(0)
+        elif self.codec.color_matrix[j] == 'auto':
+            k = 0
+            for cm in color_matrices:
+                if color_matrices[cm] == color_matrix:
+                    other_matrix_cbtext.set_active(k)
+                else:
+                    k += 1
 
     def on_mode_changed(self, cbtext):
         m = cbtext.get_active_text()
@@ -534,8 +588,8 @@ class CodecDialog(Gtk.Dialog):
     def on_bitrate_changed(self, spin):
         self.codec.mode = spin.get_value_as_int()
 
-    def on_compression_changed(self, spin):
-        self.codec.compression = spin.get_value_as_int()
+    def on_quality_changed(self, spin):
+        self.codec.quality = spin.get_value_as_int()
 
     def on_channel_changed(self, cbtext, channels):
         self.codec.channel = channels[cbtext.get_active_text()]
@@ -547,11 +601,69 @@ class CodecDialog(Gtk.Dialog):
         self.codec.resampler = cbtext.get_active_text()
 
 
-class X264Dialog(CodecDialog):
+class VideoCodecDialog(CodecDialog):
     def __init__(self, codec, parent):
         CodecDialog.__init__(self, codec, parent)
 
-        qualities = Gtk.Adjustment(18, 1, 51, 1, 10)
+        self.pixel_format()
+        self.color_matrix()
+
+        hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+
+        self.grid.attach(self.pixel_format_label, 0, 0, 1, 1)
+        self.grid.attach(self.pixel_format_cbtext, 1, 0, 1, 1)
+        self.grid.attach(self.input_matrix_label, 0, 1, 1, 1)
+        self.grid.attach(self.input_matrix_cbtext, 1, 1, 1, 1)
+        self.grid.attach(self.output_matrix_label, 0, 2, 1, 1)
+        self.grid.attach(self.output_matrix_cbtext, 1, 2, 1, 1)
+        self.grid.attach(hsep, 0, 3, 2, 1)
+
+
+class VpxDialog(VideoCodecDialog):
+    def __init__(self, codec, parent):
+        VideoCodecDialog.__init__(self, codec, parent)
+
+        crfs = Gtk.Adjustment(10, 0, 63, 1, 10)
+        presets = ['best',
+                   'good',
+                   'realtime']
+        cpus_used = Gtk.Adjustment(2, 0, 5, 1, 1)
+
+        self.crf(crfs)
+        self.preset(presets)
+        self.cpu_used(cpus_used)
+        self.arguments()
+
+        self.grid.attach(self.crf_label, 0, 4, 1, 1)
+        self.grid.attach_next_to(self.crf_spin, self.crf_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(self.preset_label, 0, 5, 1, 1)
+        self.grid.attach_next_to(self.preset_cbtext, self.preset_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(self.cpu_used_label, 0, 6, 1, 1)
+        self.grid.attach_next_to(self.cpu_used_spin, self.cpu_used_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(self.arguments_label, 0, 7, 2, 1)
+        self.grid.attach(self.arguments_entry, 0, 8, 2, 1)
+
+        self.show_all()
+
+
+class Vp8Dialog(VpxDialog):
+    def __init__(self, codec, parent):
+        VpxDialog.__init__(self, codec, parent)
+
+
+class Vp9Dialog(VpxDialog):
+    def __init__(self, codec, parent):
+        VpxDialog.__init__(self, codec, parent)
+
+
+class X264Dialog(VideoCodecDialog):
+    def __init__(self, codec, parent):
+        VideoCodecDialog.__init__(self, codec, parent)
+
+        crfs = Gtk.Adjustment(18, 1, 51, 1, 10)
         presets = ['none',
                    'ultrafast',
                    'superfast',
@@ -572,40 +684,32 @@ class X264Dialog(CodecDialog):
                  'ssim',
                  'fastdecode',
                  'zerolatency']
-        containers = ['264',
-                      'flv',
-                      'mp4',
-                      'mkv']
 
-        self.quality(qualities)
+        self.crf(crfs)
         self.preset(presets)
         self.tune(tunes)
-        self.container(containers)
         self.arguments()
 
-        self.grid.attach(self.quality_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(self.quality_spin, self.quality_label,
+        self.grid.attach(self.crf_label, 0, 4, 1, 1)
+        self.grid.attach_next_to(self.crf_spin, self.crf_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.preset_label, 0, 1, 1, 1)
+        self.grid.attach(self.preset_label, 0, 5, 1, 1)
         self.grid.attach_next_to(self.preset_cbtext, self.preset_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.tune_label, 0, 2, 1, 1)
+        self.grid.attach(self.tune_label, 0, 6, 1, 1)
         self.grid.attach_next_to(self.tune_cbtext, self.tune_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.container_label, 0, 3, 1, 1)
-        self.grid.attach_next_to(self.container_cbtext, self.container_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.arguments_label, 0, 4, 2, 1)
-        self.grid.attach(self.arguments_entry, 0, 5, 2, 1)
+        self.grid.attach(self.arguments_label, 0, 7, 2, 1)
+        self.grid.attach(self.arguments_entry, 0, 8, 2, 1)
 
         self.show_all()
 
 
-class X265Dialog(CodecDialog):
+class X265Dialog(VideoCodecDialog):
     def __init__(self, codec, parent):
-        CodecDialog.__init__(self, codec, parent)
+        VideoCodecDialog.__init__(self, codec, parent)
 
-        qualities = Gtk.Adjustment(18, 1, 51, 1, 10)
+        crfs = Gtk.Adjustment(18, 1, 51, 1, 10)
         presets = ['none',
                    'ultrafast',
                    'superfast',
@@ -617,33 +721,19 @@ class X265Dialog(CodecDialog):
                    'slower',
                    'veryslow',
                    'placebo']
-        tunes = ['none',
-                 'psnr',
-                 'ssim',
-                 'fastdecode',
-                 'zerolatency']
-        containers = ['265']
 
-        self.quality(qualities)
+        self.crf(crfs)
         self.preset(presets)
-        self.tune(tunes)
-        self.container(containers)
         self.arguments()
 
-        self.grid.attach(self.quality_label, 0, 0, 1, 1)
-        self.grid.attach_next_to(self.quality_spin, self.quality_label,
+        self.grid.attach(self.crf_label, 0, 4, 1, 1)
+        self.grid.attach_next_to(self.crf_spin, self.crf_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.preset_label, 0, 1, 1, 1)
+        self.grid.attach(self.preset_label, 0, 5, 1, 1)
         self.grid.attach_next_to(self.preset_cbtext, self.preset_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.tune_label, 0, 2, 1, 1)
-        self.grid.attach_next_to(self.tune_cbtext, self.tune_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.container_label, 0, 3, 1, 1)
-        self.grid.attach_next_to(self.container_cbtext, self.container_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.arguments_label, 0, 4, 2, 1)
-        self.grid.attach(self.arguments_entry, 0, 5, 2, 1)
+        self.grid.attach(self.arguments_label, 0, 6, 2, 1)
+        self.grid.attach(self.arguments_entry, 0, 7, 2, 1)
 
         self.show_all()
 
@@ -667,6 +757,26 @@ class AudioDialog(CodecDialog):
         self.grid.attach(hsep, 0, 3, 2, 1)
 
 
+class AacDialog(AudioDialog):
+    def __init__(self, codec, parent):
+        AudioDialog.__init__(self, codec, parent)
+
+        modes = ['CBR']
+        bitrates = Gtk.Adjustment(128, 0, 320, 1, 10)
+
+        self.mode(modes)
+        self.bitrate(bitrates)
+
+        self.grid.attach(self.mode_label, 0, 4, 1, 1)
+        self.grid.attach_next_to(self.mode_cbtext, self.mode_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(self.bitrate_label, 0, 5, 1, 1)
+        self.grid.attach_next_to(self.bitrate_spin, self.bitrate_label,
+                                 Gtk.PositionType.RIGHT, 1, 1)
+
+        self.show_all()
+
+
 class FaacDialog(AudioDialog):
     def __init__(self, codec, parent):
         AudioDialog.__init__(self, codec, parent)
@@ -674,12 +784,10 @@ class FaacDialog(AudioDialog):
         modes = ['ABR', 'VBR']
         bitrates = Gtk.Adjustment(128, 0, 320, 1, 10)
         qualities = Gtk.Adjustment(100, 10, 500, 10, 100)
-        containers = ['aac', 'm4a']
 
         self.mode(modes)
         self.bitrate(bitrates)
         self.quality(qualities)
-        self.containers(containers)
 
         if self.codec.mode == 'VBR':
             self.bitrate_spin.set_sensitive(False)
@@ -694,9 +802,6 @@ class FaacDialog(AudioDialog):
                                  Gtk.PositionType.RIGHT, 1, 1)
         self.grid.attach(self.quality_label, 0, 6, 1, 1)
         self.grid.attach_next_to(self.quality_spin, self.quality_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.container_label, 0, 7, 1, 1)
-        self.grid.attach_next_to(self.container_cbtext, self.container_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
 
         self.show_all()
@@ -709,12 +814,10 @@ class FdkaacDialog(AudioDialog):
         modes = ['CBR', 'VBR']
         bitrates = Gtk.Adjustment(128, 0, 320, 1, 10)
         qualities = Gtk.Adjustment(4, 1, 5, 1, 10)
-        containers = ['aac', 'm4a']
 
         self.mode(modes)
         self.bitrate(bitrates)
         self.quality(qualities)
-        self.container(containers)
 
         if self.codec.mode == 'VBR':
             self.bitrate_spin.set_sensitive(False)
@@ -730,9 +833,6 @@ class FdkaacDialog(AudioDialog):
         self.grid.attach(self.quality_label, 0, 6, 1, 1)
         self.grid.attach_next_to(self.quality_spin, self.quality_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
-        self.grid.attach(self.container_label, 0, 7, 1, 1)
-        self.grid.attach_next_to(self.container_cbtext, self.container_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
 
         self.show_all()
 
@@ -740,14 +840,6 @@ class FdkaacDialog(AudioDialog):
 class FlacDialog(AudioDialog):
     def __init__(self, codec, parent):
         AudioDialog.__init__(self, codec, parent)
-
-        compressions = Gtk.Adjustment(8, 0, 8, 1, 10)
-
-        self.compression(compressions)
-
-        self.grid.attach(self.compression_label, 0, 4, 1, 1)
-        self.grid.attach_next_to(self.compression_spin, self.compression_label,
-                                 Gtk.PositionType.RIGHT, 1, 1)
 
         self.show_all()
 
@@ -818,8 +910,8 @@ class VorbisDialog(AudioDialog):
             self.bitrate_spin.set_sensitive(False)
         else:
             self.quality_spin.set_sensitive(False)
+            self.grid.attach(self.mode_label, 0, 4, 1, 1)
 
-        self.grid.attach(self.mode_label, 0, 4, 1, 1)
         self.grid.attach_next_to(self.mode_cbtext, self.mode_label,
                                  Gtk.PositionType.RIGHT, 1, 1)
         self.grid.attach(self.bitrate_label, 0, 5, 1, 1)

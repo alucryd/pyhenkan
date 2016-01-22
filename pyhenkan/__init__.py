@@ -136,8 +136,6 @@ class MainWindow(Gtk.Window):
         self.queue_button.set_sensitive(False)
         self.queue_button.connect('clicked', self.on_queue_clicked)
 
-        vbox = Gtk.Box(spacing=6)
-
         grid = Gtk.Grid()
         grid.set_column_spacing(6)
         grid.set_row_spacing(6)
@@ -245,16 +243,10 @@ class MainWindow(Gtk.Window):
         for tab in notebook.get_children():
             notebook.child_set_property(tab, 'tab-expand', True)
 
-        # -- Progress Bar --#
-        self.pbar = Gtk.ProgressBar()
-        self.pbar.set_property('margin', 6)
-        self.pbar.set_text('Ready')
-        self.pbar.set_show_text(True)
-
         # -- Main Box -- #
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.pack_start(notebook, True, True, 0)
-        main_box.pack_start(self.pbar, False, True, 0)
+        main_box.pack_start(self.queue.pbar, False, True, 0)
 
         self.add(main_box)
 
@@ -414,6 +406,8 @@ class MainWindow(Gtk.Window):
             conf_button = Gtk.Button()
             conf_button.set_image(conf_image)
             conf_button.connect('clicked', self.on_conf_clicked, i)
+            if t.type in ['Text', 'Menu']:
+                conf_button.set_sensitive(False)
 
             codec_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                  spacing=6)
@@ -430,29 +424,22 @@ class MainWindow(Gtk.Window):
 
     def _populate_vcodecs(self):
         self.vcodecs = OrderedDict()
+        self.vcodecs['VP8 (libvpx)'] = codec.Vp8()
+        self.vcodecs['VP9 (libvpx)'] = codec.Vp9()
+        self.vcodecs['AVC (libx264)'] = codec.X264()
+        self.vcodecs['HEVC (libx265)'] = codec.X265()
 
-        for d in [8, 10]:
-            x = 'x264'
-            c = codec.X264(x, d)
-            if not c.is_avail():
-                x = '-'.join([x, str(d) + 'bit'])
-                c = codec.X264(x, d)
-            if c.is_avail():
-                k = 'x264 ({}bit)'.format(d)
-                self.vcodecs[k] = c
+        not_found = []
+        for c in self.vcodecs:
+            if not self.vcodecs[c].is_avail():
+                not_found.append(c)
 
-        for d in [8, 10, 12]:
-            x = 'x265'
-            c = codec.X265(x, d)
-            if not c.is_avail():
-                x = '-'.join([x, str(d) + 'bit'])
-                c = codec.X265(x, d)
-            if c.is_avail():
-                k = 'x265 ({}bit)'.format(d)
-                self.vcodecs[k] = c
+        for c in not_found:
+            self.vcodecs.pop(c)
 
     def _populate_acodecs(self):
         self.acodecs = OrderedDict()
+        self.acodecs['AAC (native)'] = codec.Aac()
         self.acodecs['AAC (libfaac)'] = codec.Faac()
         self.acodecs['AAC (libfdk-aac)'] = codec.Fdkaac()
         self.acodecs['FLAC (native)'] = codec.Flac()
@@ -515,16 +502,16 @@ class MainWindow(Gtk.Window):
             cont = self.out_cont_cbtext.get_active_text()
             f.ocont = cont
 
-            f.process(self.pbar)
+            f.process()
 
             # Clean up
-            self.queue.worker.submit(f.clean, self.pbar)
+            self.queue.executor.submit(f.clean)
 
             # Update queue
-            self.queue.worker.submit(self.queue.update)
+            self.queue.executor.submit(self.queue.update)
 
             # Add a wait job after each encoding job
-            future = self.queue.worker.submit(self.queue.wait)
+            future = self.queue.executor.submit(self.queue.wait)
             self.queue.waitlist.append(future)
             if self.queue.idle:
                 self.queue_start_button.set_sensitive(True)
@@ -566,8 +553,8 @@ class MainWindow(Gtk.Window):
                 # Mark job as failed
                 self.queue.tstore.set_value(job.iter, 3, 'Failed')
 
-        self.pbar.set_fraction(0)
-        self.pbar.set_text('Ready')
+        self.queue.pbar.set_fraction(0)
+        self.queue.pbar.set_text('Ready')
         self.queue_stop_button.set_sensitive(False)
         self.queue_clr_button.set_sensitive(True)
 

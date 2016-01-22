@@ -1,5 +1,10 @@
+import re
+import subprocess
+
 from pyhenkan.queue import Queue
-from pyhenkan.transcode import Transcode
+from pyhenkan.vapoursynth import VapourSynth
+
+from gi.repository import GLib
 
 
 class Track:
@@ -13,8 +18,6 @@ class Track:
         self.title = ''
         self.lang = ''
         self.default = True
-
-        self.queue = Queue()
 
     def compare(self, track):
         m = ('{} (track {}: {}) and {} (track {}: {}) have different {}.\n'
@@ -47,19 +50,67 @@ class VideoTrack(Track):
         self.fpsnum = 0
         self.fpsden = 1
 
-    def process(self, job, pbar):
-        trans = Transcode(self, pbar)
+    def get_total_frame(self, vpy):
+        cmd = 'vspipe "{}" - -i'.format(vpy)
+        proc = subprocess.Popen(cmd, shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL,
+                                universal_newlines=True)
+        while proc.poll() is None:
+            line = proc.stdout.readline()
+            # Get the number of frames
+            if 'Frames:' in line:
+                tf = int(line.split(' ')[1])
+        return tf
 
+    def transcode(self):
+        print('transcode video')
+        queue = Queue()
+
+        print('Create VapourSynth script...')
+        s = VapourSynth(self.file).get_script()
         vpy = '/'.join([self.file.tmpd, self.file.name + '.vpy'])
 
-        # trans.script(vpy, self.file)
-        future = self.queue.worker.submit(trans.script, vpy, self.file.filters)
-        self.queue.tstore.append(job, [future, '', 'vpy', 'Waiting'])
+        print('Write ' + vpy)
+        with open(vpy, 'w') as f:
+            f.write(s)
 
-        # trans.video()
-        future = self.queue.worker.submit(trans.video)
-        self.queue.tstore.append(job, [future, '', self.codec.binary,
-                                       'Waiting'])
+        print('Encode video...')
+        o = '/'.join([self.file.tmpd, self.file.name])
+
+        cmd = ' '.join(self.codec.get_cmd(vpy, o))
+        print(cmd)
+
+        queue.proc = subprocess.Popen(cmd, shell=True,
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE,
+                                      universal_newlines=True)
+
+        # Progress
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+        GLib.idle_add(queue.pbar.set_text, 'Encoding video...')
+
+        queue.update()
+
+        # Get the number of frames
+        d = self.get_total_frame(vpy)
+
+        while queue.proc.poll() is None:
+            line = queue.proc.stderr.readline()
+            # Get the current frame
+            if 'frame=' in line:
+                p = int(re.findall('[0-9]+', line)[0])
+                f = round(p / d, 2)
+                GLib.idle_add(queue.pbar.set_fraction, f)
+        if queue.proc.poll() < 0:
+            GLib.idle_add(queue.pbar.set_text, 'Failed')
+        else:
+            GLib.idle_add(queue.pbar.set_text, 'Ready')
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+
+        # Update path and id
+        self.tmpfilepath = '.'.join([o, self.codec.container])
+        self.id = 0
 
 
 class AudioTrack(Track):
@@ -88,13 +139,51 @@ class AudioTrack(Track):
 
         return m
 
-    def process(self, job, pbar):
-        trans = Transcode(self, pbar)
+    def transcode(self):
+        print('transcode audio')
+        queue = Queue()
 
-        # trans.audio()
-        future = self.queue.worker.submit(trans.audio)
-        self.queue.tstore.append(job, [future, '', self.codec.library,
-                                       'Waiting'])
+        print('Encode audio...')
+        o = '_'.join([self.file.name, str(self.id)])
+        o = '/'.join([self.file.tmpd, o])
+
+        cmd = ' '.join(self.codec.get_cmd(self, o))
+        print(cmd)
+
+        queue.proc = subprocess.Popen(cmd, shell=True,
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE,
+                                      universal_newlines=True)
+
+        # Progress
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+        GLib.idle_add(queue.pbar.set_text, 'Encoding audio...')
+
+        queue.update()
+
+        while queue.proc.poll() is None:
+            line = queue.proc.stderr.readline()
+            # Get the clip duration
+            if 'Duration:' in line:
+                d = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
+                h, m, s = d.split(':')
+                d = int(h) * 3600 + int(m) * 60 + int(s)
+            # Get the current timestamp
+            if 'time=' in line:
+                p = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
+                h, m, s = p.split(':')
+                p = int(h) * 3600 + int(m) * 60 + int(s)
+                f = round(p / d, 2)
+                GLib.idle_add(queue.pbar.set_fraction, f)
+        if queue.proc.poll() < 0:
+            GLib.idle_add(queue.pbar.set_text, 'Failed')
+        else:
+            GLib.idle_add(queue.pbar.set_text, 'Ready')
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+
+        # Update path and id
+        self.tmpfilepath = '.'.join([o, self.codec.container])
+        self.id = 0
 
 
 class TextTrack(Track):
