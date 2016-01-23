@@ -1,4 +1,4 @@
 pyhenkan
 =========
 
-Audio/Video Transcoding Frontend
+Transcoding suite built around VapourSynth and FFmpeg
