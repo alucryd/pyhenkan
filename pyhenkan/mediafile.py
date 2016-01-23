@@ -2,8 +2,8 @@ import copy
 import os
 import re
 import shutil
+import subprocess
 
-from pyhenkan.mux import Mux
 from pyhenkan.plugin import LWLibavSource
 from pyhenkan.queue import Queue
 from pyhenkan.track import AudioTrack, MenuTrack, TextTrack, VideoTrack
@@ -18,6 +18,7 @@ class MediaFile:
         self.dname, self.bname = os.path.split(self.path)
         self.name, self.ext = os.path.splitext(self.bname)
         self.tmpd = '/'.join([self.dname, self.name + '.tmp'])
+        self.oname = ''
 
         # Set these globally until I want to support multiple video tracks
         self.width = 0
@@ -31,10 +32,6 @@ class MediaFile:
         self.mediainfo = MediaInfo.parse(self.path)
         self.uid = self._get_uid()
         self.tracklist = self._get_tracklist()
-
-        self.oname = self.name
-        self.osuffix = 'new'
-        self.ocont = ''
 
     def copy(self):
         f = MediaFile(self.path)
@@ -55,8 +52,6 @@ class MediaFile:
             if t.type in ['Video', 'Audio']:
                 t.codec = copy.deepcopy(tc.codec)
         f.oname = copy.copy(self.oname)
-        f.osufix = copy.copy(self.osuffix)
-        f.ocont = copy.copy(self.ocont)
         return f
 
     def compare(self, mediafile):
@@ -72,22 +67,71 @@ class MediaFile:
         return m
 
     def process(self):
-        print('process')
         queue = Queue()
 
-        if not os.path.isdir(self.tmpd):
-            os.mkdir(self.tmpd)
-
-        job = queue.tstore.append(None, [None, self.bname, '', 'Waiting'])
+        job = queue.tstore.append(None, [None, self.bname, self.oname, '',
+                                         'Waiting'])
 
         for t in self.tracklist:
             if t.type not in ['Text', 'Menu'] and t.enable and t.codec:
                 future = queue.executor.submit(t.transcode)
-                queue.tstore.append(job, [future, '', t.codec.library,
+                queue.tstore.append(job, [future, '', '', t.codec.library,
                                           'Waiting'])
 
-        future = queue.executor.submit(Mux(self).mux)
-        queue.tstore.append(job, [future, '', 'mux', 'Waiting'])
+        future = queue.executor.submit(self.mux)
+        queue.tstore.append(job, [future, '', '', 'mux', 'Waiting'])
+
+    def mux(self):
+        queue = Queue()
+
+        print('Mux...')
+        o = '/'.join([self.dname, self.oname])
+
+        cmd = ['mkvmerge -o "{}" -D -A -S -B -T "{}"'.format(o, self.path)]
+
+        for t in self.tracklist:
+            f = ''
+            if t.type == 'Video' and t.enable:
+                f = '-A -S -B -T -M -d {} --no-global-tags --no-chapters '
+                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+            elif t.type == 'Audio' and t.enable:
+                f = '-D -S -B -T -M -a {} --no-global-tags --no-chapters '
+                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+            elif t.type == 'Text' and t.enable:
+                f = '-D -A -B -T -M -s {} --no-global-tags --no-chapters '
+                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+            elif t.type == 'Menu' and t.enable:
+                f = '-D -A -S -T -M -b {} --no-global-tags --no-chapters '
+                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+            if f:
+                f = f.format(t.id, t.id, t.title, t.id,
+                             t.lang if t.lang else 'und',
+                             t.tmpfilepath if t.tmpfilepath else self.path)
+                cmd.append(f)
+
+        if self.uid:
+            u = '--segment-uid ' + self.uid
+            cmd.append(u)
+
+        cmd = ' '.join(cmd)
+        print(cmd)
+
+        self.proc = subprocess.Popen(cmd, shell=True,
+                                     stdout=subprocess.PIPE,
+                                     universal_newlines=True)
+
+        GLib.idle_add(queue.pbar.set_fraction, 0)
+        GLib.idle_add(queue.pbar.set_text, 'Muxing...')
+        while self.proc.poll() is None:
+            line = self.proc.stdout.readline()
+            if 'Progress:' in line:
+                f = int(re.findall('[0-9]+', line)[0]) / 100
+                GLib.idle_add(queue.pbar.set_fraction, f)
+        if self.proc.poll() < 0:
+            GLib.idle_add(queue.pbar.set_text, 'Failed')
+        else:
+            GLib.idle_add(queue.pbar.set_text, 'Ready')
+        GLib.idle_add(queue.pbar.set_fraction, 0)
 
     def clean(self):
         queue = Queue()

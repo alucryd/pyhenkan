@@ -169,59 +169,6 @@ class MainWindow(Gtk.Window):
         # -- Queue -- #
         self.queue = Queue()
 
-        qexp_crpixbuf = Gtk.CellRendererPixbuf()
-        qexp_crpixbuf.set_property('is-expander', True)
-        qexp_tvcolumn = Gtk.TreeViewColumn('', qexp_crpixbuf)
-
-        qin_crtext = Gtk.CellRendererText()
-        qin_tvcolumn = Gtk.TreeViewColumn('Input', qin_crtext, text=1)
-
-        qcod_crtext = Gtk.CellRendererText()
-        qcod_tvcolumn = Gtk.TreeViewColumn('Codec', qcod_crtext, text=2)
-
-        qsta_crtext = Gtk.CellRendererText()
-        qsta_tvcolumn = Gtk.TreeViewColumn('Status', qsta_crtext, text=3)
-
-        queue_tview = Gtk.TreeView(self.queue.tstore)
-        queue_tview.append_column(qexp_tvcolumn)
-        queue_tview.append_column(qin_tvcolumn)
-        queue_tview.append_column(qcod_tvcolumn)
-        queue_tview.append_column(qsta_tvcolumn)
-
-        queue_scrwin = Gtk.ScrolledWindow()
-        queue_scrwin.set_policy(Gtk.PolicyType.AUTOMATIC,
-                                Gtk.PolicyType.ALWAYS)
-        queue_scrwin.add(queue_tview)
-
-        self.queue_tselection = queue_tview.get_selection()
-        self.queue_start_button = Gtk.Button()
-
-        self.queue_start_button.set_label('Start')
-        self.queue_start_button.connect('clicked', self.on_start_clicked)
-        self.queue_start_button.set_sensitive(False)
-
-        self.queue_stop_button = Gtk.Button()
-        self.queue_stop_button.set_label('Stop')
-        self.queue_stop_button.connect('clicked', self.on_stop_clicked)
-        self.queue_stop_button.set_sensitive(False)
-
-        self.queue_del_button = Gtk.Button()
-        self.queue_del_button.set_label('Delete')
-        self.queue_del_button.connect('clicked', self.on_del_clicked)
-        self.queue_del_button.set_sensitive(False)
-
-        self.queue_clr_button = Gtk.Button()
-        self.queue_clr_button.set_label('Clear')
-        self.queue_clr_button.connect('clicked', self.on_clr_clicked)
-        self.queue_clr_button.set_sensitive(False)
-
-        queue_ctl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
-                                spacing=6)
-        queue_ctl_box.pack_start(self.queue_start_button, True, True, 0)
-        queue_ctl_box.pack_start(self.queue_stop_button, True, True, 0)
-        queue_ctl_box.pack_start(self.queue_del_button, True, True, 0)
-        queue_ctl_box.pack_start(self.queue_clr_button, True, True, 0)
-
         # -- Notebook --#
         input_label = Gtk.Label('Input')
         queue_label = Gtk.Label('Queue')
@@ -231,14 +178,9 @@ class MainWindow(Gtk.Window):
         input_box.pack_start(grid, False, False, 0)
         input_box.pack_start(self.tracks_scrwin, True, True, 0)
 
-        queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        queue_box.set_property('margin', 6)
-        queue_box.pack_start(queue_scrwin, True, True, 0)
-        queue_box.pack_start(queue_ctl_box, False, True, 0)
-
         notebook = Gtk.Notebook()
         notebook.append_page(input_box, input_label)
-        notebook.append_page(queue_box, queue_label)
+        notebook.append_page(self.queue.vbox, queue_label)
 
         for tab in notebook.get_children():
             notebook.child_set_property(tab, 'tab-expand', True)
@@ -494,13 +436,9 @@ class MainWindow(Gtk.Window):
     def on_queue_clicked(self, button):
         for f in self.files:
             name = self.out_name_entry.get_text()
-            if name:
-                f.oname = name
             suffix = self.out_suffix_entry.get_text()
-            if suffix:
-                f.osuffix = suffix
             cont = self.out_cont_cbtext.get_active_text()
-            f.ocont = cont
+            f.oname = '.'.join(['_'.join([name, suffix]), cont])
 
             f.process()
 
@@ -514,9 +452,9 @@ class MainWindow(Gtk.Window):
             future = self.queue.executor.submit(self.queue.wait)
             self.queue.waitlist.append(future)
             if self.queue.idle:
-                self.queue_start_button.set_sensitive(True)
-                self.queue_del_button.set_sensitive(True)
-                self.queue_clr_button.set_sensitive(True)
+                self.queue.start_button.set_sensitive(True)
+                self.queue.delete_button.set_sensitive(True)
+                self.queue.clear_button.set_sensitive(True)
 
             # Create new MediaFile instances and carry settings over
             # Otherwise they may have changed by the time jobs are processed
@@ -524,79 +462,6 @@ class MainWindow(Gtk.Window):
                     self.files[i] = self.files[i].copy()
                 self.workfile = self.files[0]
                 self.tracklist = self.workfile.tracklist
-
-    def on_start_clicked(self, button):
-        if len(self.queue.tstore):
-            self.queue_stop_button.set_sensitive(True)
-            self.queue_del_button.set_sensitive(False)
-            self.queue_clr_button.set_sensitive(False)
-            print('Start processing...')
-            self.queue.idle = False
-            self.queue.lock.release()
-
-    def on_stop_clicked(self, button):
-        self.idle = True
-        print('Stop processing...')
-        # Wait for the process to terminate
-        while self.queue.proc.poll() is None:
-            self.queue.proc.terminate()
-
-        for job in self.queue.tstore:
-            status = self.queue.tstore.get_value(job.iter, 3)
-            if status == 'Running':
-                for step in job.iterchildren():
-                    future = self.queue.tstore.get_value(step.iter, 0)
-                    # Cancel and mark steps as failed
-                    if not future.done():
-                        self.queue.tstore.set_value(step.iter, 3, 'Failed')
-                        future.cancel()
-                # Mark job as failed
-                self.queue.tstore.set_value(job.iter, 3, 'Failed')
-
-        self.queue.pbar.set_fraction(0)
-        self.queue.pbar.set_text('Ready')
-        self.queue_stop_button.set_sensitive(False)
-        self.queue_clr_button.set_sensitive(True)
-
-    def on_del_clicked(self, button):
-        job = self.queue_tselection.get_selected()[1]
-        # If child, select parent instead
-        if self.queue.tstore.iter_depth(job) == 1:
-            job = self.queue.tstore.iter_parent(job)
-        status = self.queue.tstore.get_value(job, 3)
-        while self.queue.tstore.iter_has_child(job):
-            step = self.queue.tstore.iter_nth_child(job, 0)
-            future = self.queue.tstore.get_value(step, 0)
-            # Cancel pending step
-            if not future.done():
-                future.cancel()
-            self.queue.tstore.remove(step)
-        # Cancel associated wait job
-        if status not in ['Done', 'Failed']:
-            i = self.queue.tstore.get_path(job).get_indices()[0]
-            self.queue.waitlist[i].cancel()
-        # Delete job
-        self.queue.tstore.remove(job)
-
-        if not len(self.queue.tstore):
-            self.queue_start_button.set_sensitive(False)
-            self.queue_del_button.set_sensitive(False)
-            self.queue_clr_button.set_sensitive(False)
-
-    def on_clr_clicked(self, button):
-        for job in self.queue.tstore:
-            # Cancel jobs before clearing them
-            for step in job.iterchildren():
-                future = self.queue.tstore.get_value(step.iter, 0)
-                future.cancel()
-            for future in self.queue.waitlist:
-                future.cancel()
-        # Clear queue
-        self.queue.tstore.clear()
-
-        self.queue_start_button.set_sensitive(False)
-        self.queue_del_button.set_sensitive(False)
-        self.queue_clr_button.set_sensitive(False)
 
     def on_delete_event(event, self, widget):
         # Cancel all jobs

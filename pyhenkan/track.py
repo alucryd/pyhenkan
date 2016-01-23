@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 
@@ -64,8 +65,10 @@ class VideoTrack(Track):
         return tf
 
     def transcode(self):
-        print('transcode video')
         queue = Queue()
+
+        if not os.path.isdir(self.file.tmpd):
+            os.mkdir(self.file.tmpd)
 
         print('Create VapourSynth script...')
         s = VapourSynth(self.file).get_script()
@@ -140,7 +143,6 @@ class AudioTrack(Track):
         return m
 
     def transcode(self):
-        print('transcode audio')
         queue = Queue()
 
         print('Encode audio...')

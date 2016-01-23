@@ -537,10 +537,11 @@ class CodecDialog(Gtk.Dialog):
         self.codec.preset = cbtext.get_active_text()
 
         # best libvpx preset implies cpu_used = 0
-        if self.codec.preset == 'best':
-            self.cpu_used_spin.set_sensitive = False
-        else:
-            self.cpu_used_spin.set_sensitive(True)
+        if self.codec.library.startswith('libvpx'):
+            if self.codec.preset == 'best':
+                self.cpu_used_spin.set_sensitive(False)
+            else:
+                self.cpu_used_spin.set_sensitive(True)
 
     def on_tune_changed(self, cbtext):
         self.codec.tune = cbtext.get_active_text()
