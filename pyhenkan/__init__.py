@@ -299,12 +299,19 @@ class MainWindow(Gtk.Window):
         title_label.set_property('hexpand', True)
         lang_label = Gtk.Label('Language')
         codec_label = Gtk.Label('Codec')
+        default_label = Gtk.Label('Default')
 
         self.tracks_grid.attach(type_label, 0, 0, 1, 1)
         self.tracks_grid.attach(format_label, 1, 0, 1, 1)
         self.tracks_grid.attach(title_label, 2, 0, 1, 1)
         self.tracks_grid.attach(lang_label, 3, 0, 1, 1)
         self.tracks_grid.attach(codec_label, 4, 0, 1, 1)
+        self.tracks_grid.attach(default_label, 5, 0, 1, 1)
+
+        # Dummy radios to serve as groups
+        video_radio = Gtk.RadioButton()
+        audio_radio = Gtk.RadioButton()
+        text_radio = Gtk.RadioButton()
 
         for i in range(len(self.tracklist)):
             t = self.tracklist[i]
@@ -347,20 +354,29 @@ class MainWindow(Gtk.Window):
                                                   Gtk.IconSize.BUTTON)
             conf_button = Gtk.Button()
             conf_button.set_image(conf_image)
+            conf_button.set_sensitive(False)
             conf_button.connect('clicked', self.on_conf_clicked, i)
-            if t.type in ['Text', 'Menu']:
-                conf_button.set_sensitive(False)
 
             codec_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                  spacing=6)
             codec_hbox.pack_start(codec_cbtext, True, True, 0)
             codec_hbox.pack_start(conf_button, False, True, 0)
 
+            if t.type == 'Video':
+                default_radio = Gtk.RadioButton.new_from_widget(video_radio)
+            elif t.type == 'Audio':
+                default_radio = Gtk.RadioButton.new_from_widget(audio_radio)
+            elif t.type == 'Text':
+                default_radio = Gtk.RadioButton.new_from_widget(text_radio)
+            default_radio.set_active(t.default)
+            default_radio.connect('toggled', self.on_default_toggled, i)
+
             self.tracks_grid.attach(type_label, 0, i + 1, 1, 1)
             self.tracks_grid.attach(format_label, 1, i + 1, 1, 1)
             self.tracks_grid.attach(title_entry, 2, i + 1, 1, 1)
             self.tracks_grid.attach(lang_entry, 3, i + 1, 1, 1)
             self.tracks_grid.attach(codec_hbox, 4, i + 1, 1, 1)
+            self.tracks_grid.attach(default_radio, 5, i + 1, 1, 1)
 
         self.tracks_grid.show_all()
 
@@ -409,8 +425,11 @@ class MainWindow(Gtk.Window):
 
     def on_codec_changed(self, cbtext, i):
         c = cbtext.get_active_text()
+        conf_button = self.tracks_grid.get_child_at(4, i + 1).get_children()[1]
         for f in self.files:
             t = f.tracklist[i]
+            if c in ['Disable', 'Mux']:
+                conf_button.set_sensitive(False)
             if c == 'Disable':
                 t.enable = False
                 t.codec = None
@@ -418,6 +437,7 @@ class MainWindow(Gtk.Window):
                 t.enable = True
                 t.codec = None
             else:
+                conf_button.set_sensitive(True)
                 t.enable = True
                 if t.type == 'Video':
                     t.codec = self.vcodecs[c]
@@ -433,12 +453,24 @@ class MainWindow(Gtk.Window):
         if self.workfile.tracklist[i].codec:
             self.workfile.tracklist[i].codec.show_dialog(self)
 
+    def on_default_toggled(self, button, i):
+        default = button.get_active()
+        for f in self.files:
+            f.tracklist[i].default = default
+
+        # # Only one default track per type
+        # if state:
+        #     for t in tracklist:
+        #         if tracklist.index(t) != i and t.type == track.type:
+        #             t.default = False
+
     def on_queue_clicked(self, button):
         for f in self.files:
             name = self.out_name_entry.get_text()
             suffix = self.out_suffix_entry.get_text()
             cont = self.out_cont_cbtext.get_active_text()
-            f.oname = '.'.join(['_'.join([name, suffix]), cont])
+            f.oname = '.'.join(['_'.join([name if name else f.name, suffix]),
+                                cont])
 
             f.process()
 

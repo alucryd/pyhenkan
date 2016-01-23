@@ -14,11 +14,11 @@ class Track:
         self.tmpfilepath = ''
         self.id = 0
         self.enable = True
+        self.default = True
         self.type = ''
         self.format = ''
         self.title = ''
         self.lang = ''
-        self.default = True
 
     def compare(self, track):
         m = ('{} (track {}: {}) and {} (track {}: {}) have different {}.\n'
@@ -46,10 +46,10 @@ class VideoTrack(Track):
     def __init__(self):
         super().__init__()
         self.codec = None
-        self.width = 0
-        self.height = 0
-        self.fpsnum = 0
-        self.fpsden = 1
+        # self.width = 0
+        # self.height = 0
+        # self.fpsnum = 0
+        # self.fpsden = 1
 
     def get_total_frame(self, vpy):
         cmd = 'vspipe "{}" - -i'.format(vpy)
@@ -144,6 +144,9 @@ class AudioTrack(Track):
 
     def transcode(self):
         queue = Queue()
+
+        if not os.path.isdir(self.file.tmpd):
+            os.mkdir(self.file.tmpd)
 
         print('Encode audio...')
         o = '_'.join([self.file.name, str(self.id)])

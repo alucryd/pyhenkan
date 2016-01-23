@@ -284,7 +284,7 @@ class PluginDialog(Gtk.Dialog):
 
     def label(self, name):
         label = Gtk.Label(name)
-        label.set_halign(Gtk.Align.START)
+        label.set_halign(Gtk.Align.CENTER)
         return label
 
     def spin(self, key, adj):

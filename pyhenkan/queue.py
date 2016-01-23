@@ -111,13 +111,12 @@ class Queue:
             Notify.init('pyhenkan')
 
     def on_start_clicked(self, button):
-        if len(self.tstore):
-            self.stop_button.set_sensitive(True)
-            self.delete_button.set_sensitive(False)
-            self.clear_button.set_sensitive(False)
-            print('Start processing...')
-            self.idle = False
-            self.lock.release()
+        self.stop_button.set_sensitive(True)
+        self.delete_button.set_sensitive(False)
+        self.clear_button.set_sensitive(False)
+        print('Start processing...')
+        self.idle = False
+        self.lock.release()
 
     def on_stop_clicked(self, button):
         self.idle = True
@@ -195,11 +194,11 @@ class Queue:
             GLib.idle_add(self.tstore.set_value, job.iter, 4, new_status)
             if new_status == 'Done' and not job.next:
                 # Mark as idle if it was the last job
-                GLib.idle_add(self._notify, 'Jobs done')
                 self.idle = True
-                self.start_button.set_sensitive(False)
-                self.stop_button.set_sensitive(False)
-                self.clear_button.set_sensitive(True)
+                GLib.idle_add(self.start_button.set_sensitive, False)
+                GLib.idle_add(self.stop_button.set_sensitive, False)
+                GLib.idle_add(self.clear_button.set_sensitive, True)
+                GLib.idle_add(self._notify, 'Jobs done')
             elif new_status == 'Running' and new_status != status:
                 GLib.idle_add(self._notify, 'Processing ' + filename)
 

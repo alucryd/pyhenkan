@@ -6,7 +6,7 @@ import subprocess
 
 from pyhenkan.plugin import LWLibavSource
 from pyhenkan.queue import Queue
-from pyhenkan.track import AudioTrack, MenuTrack, TextTrack, VideoTrack
+from pyhenkan.track import AudioTrack, TextTrack, VideoTrack
 
 from pymediainfo import MediaInfo
 from gi.repository import GLib
@@ -29,9 +29,7 @@ class MediaFile:
         self.last = 0
         self.filters = [LWLibavSource(self.path)]
 
-        self.mediainfo = MediaInfo.parse(self.path)
-        self.uid = self._get_uid()
-        self.tracklist = self._get_tracklist()
+        self.parse()
 
     def copy(self):
         f = MediaFile(self.path)
@@ -87,33 +85,33 @@ class MediaFile:
         print('Mux...')
         o = '/'.join([self.dname, self.oname])
 
-        cmd = ['mkvmerge -o "{}" -D -A -S -B -T "{}"'.format(o, self.path)]
+        cmd = 'mkvmerge -o "{}" -D -A -S -B -T "{}"'.format(o, self.path)
 
         for t in self.tracklist:
             f = ''
             if t.type == 'Video' and t.enable:
-                f = '-A -S -B -T -M -d {} --no-global-tags --no-chapters '
-                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+                f += ' -A -S -B -T -M -d'
             elif t.type == 'Audio' and t.enable:
-                f = '-D -S -B -T -M -a {} --no-global-tags --no-chapters '
-                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+                f += ' -D -S -B -T -M -a'
             elif t.type == 'Text' and t.enable:
-                f = '-D -A -B -T -M -s {} --no-global-tags --no-chapters '
-                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+                f += ' -D -A -B -T -M -s'
             elif t.type == 'Menu' and t.enable:
-                f = '-D -A -S -T -M -b {} --no-global-tags --no-chapters '
-                f += '--track-name {}:"{}" --language {}:"{}" "{}"'
+                f += ' -D -A -S -T -M -b'
             if f:
-                f = f.format(t.id, t.id, t.title, t.id,
-                             t.lang if t.lang else 'und',
-                             t.tmpfilepath if t.tmpfilepath else self.path)
-                cmd.append(f)
+                f += ' {id} --no-global-tags --no-chapters'
+                f += ' --track-name {id}:"{title}" --language {id}:"{lang}"'
+                if t.default:
+                    f += ' --default-track {id}'
+                f += ' "{path}"'
+                lang = t.lang if t.lang else 'und'
+                path = t.tmpfilepath if t.tmpfilepath else self.path
+                f = f.format(id=t.id,  title=t.title, lang=lang, path=path)
+                cmd += f
 
         if self.uid:
-            u = '--segment-uid ' + self.uid
-            cmd.append(u)
+            u = ' --segment-uid ' + self.uid
+            cmd += u
 
-        cmd = ' '.join(cmd)
         print(cmd)
 
         self.proc = subprocess.Popen(cmd, shell=True,
@@ -122,6 +120,9 @@ class MediaFile:
 
         GLib.idle_add(queue.pbar.set_fraction, 0)
         GLib.idle_add(queue.pbar.set_text, 'Muxing...')
+
+        queue.update()
+    
         while self.proc.poll() is None:
             line = self.proc.stdout.readline()
             if 'Progress:' in line:
@@ -142,29 +143,30 @@ class MediaFile:
         GLib.add(queue.pbar.set_fraction, 0)
         GLib.add(queue.pbar.set_text, 'Ready')
 
-    def _get_uid(self):
-        if self.mediainfo.tracks[0].other_unique_id is not None:
-            uid = self.mediainfo.tracks[0].other_unique_id[0]
+    def parse(self):
+        self.tracklist = []
+        mediainfo = MediaInfo.parse(self.path)
+
+        # UID
+        if self.ext == '.mkv' and mediainfo.tracks[0].other_unique_id:
+            uid = mediainfo.tracks[0].other_unique_id[0]
             uid = re.findall('0x[^)]*', uid)[0].replace('0x', '')
             # Mediainfo strips leading zeroes
-            uid = uid.rjust(32, '0')
+            self.uid = uid.rjust(32, '0')
 
-        return uid if self.ext == '.mkv' else ''
-
-    def _get_tracklist(self):
-        tracklist = []
         # Track: [track_id, track_type]
-        for t in self.mediainfo.tracks:
+        for t in mediainfo.tracks:
             if t.track_type == 'Video':
                 tr = VideoTrack()
-                # tr.width = t.width
-                # tr.height = t.height
-                # tr.fpsnum, tr.fpsden = self._get_fps(t.frame_rate_mode,
-                #                                      t.frame_rate)
                 self.width = t.width
                 self.height = t.height
-                self.fpsnum, self.fpsden = self._get_fps(t.frame_rate_mode,
-                                                         t.frame_rate)
+                if t.frame_rate_mode == 'CFR':
+                    if t.frame_rate == '23.976':
+                        self.fpsnum = 24000
+                        self.fpsden = 1001
+                    elif t.frame_rate == '29.970':
+                        self.fpsnum = 30000
+                        self.fpsden = 1001
             elif t.track_type == 'Audio':
                 tr = AudioTrack()
                 tr.channel = t.channel_s
@@ -175,32 +177,19 @@ class MediaFile:
                 tr = TextTrack()
 
             elif t.track_type == 'Menu':
-                tr = MenuTrack()
+                # tr = MenuTrack()
+                pass
 
-            if t.track_type != 'General':
+            if t.track_type not in ['General', 'Menu']:
                 tr.file = self
-                tr.id = (t.track_id if t.track_id else 0) - 1
+                tr.id = t.track_id - 1
+                tr.default = True if t.default == 'Yes' else False
                 tr.type = t.track_type
                 tr.format = t.format
-                if t.title:
-                    tr.title = t.title
+                tr.title = t.title if t.title else ''
                 # We want the 3 letter code
-                if t.other_language:
-                    tr.lang = t.other_language[3]
+                tr.lang = t.other_language[3] if t.other_language else ''
 
-                tracklist.append(tr)
-
-        return tracklist
-
-    def _get_fps(self, fps_mode, fps):
-        if fps_mode == 'CFR':
-            if fps == '23.976':
-                fpsnum = 24000
-                fpsden = 1001
-            elif fps_mode == '29.970':
-                fpsnum = 30000
-                fpsden = 1001
-            return fpsnum, fpsden
-        return 0, 1
+                self.tracklist.append(tr)
 
 # vim: ts=4 sw=4 et:
