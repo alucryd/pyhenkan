@@ -514,13 +514,14 @@ class AboutDialog(Gtk.AboutDialog):
         Gtk.Dialog.__init__(self, parent)
 
         pixbuf = GdkPixbuf.Pixbuf
-        logo = pixbuf.new_from_file('/usr/share/pixmaps/pyhenkan.png')
+        logo = pixbuf.new_from_file('/usr/share/pixmaps/pyhenkan.svg')
         logo = logo.scale_simple(64, 64, GdkPixbuf.InterpType.BILINEAR)
+        comments = 'Transcoding suite built around VapourSynth and FFmpeg'
 
         self.set_program_name('pyhenkan')
         self.set_logo(logo)
         self.set_version(VERSION)
-        self.set_comments('Python Transcoding Tools')
+        self.set_comments(comments)
         self.set_copyright('Copyright © 2014-2015 Maxime Gauduin')
         self.set_license_type(Gtk.License.GPL_3_0)
         self.set_website('https://github.com/alucryd/pyhenkan')

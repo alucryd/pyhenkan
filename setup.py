@@ -31,7 +31,7 @@ setup(
     ],
     data_files=[
         ('/usr/share/applications', ['data/pyhenkan.desktop']),
-        ('/usr/share/pixmaps', ['data/pyhenkan.png']),
+        ('/usr/share/pixmaps', ['data/pyhenkan.svg']),
     ],
     entry_points={'gui_scripts': [
         'pyhenkan = pyhenkan',
