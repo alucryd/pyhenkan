@@ -390,7 +390,7 @@ fieldset {
 
 /*
  * 1. Corrects color not being inherited in IE6/7/8/9
- * 2. Corrects text not wrapping in FF3 
+ * 2. Corrects text not wrapping in FF3
  * 3. Corrects alignment displayed oddly in IE6/7
  */
 legend {
@@ -580,12 +580,12 @@ h3 {
 }
 
 a {
-  color: #ffcc00;
+  color: #c05b00;
   font-weight: 400;
   text-decoration: none;
 }
 a:hover {
-  color: #ffeb9b;
+  color: #ff7b01;
 }
 
 a small {
@@ -727,13 +727,13 @@ dt {
 }
 #header nav li a {
   color: white;
-  border: 1px solid #5d910b;
-  background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #93bd20), color-stop(100%, #659e10));
-  background: -webkit-linear-gradient(#93bd20, #659e10);
-  background: -moz-linear-gradient(#93bd20, #659e10);
-  background: -o-linear-gradient(#93bd20, #659e10);
-  background: -ms-linear-gradient(#93bd20, #659e10);
-  background: linear-gradient(#93bd20, #659e10);
+  border: 1px solid #964600;
+  background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #ff7b01), color-stop(100%, #c05b00));
+  background: -webkit-linear-gradient(#ff7b01, #c05b00);
+  background: -moz-linear-gradient(#ff7b01, #c05b00);
+  background: -o-linear-gradient(#ff7b01, #c05b00);
+  background: -ms-linear-gradient(#ff7b01, #c05b00);
+  background: linear-gradient(#ff7b01, #c05b00);
   -moz-border-radius: 2px;
   -webkit-border-radius: 2px;
   -o-border-radius: 2px;
@@ -744,7 +744,7 @@ dt {
   -webkit-box-shadow: inset 0px 1px 0px rgba(255, 255, 255, 0.3), 0px 3px 7px rgba(0, 0, 0, 0.7);
   -o-box-shadow: inset 0px 1px 0px rgba(255, 255, 255, 0.3), 0px 3px 7px rgba(0, 0, 0, 0.7);
   box-shadow: inset 0px 1px 0px rgba(255, 255, 255, 0.3), 0px 3px 7px rgba(0, 0, 0, 0.7);
-  background-color: #93bd20;
+  background-color: #ff7b01;
   padding: 10px 12px;
   margin-top: 6px;
   line-height: 14px;
@@ -753,14 +753,14 @@ dt {
   text-align: center;
 }
 #header nav li a:hover {
-  background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #749619), color-stop(100%, #527f0e));
-  background: -webkit-linear-gradient(#749619, #527f0e);
-  background: -moz-linear-gradient(#749619, #527f0e);
-  background: -o-linear-gradient(#749619, #527f0e);
-  background: -ms-linear-gradient(#749619, #527f0e);
-  background: linear-gradient(#749619, #527f0e);
-  background-color: #659e10;
-  border: 1px solid #527f0e;
+  background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #c05b00), color-stop(100%, #964600));
+  background: -webkit-linear-gradient(#c05b00, #964600);
+  background: -moz-linear-gradient(#c05b00, #964600);
+  background: -o-linear-gradient(#c05b00, #964600);
+  background: -ms-linear-gradient(#c05b00, #964600);
+  background: linear-gradient(#c05b00, #964600);
+  background-color: #c05b00;
+  border: 1px solid #964600;
   -moz-box-shadow: inset 0px 1px 1px rgba(0, 0, 0, 0.2), 0px 1px 0px rgba(0, 0, 0, 0);
   -webkit-box-shadow: inset 0px 1px 1px rgba(0, 0, 0, 0.2), 0px 1px 0px rgba(0, 0, 0, 0);
   -o-box-shadow: inset 0px 1px 1px rgba(0, 0, 0, 0.2), 0px 1px 0px rgba(0, 0, 0, 0);
@@ -806,32 +806,39 @@ section #title p {
   font-size: 18px;
   text-align: center;
 }
-section #title .credits {
+
+section #footer {
+  border: 0;
+  outline: none;
+  margin: 0 0 50px 0;
+  padding: 0 0 5px 0;
+}
+section #footer .credits {
   font-size: 11px;
   font-family: 'OpenSansRegular', "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-weight: normal;
   color: #696969;
   margin-top: -10px;
 }
-section #title .credits.left {
+section #footer .credits.left {
   float: left;
 }
-section #title .credits.right {
+section #footer .credits.right {
   float: right;
 }
 
 @media print, screen and (max-width: 720px) {
-  #title .credits {
+  #footer .credits {
     display: block;
     width: 100%;
     line-height: 30px;
     text-align: center;
   }
-  #title .credits .left {
+  #footer .credits .left {
     float: none;
     display: block;
   }
-  #title .credits .right {
+  #footer .credits .right {
     float: none;
     display: block;
   }

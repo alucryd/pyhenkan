@@ -1,9 +1,13 @@
 <!doctype html>
 <html>
-  <head>
+
+<head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>pyhenkan by alucryd</title>
+    <title>pyhenkan</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="images/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
     <link rel="stylesheet" href="stylesheets/styles.css">
     <link rel="stylesheet" href="stylesheets/github-dark.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
@@ -16,36 +20,103 @@
     <![endif]-->
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 
-  </head>
-  <body>
-      <div id="header">
+</head>
+
+<body>
+    <div id="header">
         <nav>
-          <li class="fork"><a href="https://github.com/alucryd/pyhenkan">View On GitHub</a></li>
-          <li class="downloads"><a href="https://github.com/alucryd/pyhenkan/zipball/master">ZIP</a></li>
-          <li class="downloads"><a href="https://github.com/alucryd/pyhenkan/tarball/master">TAR</a></li>
-          <li class="title">DOWNLOADS</li>
+            <li class="fork"><a href="https://github.com/alucryd/pyhenkan">View On GitHub</a></li>
+            <li class="downloads"><a href="https://github.com/alucryd/pyhenkan/zipball/master">ZIP</a></li>
+            <li class="downloads"><a href="https://github.com/alucryd/pyhenkan/tarball/master">TAR</a></li>
+            <li class="title">DOWNLOADS</li>
         </nav>
-      </div><!-- end header -->
+    </div>
+    <!-- end header -->
 
     <div class="wrapper">
 
-      <section>
-        <div id="title">
-          <h1>pyhenkan</h1>
-          <p>Transcoding suite built around VapourSynth and FFmpeg</p>
-          <hr>
-          <span class="credits left">Project maintained by <a href="https://github.com/alucryd">alucryd</a></span>
-          <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="https://twitter.com/michigangraham">mattgraham</a></span>
-        </div>
+        <section>
+            <div id="title">
+                <p><img src="images/pyhenkan.png" width="128" height="128" /></p>
+                <h1>pyhenkan</h1>
+                <p>Transcoding suite built around VapourSynth and FFmpeg</p>
+                <hr>
+            </div>
 
-        <h1>
-<a id="about" class="anchor" href="#about" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>About</h1>
+            <h1>
+                <a id="about" class="anchor" href="#about" aria-hidden="true">
+                    <span aria-hidden="true" class="octicon octicon-link"></span>
+                </a>
+                About
+            </h1>
 
-<p>Transcoding suite built around VapourSynth and FFmpeg</p>
-      </section>
+            <p>
+                <b>pyhenkan</b> is a transcoding suite written in Python and built around VapourSynth and FFmpeg. It is an effort to provide an alternative to MeGUI and StaxRip on Linux.
+            </p>
+
+            <h1>
+                <a id="features" class="anchor" href="#features" aria-hidden="true">
+                    <span aria-hidden="true" class="octicon octicon-link"></span>
+                </a>
+                Features
+            </h1>
+
+            <p>
+                <h3>Input</h3>
+                <ul>
+                    <li>Handles all formats supported by FFmpeg</li>
+                    <li>Batch transcodes files with the same structure</li>
+                    <li>Uses a job control system to queue transcoding tasks</li>
+                </ul>
+            </p>
+
+            <p>
+                <h3>Output</h3>
+                <ul>
+                    <li>Video: Pasthrough, x264, x265, VP8, VP9</li>
+                    <li>Audio: Passthrough, AAC (native, faac, fdk-aac), Flac, Mp3, Opus, Vorbis</li>
+                    <li>Subtitle: Passthrough</li>
+                    <li>Video filters: Resize, Denoise, Deband, Resample, Color matrix, Trim</li>
+                    <li>Audio filters: Channel conversion, Resample, Trim</li>
+                    <li>Containers: MKV only (for now)</li>
+                    <li>Handles track title, language and default flag</li>
+                </ul>
+            </p>
+
+            <p>
+                <h3>Chapter editor</h3>
+                <ul>
+                    <li>Accepts timecodes or frame numbers (CFR videos only) as boundaries</li>
+                    <li>Dynamically converts between timecodes and frame numbers</li>
+                    <li>Supports Ordered Chapters/Segment Linking</li>
+                </ul>
+            </p>
+
+            <h1>
+                <a id="packages" class="anchor" href="#packages" aria-hidden="true">
+                    <span aria-hidden="true" class="octicon octicon-link"></span>
+                </a>
+                Packages
+            </h1>
+
+            <p>
+                <h3>Arch Linux</h3>
+                <ul>
+                    <li><a href="https://aur.archlinux.org/packages/pyhenkan-git/">AUR</a></li>
+                    <li><a href="http://pkgbuild.com/~alucryd/">[alucryd]</a></li>
+                </ul>
+            </p>
+
+            <div id="footer">
+                <hr>
+                <span class="credits left">Project maintained by <a href="https://github.com/alucryd">alucryd</a></span>
+                <span class="credits right">Hosted on GitHub Pages &mdash; Original theme by <a href="https://twitter.com/michigangraham">mattgraham</a></span>
+            </div>
+        </section>
 
     </div>
     <!--[if !IE]><script>fixScale(document);</script><![endif]-->
-    
-  </body>
+
+</body>
+
 </html>
