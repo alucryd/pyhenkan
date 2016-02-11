@@ -4,7 +4,8 @@ import re
 import shutil
 import subprocess
 
-from pyhenkan.plugin import LWLibavSource
+from pyhenkan.environment import Environment
+from pyhenkan.plugin import LWLibavSource, LibavSMASHSource, FFmpegSource
 from pyhenkan.queue import Queue
 from pyhenkan.track import AudioTrack, TextTrack, VideoTrack
 
@@ -27,7 +28,14 @@ class MediaFile:
         self.fpsden = 1
         self.first = 0
         self.last = 0
-        self.filters = [LWLibavSource(self.path)]
+
+        env = Environment()
+        if env.source_plugins['LWLibavSource'][1]:
+            self.filters = [LWLibavSource(self.path)]
+        elif env.source_plugins['LibavSMASHSource'][1]:
+            self.filters = [LibavSMASHSource(self.path)]
+        elif env.source_plugins['FFmpegSource'][1]:
+            self.filters = [FFmpegSource(self.path)]
 
         self.parse()
 
@@ -122,7 +130,7 @@ class MediaFile:
         GLib.idle_add(queue.pbar.set_text, 'Muxing...')
 
         queue.update()
-    
+
         while self.proc.poll() is None:
             line = self.proc.stdout.readline()
             if 'Progress:' in line:

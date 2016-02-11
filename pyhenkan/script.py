@@ -13,7 +13,7 @@ from gi.repository import Gio, Gtk
 
 class ScriptCreatorWindow(Gtk.Window):
     def __init__(self):
-        Gtk.Window.__init__(self, title='pyanimscript')
+        Gtk.Window.__init__(self, title='Script Creator')
         self.set_default_size(640, 480)
 
         self.wdir = os.environ['HOME']

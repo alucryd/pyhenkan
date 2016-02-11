@@ -19,7 +19,7 @@ class Plugin:
         plugins = [[plugins[p]['namespace'],
                    [f for f in plugins[p]['functions']]] for p in plugins]
         plugins = {p[0]: p[1] for p in plugins}
-        return self.function in plugins[self.namespace]
+        return self.function in plugins.get(self.namespace, [])
 
     def show_dialog(self, parent):
         dlg = self.dialog(self, parent)
@@ -86,7 +86,7 @@ class LWLibavSource(SourcePlugin):
         # self.args['decoder'] = ''
 
 
-class FFMpegSource(SourcePlugin):
+class FFmpegSource(SourcePlugin):
     def __init__(self, source):
         SourcePlugin.__init__(self, 'ffms2', 'Source',
                               FFMpegSourceDialog, source)
@@ -111,9 +111,14 @@ class ImageMagickWrite(Plugin):
         self.args['filename'] = ''
 
 
-class CropAbs(Plugin):
+class CropPlugin(Plugin):
+    def __init__(self, namespace, function, dialog):
+        Plugin.__init__(self, namespace, function, dialog)
+
+
+class CropAbs(CropPlugin):
     def __init__(self):
-        Plugin.__init__(self, 'std', 'CropAbs', CropAbsDialog)
+        CropPlugin.__init__(self, 'std', 'CropAbs', CropAbsDialog)
 
         self.args['width'] = 0
         self.args['height'] = 0
@@ -121,9 +126,9 @@ class CropAbs(Plugin):
         self.args['top'] = 0
 
 
-class CropRel(Plugin):
+class CropRel(CropPlugin):
     def __init__(self):
-        Plugin.__init__(self, 'std', 'CropRel', CropRelDialog)
+        CropPlugin.__init__(self, 'std', 'CropRel', CropRelDialog)
 
         self.args['left'] = 0
         self.args['right'] = 0
@@ -186,33 +191,39 @@ class Spline36(ResizePlugin):
         ResizePlugin.__init__(self, 'Spline36')
 
 
-class FluxSmoothT(Plugin):
+class DenoisePlugin(Plugin):
+    def __init__(self, namespace, function, dialog):
+        Plugin.__init__(self, namespace, function, dialog)
+
+
+class FluxSmoothT(DenoisePlugin):
     def __init__(self):
-        Plugin.__init__(self, 'flux', 'SmoothT', FluxSmoothTDialog)
+        DenoisePlugin.__init__(self, 'flux', 'SmoothT', FluxSmoothTDialog)
 
         self.args['temporal_threshold'] = 7
         self.args['planes'] = [0, 1, 2]
 
 
-class FluxSmoothST(Plugin):
+class FluxSmoothST(DenoisePlugin):
     def __init__(self):
-        Plugin.__init__(self, 'flux', 'SmoothT', FluxSmoothSTDialog)
+        DenoisePlugin.__init__(self, 'flux', 'SmoothT', FluxSmoothSTDialog)
 
         self.args['spatial_threshold'] = 7
         self.args['temporal_threshold'] = 7
         self.args['planes'] = [0, 1, 2]
 
 
-class RemoveGrain(Plugin):
+class RemoveGrain(DenoisePlugin):
     def __init__(self):
-        Plugin.__init__(self, 'rgvs', 'RemoveGrain', RemoveGrainDialog)
+        DenoisePlugin.__init__(self, 'rgvs', 'RemoveGrain', RemoveGrainDialog)
 
         self.args['mode'] = [2, 2, 2]
 
 
-class TemporalSoften(Plugin):
+class TemporalSoften(DenoisePlugin):
     def __init__(self):
-        Plugin.__init__(self, 'focus', 'TemporalSoften', TemporalSoftenDialog)
+        DenoisePlugin.__init__(self, 'focus', 'TemporalSoften',
+                               TemporalSoftenDialog)
 
         self.args['radius'] = 4
         self.args['luma_threshold'] = 4
@@ -221,9 +232,14 @@ class TemporalSoften(Plugin):
         # self.mode = 2
 
 
-class F3kdb(Plugin):
+class DebandPlugin(Plugin):
+    def __init__(self, namespace, function, dialog):
+        Plugin.__init__(self, namespace, function, dialog)
+
+
+class F3kdb(DebandPlugin):
     def __init__(self):
-        Plugin.__init__(self, 'f3kdb', 'Deband', F3kdbDialog)
+        DebandPlugin.__init__(self, 'f3kdb', 'Deband', F3kdbDialog)
 
         # self.args['range'] = 15
         self.args['y'] = 64
@@ -245,9 +261,14 @@ class F3kdb(Plugin):
         # self.args['random_param_grain'] = 1.0
 
 
-class Trim(Plugin):
+class MiscPlugin(Plugin):
+    def __init__(self, namespace, function, dialog):
+        Plugin.__init__(self, namespace, function, dialog)
+
+
+class Trim(MiscPlugin):
     def __init__(self):
-        Plugin.__init__(self, 'std', 'Trim', TrimDialog)
+        MiscPlugin.__init__(self, 'std', 'Trim', TrimDialog)
 
         self.args['first'] = 0
         self.args['last'] = 0

@@ -108,8 +108,8 @@ class Chapters:
 
 class ChapterEditorWindow(Gtk.Window):
     def __init__(self):
-        Gtk.Window.__init__(self, title='pyanimchap')
-        self.set_default_size(640, 0)
+        Gtk.Window.__init__(self, title='Chapter Editor')
+        self.set_default_size(640, 480)
 
         self.lang = 'und'
         self.ordered = False
@@ -130,10 +130,10 @@ class ChapterEditorWindow(Gtk.Window):
         self.scrwin.add(vport)
         self.add(self.scrwin)
 
-        # --Header Bar--#
+        # Header Bar
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
-        hbar.set_property('title', 'pyanimchap')
+        hbar.set_property('title', 'Chapter Editor')
 
         open_button = Gtk.Button('Open')
         open_button.connect('clicked', self.on_open_clicked)
@@ -163,7 +163,7 @@ class ChapterEditorWindow(Gtk.Window):
 
         self.set_titlebar(hbar)
 
-        # --Open/Save--#
+        # Open/Save
         cflt = Gtk.FileFilter()
         cflt.set_name('XML Chapter')
         cflt.add_pattern('*.xml')
@@ -180,7 +180,7 @@ class ChapterEditorWindow(Gtk.Window):
                                                  'Save', Gtk.ResponseType.OK))
         self.save_fcdlg.add_filter(cflt)
 
-        # --Settings--#
+        # Setings
         settings_grid = Gtk.Grid()
         settings_grid.set_property('margin', 6)
         settings_grid.set_column_spacing(6)
@@ -233,7 +233,7 @@ class ChapterEditorWindow(Gtk.Window):
         settings_grid.show_all()
         settings_popover.add(settings_grid)
 
-        # --Entries--#
+        # Entries
         self._update_entries()
 
     def _update_entries(self):

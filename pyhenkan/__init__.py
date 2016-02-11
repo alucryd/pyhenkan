@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 import pyhenkan.codec as codec
 from pyhenkan.chapter import ChapterEditorWindow
+from pyhenkan.environment import Environment
 from pyhenkan.mediafile import MediaFile
 from pyhenkan.queue import Queue
 from pyhenkan.script import ScriptCreatorWindow
@@ -29,6 +30,9 @@ class MainWindow(Gtk.Window):
 
         # Set default working directory
         self.wdir = os.environ['HOME']
+
+        # Get environment
+        self.env = Environment()
 
         # --File Filters--#
         self.vconts = ['mkv']
@@ -59,16 +63,22 @@ class MainWindow(Gtk.Window):
         tools_ched_button.set_label('Chapter Editor')
         tools_ched_button.connect('clicked', self.on_ched_clicked)
 
+        tools_env_button = Gtk.Button()
+        tools_env_button.set_label('Environment')
+        tools_env_button.connect('clicked', self.on_env_clicked)
+
         tools_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         tools_box.set_property('margin', 6)
         tools_box.pack_start(tools_sccr_button, True, True, 0)
         tools_box.pack_start(tools_ched_button, True, True, 0)
+        tools_box.pack_start(tools_env_button, True, True, 0)
         tools_box.show_all()
 
         tools_popover = Gtk.Popover()
         tools_popover.add(tools_box)
 
-        open_button = Gtk.Button('Open')
+        open_button = Gtk.Button()
+        open_button.set_label('Open')
         open_button.set_property('hexpand', True)
         open_button.connect('clicked', self.on_open_clicked)
 
@@ -203,6 +213,9 @@ class MainWindow(Gtk.Window):
     def on_ched_clicked(self, button):
         ched_win = ChapterEditorWindow()
         ched_win.show_all()
+
+    def on_env_clicked(self, button):
+        self.env.show_window(self)
 
     def on_about_clicked(self, button):
         self.about_dlg.run()
@@ -339,13 +352,13 @@ class MainWindow(Gtk.Window):
             codec_cbtext.append_text('Disable')
             codec_cbtext.append_text('Mux')
             if t.type == 'Video':
-                self._populate_vcodecs()
-                for c in self.vcodecs:
-                    codec_cbtext.append_text(c)
+                for c in self.env.vencs:
+                    if self.env.vencs[c][1]:
+                        codec_cbtext.append_text(c)
             elif t.type == 'Audio':
-                self._populate_acodecs()
-                for c in self.acodecs:
-                    codec_cbtext.append_text(c)
+                for c in self.env.aencs:
+                    if self.env.aencs[c][1]:
+                        codec_cbtext.append_text(c)
             codec_cbtext.set_active(1)
             codec_cbtext.connect('changed', self.on_codec_changed, i)
 
@@ -380,39 +393,6 @@ class MainWindow(Gtk.Window):
 
         self.tracks_grid.show_all()
 
-    def _populate_vcodecs(self):
-        self.vcodecs = OrderedDict()
-        self.vcodecs['VP8 (libvpx)'] = codec.Vp8()
-        self.vcodecs['VP9 (libvpx)'] = codec.Vp9()
-        self.vcodecs['AVC (libx264)'] = codec.X264()
-        self.vcodecs['HEVC (libx265)'] = codec.X265()
-
-        not_found = []
-        for c in self.vcodecs:
-            if not self.vcodecs[c].is_avail():
-                not_found.append(c)
-
-        for c in not_found:
-            self.vcodecs.pop(c)
-
-    def _populate_acodecs(self):
-        self.acodecs = OrderedDict()
-        self.acodecs['AAC (native)'] = codec.Aac()
-        self.acodecs['AAC (libfaac)'] = codec.Faac()
-        self.acodecs['AAC (libfdk-aac)'] = codec.Fdkaac()
-        self.acodecs['FLAC (native)'] = codec.Flac()
-        self.acodecs['MP3 (libmp3lame)'] = codec.Lame()
-        self.acodecs['Opus (libopus)'] = codec.Opus()
-        self.acodecs['Vorbis (libvorbis)'] = codec.Vorbis()
-
-        not_found = []
-        for c in self.acodecs:
-            if not self.acodecs[c].is_avail():
-                not_found.append(c)
-
-        for c in not_found:
-            self.acodecs.pop(c)
-
     def on_title_changed(self, entry, i):
         title = entry.get_text()
         for f in self.files:
@@ -440,9 +420,9 @@ class MainWindow(Gtk.Window):
                 conf_button.set_sensitive(True)
                 t.enable = True
                 if t.type == 'Video':
-                    t.codec = self.vcodecs[c]
+                    t.codec = self.env.vencs[c][0]()
                 elif t.type == 'Audio':
-                    t.codec = self.acodecs[c]
+                    t.codec = self.env.aencs[c][0]()
                     t.codec.channel = t.channel
                     t.codec.rate = t.rate
 
