@@ -414,7 +414,7 @@ class MainWindow(Gtk.Window):
 
     def on_codec_changed(self, cbtext, i):
         c = cbtext.get_active_text()
-        conf_button = self.tracks_grid.get_child_at(4, i + 1).get_children()[1]
+        conf_button = self.tracks_grid.get_child_at(8, i + 2).get_children()[1]
         for f in self.files:
             t = f.tracklist[i]
             if c in ['Disable', 'Mux']:
