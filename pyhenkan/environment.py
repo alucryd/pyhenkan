@@ -186,6 +186,7 @@ class EnvironmentWindow(Gtk.Window):
 
     def plugins(self):
         grid = Gtk.Grid()
+        grid.set_property('margin', 6)
         grid.set_column_spacing(6)
         grid.set_row_spacing(6)
         grid.set_row_homogeneous(True)
@@ -237,7 +238,6 @@ class EnvironmentWindow(Gtk.Window):
         model, treeiter = selection.get_selected()
         if treeiter is not None:
             self.vport.remove(self.vport.get_children()[0])
-            print(model[treeiter][0])
             if model[treeiter][0] == 'FFmpeg codecs':
                 self.vport.add(self.codecs())
             elif model[treeiter][0] == 'VapourSynth plugins':
