@@ -18,12 +18,12 @@ class Codec:
     def is_avail(self):
         proc = subprocess.run(['ffmpeg', '-codecs'],
                               stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL,
+                              stderr=subprocess.PIPE,
                               universal_newlines=True)
-        buf = io.StringIO(proc.stdout)
+        buf = io.StringIO(proc.stdout + proc.stderr)
         line = buf.readline()
         while line:
-            if self.library in line or self.library in ['aac', 'flac']:
+            if self.library in line or not self.library.startswith('lib'):
                 return True
             line = buf.readline()
         return False
@@ -155,7 +155,7 @@ class Aac(AudioCodec):
         self.container = 'm4a'
 
     def get_cmd(self, track, output):
-        settings = ['-b:a', str(self.bitrate)]
+        settings = ['-strict', '-2', '-b:a', str(self.bitrate) + 'k']
         cmd = super().get_cmd(track, output, settings)
         return cmd
 
@@ -170,7 +170,7 @@ class Faac(AudioCodec):
 
     def get_cmd(self, track, output):
         if self.mode == 'ABR':
-            settings = ['-b:a', str(self.bitrate)]
+            settings = ['-b:a', str(self.bitrate) + 'k']
         elif self.mode == 'VBR':
             settings = ['-q:a', str(self.quality)]
         cmd = super().get_cmd(track, output, settings)
@@ -187,7 +187,7 @@ class Fdkaac(AudioCodec):
 
     def get_cmd(self, track, output):
         if self.mode == 'CBR':
-            settings = ['-b:a', str(self.bitrate)]
+            settings = ['-b:a', str(self.bitrate) + 'k']
         elif self.mode == 'VBR':
             settings = ['-q:a', str(self.quality)]
         cmd = super().get_cmd(track, output, settings)
@@ -214,7 +214,7 @@ class Lame(AudioCodec):
 
     def get_cmd(self, track, output):
         if self.mode in ['CBR', 'ABR']:
-            settings = ['-b:a', str(self.bitrate)]
+            settings = ['-b:a', str(self.bitrate) + 'k']
         elif self.mode == 'VBR':
             settings = ['-q:a', str(self.quality)]
         if self.mode == 'ABR':
@@ -231,7 +231,7 @@ class Opus(AudioCodec):
         self.container = 'opus'
 
     def get_cmd(self, track, output):
-        settings = ['-b:a', str(self.bitrate * 1000)]
+        settings = ['-b:a', str(self.bitrate) + 'k']
         if self.mode == 'CBR':
             settings += ['-vbr off']
         elif self.mode == 'ABR':
@@ -250,7 +250,7 @@ class Vorbis(AudioCodec):
 
     def get_cmd(self, track, output):
         if self.mode == 'ABR':
-            settings = ['-b:a', str(self.bitrate)]
+            settings = ['-b:a', str(self.bitrate) + 'k']
         elif self.mode == 'VBR':
             settings = ['-q:a', str(self.quality)]
         cmd = super().get_cmd(track, output, settings)
@@ -260,6 +260,11 @@ class Vorbis(AudioCodec):
 class Dcadec(AudioCodec):
     def __init__(self):
         AudioCodec.__init__(self, 'libdcadec', None)
+
+
+class Swr(AudioCodec):
+    def __init__(self):
+        AudioCodec.__init__(self, 'swr', None)
 
 
 class Soxr(AudioCodec):
