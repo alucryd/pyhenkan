@@ -160,7 +160,6 @@ class MainWindow(Gtk.Window):
         grid.attach(vsep, 5, 0, 1, 2)
         grid.attach(self.flt_conf_button, 6, 0, 1, 1)
         grid.attach(self.queue_button, 6, 1, 1, 1)
-        grid.attach(hsep, 0, 3, 7, 1)
 
         tracks_empty_label = Gtk.Label('No input')
         tracks_empty_label.set_property('hexpand', True)
@@ -173,7 +172,7 @@ class MainWindow(Gtk.Window):
 
         self.tracks_scrwin = Gtk.ScrolledWindow()
         self.tracks_scrwin.set_policy(Gtk.PolicyType.NEVER,
-                                      Gtk.PolicyType.ALWAYS)
+                                      Gtk.PolicyType.AUTOMATIC)
         self.tracks_scrwin.add(self.tracks_grid)
 
         # -- Queue -- #
@@ -185,8 +184,9 @@ class MainWindow(Gtk.Window):
 
         input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         input_box.set_property('margin', 6)
-        input_box.pack_start(grid, False, False, 0)
         input_box.pack_start(self.tracks_scrwin, True, True, 0)
+        input_box.pack_start(hsep, False, False, 0)
+        input_box.pack_start(grid, False, False, 0)
 
         notebook = Gtk.Notebook()
         notebook.append_page(input_box, input_label)
@@ -314,20 +314,23 @@ class MainWindow(Gtk.Window):
         codec_label = Gtk.Label('Codec')
         default_label = Gtk.Label('Default')
 
+        hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+
         self.tracks_grid.attach(type_label, 0, 0, 1, 1)
-        self.tracks_grid.attach(format_label, 1, 0, 1, 1)
-        self.tracks_grid.attach(title_label, 2, 0, 1, 1)
-        self.tracks_grid.attach(lang_label, 3, 0, 1, 1)
-        self.tracks_grid.attach(codec_label, 4, 0, 1, 1)
-        self.tracks_grid.attach(default_label, 5, 0, 1, 1)
+        self.tracks_grid.attach(format_label, 2, 0, 1, 1)
+        self.tracks_grid.attach(title_label, 4, 0, 1, 1)
+        self.tracks_grid.attach(lang_label, 6, 0, 1, 1)
+        self.tracks_grid.attach(codec_label, 8, 0, 1, 1)
+        self.tracks_grid.attach(default_label, 10, 0, 1, 1)
+        self.tracks_grid.attach(hsep, 0, 1, 11, 1)
 
         # Dummy radios to serve as groups
         video_radio = Gtk.RadioButton()
         audio_radio = Gtk.RadioButton()
         text_radio = Gtk.RadioButton()
 
-        for i in range(len(self.tracklist)):
-            t = self.tracklist[i]
+        i = 0
+        for t in self.tracklist:
             edit = False if t.type == 'Menu' else True
 
             type_label = Gtk.Label(t.type)
@@ -384,12 +387,18 @@ class MainWindow(Gtk.Window):
             default_radio.set_active(t.default)
             default_radio.connect('toggled', self.on_default_toggled, i)
 
-            self.tracks_grid.attach(type_label, 0, i + 1, 1, 1)
-            self.tracks_grid.attach(format_label, 1, i + 1, 1, 1)
-            self.tracks_grid.attach(title_entry, 2, i + 1, 1, 1)
-            self.tracks_grid.attach(lang_entry, 3, i + 1, 1, 1)
-            self.tracks_grid.attach(codec_hbox, 4, i + 1, 1, 1)
-            self.tracks_grid.attach(default_radio, 5, i + 1, 1, 1)
+            self.tracks_grid.attach(type_label, 0, i + 2, 1, 1)
+            self.tracks_grid.attach(format_label, 2, i + 2, 1, 1)
+            self.tracks_grid.attach(title_entry, 4, i + 2, 1, 1)
+            self.tracks_grid.attach(lang_entry, 6, i + 2, 1, 1)
+            self.tracks_grid.attach(codec_hbox, 8, i + 2, 1, 1)
+            self.tracks_grid.attach(default_radio, 10, i + 2, 1, 1)
+
+            i += 1
+
+        for j in range(5):
+            vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+            self.tracks_grid.attach(vsep, j * 2 + 1, 0, 1, i + 3)
 
         self.tracks_grid.show_all()
 
@@ -405,7 +414,7 @@ class MainWindow(Gtk.Window):
 
     def on_codec_changed(self, cbtext, i):
         c = cbtext.get_active_text()
-        conf_button = self.tracks_grid.get_child_at(4, i + 1).get_children()[1]
+        conf_button = self.tracks_grid.get_child_at(8, i + 2).get_children()[1]
         for f in self.files:
             t = f.tracklist[i]
             if c in ['Disable', 'Mux']:
