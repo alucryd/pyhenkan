@@ -496,7 +496,7 @@ class CodecDialog(Gtk.Dialog):
             rates['88.2 kHz'] = 88200
         if self.codec.library not in ('libmp3lame', 'libopus'):
             rates['96 kHz'] = 96000
-        if self.codec.library not in ('aac', 'libfaac', 'libfdk-aac',
+        if self.codec.library not in ('aac', 'libfaac', 'libfdk_aac',
                                       'libmp3lame', 'libopus'):
             rates['192 kHz'] = 192000
 
