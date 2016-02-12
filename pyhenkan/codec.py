@@ -564,19 +564,19 @@ class CodecDialog(Gtk.Dialog):
         color_matrix = color_matrices[cbtext.get_active_text()]
         self.codec.color_matrix[i] = color_matrix
 
-        # If one matrix is specified, the other must be as well
+        # If one matrix is specified, the other must be different
         if i == 0:
             other_matrix_cbtext = self.output_matrix_cbtext
         elif i == 1:
             other_matrix_cbtext = self.input_matrix_cbtext
+        other_matrix = color_matrices[other_matrix_cbtext.get_active_text()]
 
-        j = 1 if i == 0 else 0
         if color_matrix == 'auto':
             other_matrix_cbtext.set_active(0)
-        elif self.codec.color_matrix[j] == 'auto':
+        elif color_matrix == other_matrix or other_matrix == 'auto':
             k = 0
             for cm in color_matrices:
-                if color_matrices[cm] == color_matrix:
+                if color_matrices[cm] not in ['auto', color_matrix]:
                     other_matrix_cbtext.set_active(k)
                 else:
                     k += 1
