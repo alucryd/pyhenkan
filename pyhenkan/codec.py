@@ -1,5 +1,6 @@
 import io
 import subprocess
+import sys
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -16,10 +17,16 @@ class Codec:
         self.arguments = ''
 
     def is_avail(self):
-        proc = subprocess.run(['ffmpeg', '-codecs'],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              universal_newlines=True)
+        if sys.version_info < (3, 5):
+            proc = subprocess.call(['ffmpeg', '-codecs'],
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,
+                                   universal_newlines=True)
+        else:
+            proc = subprocess.run(['ffmpeg', '-codecs'],
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  universal_newlines=True)
         buf = io.StringIO(proc.stdout + proc.stderr)
         line = buf.readline()
         while line:
