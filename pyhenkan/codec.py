@@ -18,16 +18,17 @@ class Codec:
 
     def is_avail(self):
         if sys.version_info < (3, 5):
-            proc = subprocess.call(['ffmpeg', '-codecs'],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE,
-                                   universal_newlines=True)
+            proc = subprocess.Popen(['ffmpeg', '-codecs'],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                    universal_newlines=True)
+            buf = proc.stdout
         else:
             proc = subprocess.run(['ffmpeg', '-codecs'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   universal_newlines=True)
-        buf = io.StringIO(proc.stdout + proc.stderr)
+            buf = io.StringIO(proc.stdout + proc.stderr)
         line = buf.readline()
         while line:
             if self.library in line or not self.library.startswith('lib'):
