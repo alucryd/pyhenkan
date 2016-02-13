@@ -126,9 +126,12 @@ class AudioCodec(Codec):
 
     # Try to get rid of all those track.file
     def get_cmd(self, track, output, settings):
-        cmd = ['ffmpeg', '-y', '-i', track.file.path,
-               '-map 0:{}'.format(track.id),
-               '-c:a', self.library]
+        cmd = ['ffmpeg', '-y']
+        if track.format == 'DTS' and Dcadec.is_avail():
+            cmd += ['-c:a', 'libdcadec']
+        cmd += ['-i', track.file.path,
+                '-map 0:{}'.format(track.id),
+                '-c:a', self.library]
         if self.channel != track.channel:
             cmd += ['-ac', str(self.channel)]
         if self.rate != track.rate:
