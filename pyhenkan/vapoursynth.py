@@ -27,7 +27,6 @@ class VapourSynth:
         clip = self.mediafile.filters[0].get_clip(self.mediafile.path)
         for f in self.mediafile.filters[1:]:
             clip = f.get_clip(clip)
-        clip.set_output()
         return clip
 
 

@@ -2,9 +2,6 @@
 
 import os
 
-from collections import OrderedDict
-
-import pyhenkan.codec as codec
 from pyhenkan.chapter import ChapterEditorWindow
 from pyhenkan.environment import Environment
 from pyhenkan.mediafile import MediaFile
@@ -15,7 +12,7 @@ from pyhenkan.vapoursynth import VapourSynth
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Notify', '0.7')
-from gi.repository import GdkPixbuf, Gio, Gtk, Notify
+from gi.repository import GdkPixbuf, Gio, GLib, Gtk, Notify
 
 VERSION = '0.1.0'
 AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
@@ -473,9 +470,9 @@ class MainWindow(Gtk.Window):
             future = self.queue.executor.submit(self.queue.wait)
             self.queue.waitlist.append(future)
             if self.queue.idle:
-                self.queue.start_button.set_sensitive(True)
-                self.queue.delete_button.set_sensitive(True)
-                self.queue.clear_button.set_sensitive(True)
+                GLib.idle_add(self.queue.start_button.set_sensitive, True)
+                GLib.idle_add(self.queue.delete_button.set_sensitive, True)
+                GLib.idle_add(self.queue.clear_button.set_sensitive, True)
 
             # Create new MediaFile instances and carry settings over
             # Otherwise they may have changed by the time jobs are processed

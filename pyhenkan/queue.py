@@ -115,9 +115,9 @@ class Queue:
         GLib.idle_add(self.pbar.set_fraction, f)
 
     def on_start_clicked(self, button):
-        self.stop_button.set_sensitive(True)
-        self.delete_button.set_sensitive(False)
-        self.clear_button.set_sensitive(False)
+        GLib.idle_add(self.stop_button.set_sensitive, True)
+        GLib.idle_add(self.delete_button.set_sensitive, False)
+        GLib.idle_add(self.clear_button.set_sensitive, False)
         print('Start processing...')
         self.idle = False
         self.lock.release()
@@ -136,10 +136,11 @@ class Queue:
                     future = self.tstore.get_value(step.iter, 0)
                     # Cancel and mark steps as failed
                     if not future.done():
-                        self.tstore.set_value(step.iter, 4, 'Failed')
+                        GLib.idle_add(self.tstore.set_value, step.iter, 4,
+                                      'Failed')
                         future.cancel()
                 # Mark job as failed
-                self.tstore.set_value(job.iter, 4, 'Failed')
+                GLib.idle_add(self.tstore.set_value, job.iter, 4, 'Failed')
 
         self.pbar.set_fraction(0)
         self.pbar.set_text('Ready')
@@ -158,18 +159,18 @@ class Queue:
             # Cancel pending step
             if not future.done():
                 future.cancel()
-            self.tstore.remove(step)
+            GLib.idle_add(self.tstore.remove, step)
         # Cancel associated wait job
         if status not in ['Done', 'Failed']:
             i = self.tstore.get_path(job).get_indices()[0]
             self.waitlist[i].cancel()
         # Delete job
-        self.tstore.remove(job)
+        GLib.idle_add(self.tstore.remove, job)
 
         if not len(self.tstore):
-            self.start_button.set_sensitive(False)
-            self.delete_button.set_sensitive(False)
-            self.clear_button.set_sensitive(False)
+            GLib.idle_add(self.start_button.set_sensitive, False)
+            GLib.idle_add(self.delete_button.set_sensitive, False)
+            GLib.idle_add(self.clear_button.set_sensitive, False)
 
     def on_clear_clicked(self, button):
         for job in self.tstore:
@@ -182,9 +183,9 @@ class Queue:
         # Clear queue
         self.tstore.clear()
 
-        self.start_button.set_sensitive(False)
-        self.delete_button.set_sensitive(False)
-        self.clear_button.set_sensitive(False)
+        GLib.idle_add(self.start_button.set_sensitive, False)
+        GLib.idle_add(self.delete_button.set_sensitive, False)
+        GLib.idle_add(self.clear_button.set_sensitive, False)
 
     def wait(self):
         if self.idle:

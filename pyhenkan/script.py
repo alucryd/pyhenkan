@@ -218,7 +218,7 @@ class PreviewWindow(Gtk.Window):
         bilinear = Bilinear()
         bilinear.args['format'] = vs.RGB24
         imhdriw = ImageMagickHDRIWrite()
-        imw = imhdriw if imhdriw.function else ImageMagickWrite()
+        imw = imhdriw if imhdriw.is_avail() else ImageMagickWrite()
         imw.args['imgformat'] = 'PNG'
         imw.args['filename'] = self.png
 

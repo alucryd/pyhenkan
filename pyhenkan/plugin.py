@@ -9,15 +9,19 @@ from gi.repository import Gtk
 
 class Plugin:
     def __init__(self, unit, function, dialog):
-        self.name = '{}.{}'.format(unit, function)
-        try:
-            core = vs.get_core()
-            u = getattr(core, unit)
-            self.function = getattr(u, function)
-        except AttributeError:
-            self.function = None
+        self.unit = unit
+        self.function = function
         self.args = OrderedDict()
         self.dialog = dialog
+
+    def is_avail(self):
+        core = vs.get_core()
+        try:
+            u = getattr(core, self.unit)
+            getattr(u, self.function)
+        except AttributeError:
+            return False
+        return True
 
     def show_dialog(self, parent):
         dlg = self.dialog(self, parent)
@@ -41,7 +45,10 @@ class Plugin:
         return line
 
     def get_clip(self, clip):
-        return self.function(clip, **self.args)
+        core = vs.get_core()
+        u = getattr(core, self.unit)
+        f = getattr(u, self.function)
+        return f(clip, **self.args)
 
 
 class SourcePlugin(Plugin):
@@ -53,7 +60,10 @@ class SourcePlugin(Plugin):
         # self.args['threads'] = 0
 
     def get_clip(self, source):
-        return self.function(source, **self.args)
+        core = vs.get_core()
+        u = getattr(core, self.unit)
+        f = getattr(u, self.function)
+        return f(source, **self.args)
 
 
 class LibavSMASHSource(SourcePlugin):
@@ -287,7 +297,7 @@ class Trim(MiscPlugin):
 
 class PluginDialog(Gtk.Dialog):
     def __init__(self, plugin, parent):
-        title = plugin.name
+        title = '{}.{}'.format(plugin.unit, plugin.function)
         Gtk.Dialog.__init__(self, title, parent, Gtk.DialogFlags.MODAL)
         self.set_default_size(240, 0)
 

@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import vapoursynth as vs
 
 from pyhenkan.queue import Queue
 from pyhenkan.vapoursynth import VapourSynth
@@ -63,7 +64,10 @@ class VideoTrack(Track):
         cmd = self.codec.get_cmd(o)
         print(' '.join(cmd))
 
-        queue.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        queue.proc = subprocess.Popen(cmd,
+                                      stdin=subprocess.PIPE,
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL)
 
         # Progress
         GLib.idle_add(queue.pbar.set_fraction, 0)
@@ -72,7 +76,6 @@ class VideoTrack(Track):
         queue.update()
 
         clip = VapourSynth(self.file).get_clip()
-        clip.set_output()
         clip.output(queue.proc.stdin, y4m=True,
                     progress_update=queue.progress_update)
         queue.proc.communicate()
@@ -150,7 +153,7 @@ class AudioTrack(Track):
                 t = re.findall('[0-9]{2}:[0-9]{2}:[0-9]{2}', line)[0]
                 h, m, s = t.split(':')
                 current = int(h) * 3600 + int(m) * 60 + int(s)
-                GLib.idle_add(queue.progress_update, current, total)
+                queue.progress_update(current, total)
         if queue.proc.poll() < 0:
             GLib.idle_add(queue.pbar.set_text, 'Failed')
         else:
