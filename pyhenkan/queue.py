@@ -110,6 +110,10 @@ class Queue:
             # Notifications
             Notify.init('pyhenkan')
 
+    def progress_update(self, current, total):
+        f = round(current / total, 2)
+        GLib.idle_add(self.pbar.set_fraction, f)
+
     def on_start_clicked(self, button):
         self.stop_button.set_sensitive(True)
         self.delete_button.set_sensitive(False)

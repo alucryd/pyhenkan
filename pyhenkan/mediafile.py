@@ -31,11 +31,11 @@ class MediaFile:
 
         env = Environment()
         if env.source_plugins['LWLibavSource'][1]:
-            self.filters = [LWLibavSource(self.path)]
+            self.filters = [LWLibavSource()]
         elif env.source_plugins['LibavSMASHSource'][1]:
-            self.filters = [LibavSMASHSource(self.path)]
+            self.filters = [LibavSMASHSource()]
         elif env.source_plugins['FFmpegSource'][1]:
-            self.filters = [FFmpegSource(self.path)]
+            self.filters = [FFmpegSource()]
 
         self.parse()
 

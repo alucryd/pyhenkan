@@ -8,27 +8,27 @@ from gi.repository import Gtk
 
 
 class Plugin:
-    def __init__(self, namespace, function, dialog):
-        self.namespace = namespace
-        self.function = function
+    def __init__(self, unit, function, dialog):
+        self.name = '{}.{}'.format(unit, function)
+        try:
+            core = vs.get_core()
+            u = getattr(core, unit)
+            self.function = getattr(u, function)
+        except AttributeError:
+            self.function = None
         self.args = OrderedDict()
         self.dialog = dialog
-
-    def is_avail(self):
-        plugins = vs.get_core().get_plugins()
-        plugins = [[plugins[p]['namespace'],
-                   [f for f in plugins[p]['functions']]] for p in plugins]
-        plugins = {p[0]: p[1] for p in plugins}
-        return self.function in plugins.get(self.namespace, [])
 
     def show_dialog(self, parent):
         dlg = self.dialog(self, parent)
         dlg.run()
         dlg.destroy()
 
-    def get_line(self, args=['clip']):
-        if args:
-            args = ['clip']
+    def get_line(self, clip):
+        if clip != 'clip':
+            args = ['"{}"'.format(clip)]
+        else:
+            args = [clip]
         for key in self.args:
             value = self.args[key]
             if type(value) is str:
@@ -37,28 +37,29 @@ class Plugin:
                 arg = key + '={}'
             arg = arg.format(value)
             args.append(arg)
-        line = 'clip = core.{}.{}({})'.format(self.namespace, self.function,
-                                              ', '.join(args))
+        line = 'clip = core.{}({})'.format(self.name, ', '.join(args))
         return line
+
+    def get_clip(self, clip):
+        return self.function(clip, **self.args)
 
 
 class SourcePlugin(Plugin):
-    def __init__(self, namespace, function, dialog, source):
-        Plugin.__init__(self, namespace, function, dialog)
+    def __init__(self, unit, function, dialog):
+        Plugin.__init__(self, unit, function, dialog)
 
-        self.args['source'] = source
         self.args['fpsnum'] = 0
         self.args['fpsden'] = 1
         # self.args['threads'] = 0
 
-    def get_line(self):
-        return super().get_line([])
+    def get_clip(self, source):
+        return self.function(source, **self.args)
 
 
 class LibavSMASHSource(SourcePlugin):
-    def __init__(self, source):
+    def __init__(self):
         SourcePlugin.__init__(self, 'lsmas', 'LibavSMASHSource',
-                              LibavSMASHSourceDialog, source)
+                              LibavSMASHSourceDialog)
 
         self.args['track'] = 0
         # self.args['seek_mode'] = 0
@@ -70,9 +71,9 @@ class LibavSMASHSource(SourcePlugin):
 
 
 class LWLibavSource(SourcePlugin):
-    def __init__(self, source):
+    def __init__(self):
         SourcePlugin.__init__(self, 'lsmas', 'LWLibavSource',
-                              LWLibavSourceDialog, source)
+                              LWLibavSourceDialog)
 
         self.args['stream_index'] = -1
         # self.args['cache'] = 1
@@ -87,9 +88,9 @@ class LWLibavSource(SourcePlugin):
 
 
 class FFmpegSource(SourcePlugin):
-    def __init__(self, source):
+    def __init__(self):
         SourcePlugin.__init__(self, 'ffms2', 'Source',
-                              FFMpegSourceDialog, source)
+                              FFMpegSourceDialog)
 
         self.args['track'] = -1
         # self.args['cache'] = True
@@ -103,17 +104,27 @@ class FFmpegSource(SourcePlugin):
         # self.args['alpha'] = True
 
 
-class ImageMagickWrite(Plugin):
-    def __init__(self):
-        Plugin.__init__(self, 'imwri', 'Write', None)
+class IMPlugin(Plugin):
+    def __init__(self, unit, function):
+        Plugin.__init__(self, unit, function, None)
 
         self.args['imgformat'] = ''
         self.args['filename'] = ''
 
 
+class ImageMagickWrite(Plugin):
+    def __init__(self):
+        IMPlugin.__init__(self, 'imwri', 'Write')
+
+
+class ImageMagickHDRIWrite(Plugin):
+    def __init__(self):
+        IMPlugin.__init__(self, 'imwrif', 'Write')
+
+
 class CropPlugin(Plugin):
-    def __init__(self, namespace, function, dialog):
-        Plugin.__init__(self, namespace, function, dialog)
+    def __init__(self, unit, function, dialog):
+        Plugin.__init__(self, unit, function, dialog)
 
 
 class CropAbs(CropPlugin):
@@ -192,8 +203,8 @@ class Spline36(ResizePlugin):
 
 
 class DenoisePlugin(Plugin):
-    def __init__(self, namespace, function, dialog):
-        Plugin.__init__(self, namespace, function, dialog)
+    def __init__(self, unit, function, dialog):
+        Plugin.__init__(self, unit, function, dialog)
 
 
 class FluxSmoothT(DenoisePlugin):
@@ -233,8 +244,8 @@ class TemporalSoften(DenoisePlugin):
 
 
 class DebandPlugin(Plugin):
-    def __init__(self, namespace, function, dialog):
-        Plugin.__init__(self, namespace, function, dialog)
+    def __init__(self, unit, function, dialog):
+        Plugin.__init__(self, unit, function, dialog)
 
 
 class F3kdb(DebandPlugin):
@@ -262,8 +273,8 @@ class F3kdb(DebandPlugin):
 
 
 class MiscPlugin(Plugin):
-    def __init__(self, namespace, function, dialog):
-        Plugin.__init__(self, namespace, function, dialog)
+    def __init__(self, unit, function, dialog):
+        Plugin.__init__(self, unit, function, dialog)
 
 
 class Trim(MiscPlugin):
@@ -276,7 +287,7 @@ class Trim(MiscPlugin):
 
 class PluginDialog(Gtk.Dialog):
     def __init__(self, plugin, parent):
-        title = '.'.join([plugin.namespace, plugin.function])
+        title = plugin.name
         Gtk.Dialog.__init__(self, title, parent, Gtk.DialogFlags.MODAL)
         self.set_default_size(240, 0)
 
@@ -331,7 +342,10 @@ class PluginDialog(Gtk.Dialog):
         return cbtext
 
     def on_cbtext_changed(self, cbtext, key, text):
-        self.plugin.args[key] = text.index(cbtext.get_active_text()) + 1
+        if isinstance(self.plugin, ResizePlugin):
+            self.plugin.args[key] = getattr(vs, cbtext.get_active_text())
+        else:
+            self.plugin.args[key] = text.index(cbtext.get_active_text()) + 1
 
     def check(self, key):
         check = Gtk.CheckButton()

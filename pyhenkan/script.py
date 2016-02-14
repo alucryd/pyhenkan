@@ -1,14 +1,14 @@
 import os
-import subprocess
 import tempfile
+import vapoursynth as vs
 
 from pyhenkan.mediafile import MediaFile
-from pyhenkan.plugin import Bilinear, ImageMagickWrite, Trim
+from pyhenkan.plugin import Bilinear, ImageMagickWrite, ImageMagickHDRIWrite
 from pyhenkan.vapoursynth import VapourSynth
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gio, Gtk
+from gi.repository import Gtk
 
 
 class ScriptCreatorWindow(Gtk.Window):
@@ -17,8 +17,8 @@ class ScriptCreatorWindow(Gtk.Window):
         self.set_default_size(640, 480)
 
         self.wdir = os.environ['HOME']
-        self.source = None
-        self.vsynth = None
+        self.mediafile = MediaFile
+        self.vs = VapourSynth
 
         # --Header Bar-- #
         open_button = Gtk.Button('Open')
@@ -32,19 +32,16 @@ class ScriptCreatorWindow(Gtk.Window):
         self.preview_button.set_sensitive(False)
         self.preview_button.connect('clicked', self.on_preview_clicked)
 
-        settings_icon = Gio.ThemedIcon(name='applications-system-symbolic')
-        settings_image = Gtk.Image.new_from_gicon(settings_icon,
-                                                  Gtk.IconSize.BUTTON)
-        settings_button = Gtk.Button()
-        settings_button.set_image(settings_image)
-        settings_button.connect('clicked', self.on_settings_clicked)
+        self.filters_button = Gtk.Button('Filters')
+        self.filters_button.set_sensitive(False)
+        self.filters_button.connect('clicked', self.on_settings_clicked)
 
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
         hbar.pack_start(open_button)
         hbar.pack_start(self.save_button)
         hbar.pack_start(self.preview_button)
-        hbar.pack_end(settings_button)
+        hbar.pack_end(self.filters_button)
 
         self.set_titlebar(hbar)
 
@@ -87,31 +84,32 @@ class ScriptCreatorWindow(Gtk.Window):
         self.add(tview)
 
     def _update_buffer(self):
-        script = self.vsynth.get_script()
+        script = self.vs.get_script()
         self.tbuffer.set_text(script)
 
     def on_open_clicked(self, button):
         response = self.open_fcdlg.run()
 
         if response == Gtk.ResponseType.OK:
-            if self.source:
+            try:
                 self.preview_win.destroy()
+            except AttributeError:
+                pass
 
             f = self.open_fcdlg.get_filename()
-            self.source = MediaFile(f)
-            self.vsynth = VapourSynth(self.source)
+            self.mediafile = MediaFile(f)
+            self.vs = VapourSynth(self.mediafile)
 
             self._update_buffer()
             self.save_button.set_sensitive(True)
             self.preview_button.set_sensitive(True)
-
-            self.preview_win = PreviewWindow(self.source)
+            self.filters_button.set_sensitive(True)
 
         self.open_fcdlg.hide()
 
     def on_save_clicked(self, button):
-        o = '.'.join([self.source.bname,  'vpy'])
-        o = '/'.join([self.source.dname, o])
+        o = '.'.join([self.mediafile.bname, 'vpy'])
+        o = '/'.join([self.mediafile.dname, o])
 
         self.save_fcdlg.set_filename(o)
 
@@ -132,36 +130,29 @@ class ScriptCreatorWindow(Gtk.Window):
         self.save_fcdlg.hide()
 
     def on_preview_clicked(self, button):
-        self.preview_win.refresh()
-        self.preview_win.show_all()
+        win = PreviewWindow(self.mediafile, self.vs)
+        win.show_all()
 
     def on_settings_clicked(self, button):
-        self.vsynth.show_dialog(self)
-        if self.source:
+        self.vs.show_dialog(self)
+        if self.mediafile:
             self._update_buffer()
 
 
 class PreviewWindow(Gtk.Window):
-    def __init__(self, source):
+    def __init__(self, mediafile, vs):
         Gtk.Window.__init__(self, title='Preview')
 
-        self.source = source
+        self.mediafile = mediafile
+        self.vs = vs
         self.tempdir = tempfile.gettempdir()
         basename = '/'.join([self.tempdir, 'pyhenkan-preview'])
         self.png = basename + '%d.png'
         self.vpy = basename + '.vpy'
 
-        s = VapourSynth(self.source).get_script()
-        with open(self.vpy, 'w') as f:
-            f.write(s)
-
         # Initialize the preview at the middle of the video
-        # Pick the first video track for now
-        for t in self.source.tracklist:
-            if t.type == 'Video':
-                tf = t.get_total_frame(self.vpy)
-                self.frame = round((tf - 1) / 2)
-                break
+        num_frames = self.vs.get_clip().num_frames
+        frame = round((num_frames - 1) / 2)
 
         self.image = Gtk.Image()
 
@@ -170,7 +161,7 @@ class PreviewWindow(Gtk.Window):
         scrwin.set_min_content_height(480)
         scrwin.add(self.image)
 
-        adj = Gtk.Adjustment(self.frame, 0, tf - 1, 1, 10)
+        adj = Gtk.Adjustment(frame, 0, num_frames - 1, 1, 10)
 
         self.spin = Gtk.SpinButton()
         self.spin.set_adjustment(adj)
@@ -178,15 +169,15 @@ class PreviewWindow(Gtk.Window):
         self.spin.connect('value-changed', self.on_spin_changed)
 
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,
-                                              0, tf - 1, 1)
+                                              0, num_frames - 1, 1)
         self.scale.set_property('hexpand', True)
         self.scale.set_property('halign', Gtk.Align.FILL)
         self.scale.set_draw_value(False)
-        self.scale.set_value(self.frame)
+        self.scale.set_value(frame)
         self.scale.connect('value-changed', self.on_scale_changed)
 
         # Add a mark every 500 frame
-        for i in range(0, tf, 500):
+        for i in range(0, num_frames, 500):
             self.scale.add_mark(i, Gtk.PositionType.TOP, str(i))
 
         refresh_button = Gtk.Button('Refresh')
@@ -205,47 +196,44 @@ class PreviewWindow(Gtk.Window):
 
         self.add(vbox)
 
+        self.set_frame(frame)
+
     def on_scale_changed(self, scale):
         value = int(scale.get_value())
-        if self.spin.get_value != value:
+        if self.spin.get_value_as_int() != value:
             self.spin.set_value(value)
-            self.frame = value
-            self.refresh()
+            self.set_frame(value)
 
     def on_spin_changed(self, spin):
-        value = spin.get_value()
+        value = spin.get_value_as_int()
         if int(self.scale.get_value()) != value:
             self.scale.set_value(value)
-            self.frame = value
-            self.refresh()
+            self.set_frame(value)
 
     def on_refresh_clicked(self, button):
-        self.refresh()
+        self.set_frame(self.spin.get_value_as_int())
 
-    def refresh(self):
-        filters = self.source.filters
-        if not isinstance(filters[len(filters) - 1], ImageMagickWrite):
-            bilinear = Bilinear()
-            bilinear.format = 'vs.RGB24'
-            trim = Trim()
-            trim.first = self.frame
-            trim.last = self.frame
-            imw = ImageMagickWrite()
-            imw.imgformat = 'PNG'
-            imw.filename = self.png
+    def set_frame(self, frame):
+        filters = self.mediafile.filters
+        bilinear = Bilinear()
+        bilinear.args['format'] = vs.RGB24
+        imhdriw = ImageMagickHDRIWrite()
+        imw = imhdriw if imhdriw.function else ImageMagickWrite()
+        imw.args['imgformat'] = 'PNG'
+        imw.args['filename'] = self.png
 
-            filters += [bilinear, trim, imw]
+        # Add the necessary filters
+        filters += [bilinear, imw]
 
-        s = VapourSynth(self.source).get_script()
-        with open(self.vpy, 'w') as f:
-            f.write(s)
+        clip = self.vs.get_clip()[frame]
+        clip.set_output()
+        with open(os.devnull, 'wb') as f:
+            clip.output(f)
 
-        cmd = 'vspipe "{}" /dev/null'.format(self.vpy)
-        subprocess.run(cmd, shell=True,
-                       stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL,
-                       universal_newlines=True)
+        # Remove the filters
+        filters.pop()
+        filters.pop()
 
-        self.image.set_from_file(self.png.replace('%d', str(0)))
+        self.image.set_from_file(self.png.replace('%d', str(frame)))
 
 # vim: ts=4 sw=4 et:

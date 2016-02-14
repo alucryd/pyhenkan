@@ -78,10 +78,7 @@ class Environment:
                                               'denoise', 'deband', 'misc']]:
             plugins = getattr(self, attr)
             for p in plugins:
-                if attr == 'source_plugins':
-                    plugins[p][1] = plugins[p][0]('').is_avail()
-                else:
-                    plugins[p][1] = plugins[p][0]().is_avail()
+                    plugins[p][1] = True if plugins[p][0]().function else False
 
     def show_window(self, parent):
         win = EnvironmentWindow(self, parent)

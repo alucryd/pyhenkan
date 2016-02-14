@@ -10,17 +10,25 @@ class VapourSynth:
     def __init__(self, mediafile):
         self.mediafile = mediafile
 
-    def get_script(self):
-        script = ['import vapoursynth as vs', 'core = vs.get_core()']
-        for f in self.mediafile.filters:
-            script.append(f.get_line())
-        script.append('clip.set_output()')
-        return '\n'.join(script)
-
     def show_dialog(self, parent):
         dlg = VapourSynthDialog(parent, self.mediafile)
         dlg.run()
         dlg.destroy()
+
+    def get_script(self):
+        script = ['import vapoursynth as vs', 'core = vs.get_core()']
+        script.append(self.mediafile.filters[0].get_line(self.mediafile.path))
+        for f in self.mediafile.filters[1:]:
+            script.append(f.get_line('clip'))
+        script.append('clip.set_output()')
+        return '\n'.join(script)
+
+    def get_clip(self):
+        clip = self.mediafile.filters[0].get_clip(self.mediafile.path)
+        for f in self.mediafile.filters[1:]:
+            clip = f.get_clip(clip)
+        clip.set_output()
+        return clip
 
 
 class VapourSynthDialog(Gtk.Dialog):

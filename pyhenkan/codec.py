@@ -48,19 +48,17 @@ class VideoCodec(Codec):
         self.pixel_format = 'auto'
         self.color_matrix = ['auto', 'auto']
 
-    def get_cmd(self, input, output, settings):
-        dec = ['vspipe', "{}".format(input), '-', '-y']
-        enc = ['ffmpeg', '-y', '-i -', '-c:v', self.library]
+    def get_cmd(self, output, settings):
+        cmd = ['ffmpeg', '-y', '-i', '-', '-c:v', self.library]
         if self.pixel_format != 'auto':
-            enc += ['-pix_fmt', self.pixel_format]
+            cmd += ['-pix_fmt', self.pixel_format]
         if self.color_matrix != ['auto', 'auto']:
-            enc += ['-vf', 'colormatrix={}:{}'.format(self.color_matrix[0],
+            cmd += ['-vf', 'colormatrix={}:{}'.format(self.color_matrix[0],
                                                       self.color_matrix[1])]
-        enc += settings
+        cmd += settings
         if self.arguments:
-            enc += [self.arguments]
-        enc += ['"{}.{}"'.format(output, self.container)]
-        cmd = dec + ['|'] + enc
+            cmd += self.arguments.split()
+        cmd += ['{}.{}'.format(output, self.container)]
         return cmd
 
 
@@ -72,13 +70,13 @@ class Vpx(VideoCodec):
         self.cpu_used = 2
         self.container = 'webm'
 
-    def get_cmd(self, input, output):
+    def get_cmd(self, output):
         settings = ['-crf', str(self.crf),
                     '-b:v', str(0),
                     '-quality', self.preset]
         if self.preset != 'best':
             settings += ['-cpu-used', str(self.cpu_used)]
-        cmd = super().get_cmd(input, output, settings)
+        cmd = super().get_cmd(output, settings)
         return cmd
 
 
@@ -100,13 +98,13 @@ class X264(VideoCodec):
         self.tune = 'none'
         self.container = 'mp4'
 
-    def get_cmd(self, input, output):
+    def get_cmd(self, output):
         settings = ['-crf', str(self.crf)]
         if self.preset != 'none':
             settings += ['-preset', self.preset]
         if self.tune != 'none':
             settings += ['-tune', self.tune]
-        cmd = super().get_cmd(input, output, settings)
+        cmd = super().get_cmd(output, settings)
         return cmd
 
 
@@ -117,11 +115,11 @@ class X265(VideoCodec):
         self.preset = 'medium'
         self.container = 'mp4'
 
-    def get_cmd(self, input, output):
+    def get_cmd(self, output):
         settings = ['-crf', str(self.crf)]
         if self.preset != 'none':
             settings += ['-preset', self.preset]
-        cmd = super().get_cmd(input, output, settings)
+        cmd = super().get_cmd(output, settings)
         return cmd
 
 
@@ -135,7 +133,7 @@ class AudioCodec(Codec):
     # Try to get rid of all those track.file
     def get_cmd(self, track, output, settings):
         cmd = ['ffmpeg', '-y']
-        if track.format == 'DTS' and Dcadec.is_avail():
+        if track.format == 'DTS' and Dcadec().is_avail():
             cmd += ['-c:a', 'libdcadec']
         cmd += ['-i', track.file.path,
                 '-map 0:{}'.format(track.id),
