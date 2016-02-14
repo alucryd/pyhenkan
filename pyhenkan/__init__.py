@@ -93,8 +93,8 @@ class MainWindow(Gtk.Window):
         hbar.set_show_close_button(True)
         hbar.set_property('title', 'pyhenkan')
         hbar.pack_start(open_button)
-        hbar.pack_start(tools_mbutton)
         hbar.pack_end(about_button)
+        hbar.pack_end(tools_mbutton)
 
         self.set_titlebar(hbar)
 
