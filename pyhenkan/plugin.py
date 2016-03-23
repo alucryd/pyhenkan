@@ -41,7 +41,8 @@ class Plugin:
                 arg = key + '={}'
             arg = arg.format(value)
             args.append(arg)
-        line = 'clip = core.{}({})'.format(self.name, ', '.join(args))
+        line = 'clip = core.{}.{}({})'.format(self.unit, self.function,
+                                              ', '.join(args))
         return line
 
     def get_clip(self, clip):
