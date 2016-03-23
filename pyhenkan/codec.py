@@ -545,7 +545,7 @@ class CodecDialog(Gtk.Dialog):
         self.resampler_cbtext.connect('changed', self.on_resampler_changed)
 
     def on_crf_changed(self, spin):
-        self.codec.quality = spin.get_value_as_int()
+        self.codec.crf = spin.get_value_as_int()
 
     def on_preset_changed(self, cbtext):
         self.codec.preset = cbtext.get_active_text()
