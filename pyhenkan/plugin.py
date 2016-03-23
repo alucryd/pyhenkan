@@ -402,10 +402,10 @@ class CropAbsDialog(PluginDialog):
     def __init__(self, plugin, parent):
         PluginDialog.__init__(self, plugin, parent)
 
-        widths = Gtk.Adjustment(0, 0, 3840, 1, 10)
-        heights = Gtk.Adjustment(0, 0, 2160, 1, 10)
-        lefts = Gtk.Adjustment(0, 0, 3840, 1, 10)
-        tops = Gtk.Adjustment(0, 0, 2160, 1, 10)
+        widths = Gtk.Adjustment(0, 0, 3840, 2, 10)
+        heights = Gtk.Adjustment(0, 0, 2160, 2, 10)
+        lefts = Gtk.Adjustment(0, 0, 3840, 2, 10)
+        tops = Gtk.Adjustment(0, 0, 2160, 2, 10)
 
         widgets = [[self.label('Width'), self.spin('width', widths)],
                    [self.label('Height'), self.spin('height', heights)],
