@@ -303,7 +303,7 @@ class ChapterEditorWindow(Gtk.Window):
             grid.attach(down_button, 4, 2, 1, 1)
 
             if self.frame:
-                start_adj = Gtk.Adjustment(0, 0, 256000, 1, 10)
+                start_adj = Gtk.Adjustment(0, 0, 512000, 1, 10)
                 start_spin = Gtk.SpinButton()
                 start_spin.set_numeric(True)
                 start_spin.set_adjustment(start_adj)
@@ -311,7 +311,7 @@ class ChapterEditorWindow(Gtk.Window):
                 start_spin.set_value(self.chapters[i][2])
                 start_spin.connect('value-changed', self.on_start_changed, i)
 
-                end_adj = Gtk.Adjustment(0, 0, 256000, 1, 10)
+                end_adj = Gtk.Adjustment(0, 0, 512000, 1, 10)
                 end_spin = Gtk.SpinButton()
                 end_spin.set_numeric(True)
                 end_spin.set_adjustment(end_adj)
