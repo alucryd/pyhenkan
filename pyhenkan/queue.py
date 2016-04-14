@@ -1,3 +1,5 @@
+import subprocess
+
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
@@ -32,6 +34,8 @@ class Queue:
             self.waitlist = [future]
             # Running proc
             self.proc = None
+            # Shutdown after jobs
+            self.shutdown = False
 
             # GUI
             expander_crpixbuf = Gtk.CellRendererPixbuf()
@@ -89,12 +93,22 @@ class Queue:
             self.clear_button.connect('clicked', self.on_clear_clicked)
             self.clear_button.set_sensitive(False)
 
+            vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+
+            shutdown_label = Gtk.Label('Shutdown')
+            shutdown_check = Gtk.CheckButton()
+            shutdown_check.set_active(self.shutdown)
+            shutdown_check.connect('toggled', self.on_shutdown_toggled)
+
             hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                            spacing=6)
             hbox.pack_start(self.start_button, True, True, 0)
             hbox.pack_start(self.stop_button, True, True, 0)
             hbox.pack_start(self.delete_button, True, True, 0)
             hbox.pack_start(self.clear_button, True, True, 0)
+            hbox.pack_start(vsep, False, True, 0)
+            hbox.pack_start(shutdown_check, False, True, 0)
+            hbox.pack_start(shutdown_label, False, True, 0)
 
             self.pbar = Gtk.ProgressBar()
             self.pbar.set_property('margin', 6)
@@ -187,6 +201,9 @@ class Queue:
         GLib.idle_add(self.delete_button.set_sensitive, False)
         GLib.idle_add(self.clear_button.set_sensitive, False)
 
+    def on_shutdown_toggled(self, check):
+        self.shutdown = check.get_active()
+
     def wait(self):
         if self.idle:
             self.lock.acquire()
@@ -204,6 +221,9 @@ class Queue:
                 GLib.idle_add(self.stop_button.set_sensitive, False)
                 GLib.idle_add(self.clear_button.set_sensitive, True)
                 GLib.idle_add(self._notify, 'Jobs done')
+                # Shutdown
+                if self.shutdown:
+                    subprocess.run(['systemctl', 'poweroff'])
             elif new_status == 'Running' and new_status != status:
                 GLib.idle_add(self._notify, 'Processing ' + filename)
 
