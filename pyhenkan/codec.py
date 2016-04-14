@@ -144,12 +144,11 @@ class AudioCodec(Codec):
             cmd += ['-ar', str(self.rate)]
         if self.resampler != 'swr':
             cmd += ['-af', 'aresample=resampler={}'.format(self.resampler)]
-        t = [track.file.first, track.file.last]
-        n = track.file.fpsnum
-        d = track.file.fpsden
-        if t != [0, 0] and [n, d] != [0, 1]:
-            f = Decimal(t[0]) * Decimal(d) / Decimal(n)
-            l = Decimal(t[1] + 1) * Decimal(d) / Decimal(n)
+        trim = track.file.trim
+        fps = track.file.fps
+        if trim != [0, 0] and fps != [0, 1]:
+            f = Decimal(trim[0]) * Decimal(fps[1]) / Decimal(fps[0])
+            l = Decimal(trim[1] + 1) * Decimal(fps[1]) / Decimal(fps[0])
             cmd += ['-af atrim={}:{}'.format(f, l)]
         cmd += settings
         cmd += ['"{}.{}"'.format(output, self.container)]

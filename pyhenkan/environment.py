@@ -61,9 +61,6 @@ class Environment:
         self.deband_plugins = OrderedDict()
         self.deband_plugins['f3kdb'] = [plugin.F3kdb, False]
 
-        self.misc_plugins = OrderedDict()
-        self.misc_plugins['Trim'] = [plugin.Trim, False]
-
         self.check_codecs()
         self.check_plugins()
 
@@ -75,7 +72,7 @@ class Environment:
 
     def check_plugins(self):
         for attr in [d + '_plugins' for d in ['source', 'crop', 'resize',
-                                              'denoise', 'deband', 'misc']]:
+                                              'denoise', 'deband']]:
             plugins = getattr(self, attr)
             for p in plugins:
                     plugins[p][1] = plugins[p][0]().is_avail()
@@ -95,8 +92,8 @@ class EnvironmentWindow(Gtk.Window):
         self.env = env
 
         lstore = Gtk.ListStore(str)
-        treeiter = lstore.append(['FFmpeg codecs'])
-        lstore.append(['VapourSynth plugins'])
+        treeiter = lstore.append(['FFmpeg'])
+        lstore.append(['VapourSynth'])
 
         crtext = Gtk.CellRendererText()
         tvcolumn = Gtk.TreeViewColumn('', crtext, text=0)
@@ -203,12 +200,9 @@ class EnvironmentWindow(Gtk.Window):
         deband_label = Gtk.Label()
         deband_label.set_markup('<b>Deband plugins</b>')
         deband_label.set_halign(Gtk.Align.START)
-        misc_label = Gtk.Label()
-        misc_label.set_markup('<b>Misc plugins</b>')
-        misc_label.set_halign(Gtk.Align.START)
 
         i = 0
-        for attr in ['source', 'crop', 'resize', 'denoise', 'deband', 'misc']:
+        for attr in ['source', 'crop', 'resize', 'denoise', 'deband']:
             label = eval(attr + '_label')
             plugins = getattr(self.env, attr + '_plugins')
 

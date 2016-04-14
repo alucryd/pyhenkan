@@ -22,12 +22,10 @@ class MediaFile:
         self.oname = ''
 
         # Set these globally until I want to support multiple video tracks
-        self.width = 0
-        self.height = 0
-        self.fpsnum = 0
-        self.fpsden = 1
-        self.first = 0
-        self.last = 0
+        # Store current and original values
+        self.dimensions = [0, 0, 0, 0]
+        self.fps = [0, 1, 0, 1]
+        self.trim = [0, 0]
 
         env = Environment()
         if env.source_plugins['LWLibavSource'][1]:
@@ -41,12 +39,9 @@ class MediaFile:
 
     def copy(self):
         f = MediaFile(self.path)
-        f.width = copy.copy(self.width)
-        f.height = copy.copy(self.height)
-        f.fpsnum = copy.copy(self.fpsnum)
-        f.fpsden = copy.copy(self.fpsden)
-        f.first = copy.copy(self.first)
-        f.last = copy.copy(self.last)
+        f.dimensions = copy.copy(self.dimensions)
+        f.fps = copy.copy(self.fps)
+        f.trim = copy.copy(self.trim)
         f.filters = [copy.deepcopy(f) for f in self.filters]
         for i in range(len(self.tracklist)):
             tc = self.tracklist[i]
@@ -166,15 +161,21 @@ class MediaFile:
         for t in mediainfo.tracks:
             if t.track_type == 'Video':
                 tr = VideoTrack()
-                self.width = t.width
-                self.height = t.height
+                self.dimensions[0] = t.width
+                self.dimensions[2] = t.width
+                self.dimensions[1] = t.height
+                self.dimensions[3] = t.height
                 if t.frame_rate_mode == 'CFR':
                     if t.frame_rate == '23.976':
-                        self.fpsnum = 24000
-                        self.fpsden = 1001
+                        self.fps[0] = 24000
+                        self.fps[2] = 24000
+                        self.fps[1] = 1001
+                        self.fps[3] = 1001
                     elif t.frame_rate == '29.970':
-                        self.fpsnum = 30000
-                        self.fpsden = 1001
+                        self.fps[0] = 30000
+                        self.fps[2] = 30000
+                        self.fps[1] = 1001
+                        self.fps[3] = 1001
             elif t.track_type == 'Audio':
                 tr = AudioTrack()
                 tr.channel = t.channel_s

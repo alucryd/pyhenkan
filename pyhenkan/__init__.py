@@ -5,6 +5,7 @@ import os
 from pyhenkan.chapter import ChapterEditorWindow
 from pyhenkan.environment import Environment
 from pyhenkan.mediafile import MediaFile
+from pyhenkan.plugin import CropAbs, CropRel, ResizePlugin, SourcePlugin
 from pyhenkan.queue import Queue
 from pyhenkan.script import ScriptCreatorWindow
 from pyhenkan.vapoursynth import VapourSynth
@@ -21,7 +22,7 @@ AUTHOR = 'Maxime Gauduin <alucryd@gmail.com>'
 class MainWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title='pyhenkan')
-        self.set_default_size(640, 480)
+        self.set_default_size(640, 0)
 
         self.connect('delete-event', self.on_delete_event)
 
@@ -74,11 +75,6 @@ class MainWindow(Gtk.Window):
         tools_popover = Gtk.Popover()
         tools_popover.add(tools_box)
 
-        open_button = Gtk.Button()
-        open_button.set_label('Open')
-        open_button.set_property('hexpand', True)
-        open_button.connect('clicked', self.on_open_clicked)
-
         tools_mbutton = Gtk.MenuButton()
         tools_mbutton.set_label('Tools')
         tools_mbutton.set_direction(Gtk.ArrowType.DOWN)
@@ -92,29 +88,37 @@ class MainWindow(Gtk.Window):
         hbar = Gtk.HeaderBar()
         hbar.set_show_close_button(True)
         hbar.set_property('title', 'pyhenkan')
-        hbar.pack_start(open_button)
+        hbar.pack_start(tools_mbutton)
         hbar.pack_end(about_button)
-        hbar.pack_end(tools_mbutton)
 
         self.set_titlebar(hbar)
 
         # -- Input -- #
-        vid_label = Gtk.Label('Video Codec')
-        vid_label.set_property('hexpand', True)
+        select_button = Gtk.Button()
+        select_button.set_label('Select File(s)')
+        select_button.connect('clicked', self.on_select_clicked)
 
-        aud_label = Gtk.Label('Audio Codec')
-        aud_label.set_property('hexpand', True)
+        input_hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
-        fname_label = Gtk.Label('Filename')
-        fname_label.set_property('hexpand', True)
-        suffix_label = Gtk.Label('Suffix')
-        suffix_label.set_property('hexpand', True)
-        cont_label = Gtk.Label('Container')
-        cont_label.set_property('hexpand', True)
-        cont_label.set_property('margin_left', 6)
-        cont_label.set_property('margin_right', 6)
-        out_uscore_label = Gtk.Label('_')
-        out_dot_label = Gtk.Label('.')
+        self.input_grid = Gtk.Grid()
+        self.input_grid.set_column_spacing(6)
+        self.input_grid.set_row_spacing(6)
+
+        self.input_scrwin = Gtk.ScrolledWindow()
+        self.input_scrwin.set_policy(Gtk.PolicyType.NEVER,
+                                     Gtk.PolicyType.AUTOMATIC)
+        self.input_scrwin.add(self.input_grid)
+
+        input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        input_box.set_property('margin', 6)
+        input_box.pack_start(select_button, False, False, 0)
+        input_box.pack_start(input_hsep, False, False, 0)
+        input_box.pack_start(self.input_scrwin, True, True, 0)
+
+        # -- Output -- #
+        output_hsep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        output_hsep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        output_hsep3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
         self.out_name_entry = Gtk.Entry()
         self.out_name_entry.set_sensitive(False)
@@ -131,62 +135,68 @@ class MainWindow(Gtk.Window):
             self.out_cont_cbtext.append_text(cont)
         self.out_cont_cbtext.set_active(0)
 
-        vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self.filters_button = Gtk.Button('VapourSynth Filters')
+        self.filters_button.set_sensitive(False)
+        self.filters_button.connect('clicked', self.on_filters_clicked)
 
-        self.flt_conf_button = Gtk.Button('Filters')
-        self.flt_conf_button.set_sensitive(False)
-        self.flt_conf_button.connect('clicked', self.on_filters_clicked)
+        self.dimensions_label = Gtk.Label('Dimensions: Unknown')
+        self.fps_label = Gtk.Label('FPS: Unknown')
+        trim_label = Gtk.Label('Trim')
+
+        start_adj = Gtk.Adjustment(0, 0, 512000, 1, 10)
+        end_adj = Gtk.Adjustment(0, 0, 512000, 1, 10)
+
+        self.out_start_spin = Gtk.SpinButton()
+        self.out_start_spin.set_adjustment(start_adj)
+        self.out_start_spin.set_numeric(True)
+        self.out_start_spin.set_property('hexpand', True)
+        self.out_start_spin.connect('value_changed', self.on_trim_changed, 0)
+
+        self.out_end_spin = Gtk.SpinButton()
+        self.out_end_spin.set_adjustment(end_adj)
+        self.out_end_spin.set_numeric(True)
+        self.out_end_spin.set_property('hexpand', True)
+        self.out_end_spin.connect('value_changed', self.on_trim_changed, 1)
+
+        output_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                              spacing=6)
+        output_hbox.pack_start(self.out_name_entry, True, True, 0)
+        output_hbox.pack_start(Gtk.Label('_'), False, False, 0)
+        output_hbox.pack_start(self.out_suffix_entry, True, True, 0)
+        output_hbox.pack_start(Gtk.Label('.'), False, False, 0)
+        output_hbox.pack_start(self.out_cont_cbtext, False, True, 0)
 
         self.queue_button = Gtk.Button('Queue')
         self.queue_button.set_property('hexpand', True)
         self.queue_button.set_sensitive(False)
         self.queue_button.connect('clicked', self.on_queue_clicked)
 
-        grid = Gtk.Grid()
-        grid.set_column_spacing(6)
-        grid.set_row_spacing(6)
-        grid.attach(fname_label, 0, 0, 1, 1)
-        grid.attach(self.out_name_entry, 0, 1, 1, 1)
-        grid.attach(out_uscore_label, 1, 1, 1, 1)
-        grid.attach(suffix_label, 2, 0, 1, 1)
-        grid.attach(self.out_suffix_entry, 2, 1, 1, 1)
-        grid.attach(out_dot_label, 3, 1, 1, 1)
-        grid.attach(cont_label, 4, 0, 1, 1)
-        grid.attach(self.out_cont_cbtext, 4, 1, 1, 1)
-        grid.attach(vsep, 5, 0, 1, 2)
-        grid.attach(self.flt_conf_button, 6, 0, 1, 1)
-        grid.attach(self.queue_button, 6, 1, 1, 1)
-
-        tracks_empty_label = Gtk.Label('No input')
-        tracks_empty_label.set_property('hexpand', True)
-        tracks_empty_label.set_property('vexpand', True)
-
-        self.tracks_grid = Gtk.Grid()
-        self.tracks_grid.set_column_spacing(6)
-        self.tracks_grid.set_row_spacing(6)
-        self.tracks_grid.attach(tracks_empty_label, 0, 0, 1, 1)
-
-        self.tracks_scrwin = Gtk.ScrolledWindow()
-        self.tracks_scrwin.set_policy(Gtk.PolicyType.NEVER,
-                                      Gtk.PolicyType.AUTOMATIC)
-        self.tracks_scrwin.add(self.tracks_grid)
+        output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                             spacing=6)
+        output_box.set_property('margin', 6)
+        output_box.pack_start(output_hbox, True, True, 0)
+        output_box.pack_start(output_hsep1, False, False, 0)
+        output_box.pack_start(self.filters_button, True, True, 0)
+        output_box.pack_start(self.dimensions_label, True, True, 0)
+        output_box.pack_start(self.fps_label, True, True, 0)
+        output_box.pack_start(output_hsep2, False, False, 0)
+        output_box.pack_start(trim_label, True, True, 0)
+        output_box.pack_start(self.out_start_spin, True, True, 0)
+        output_box.pack_start(self.out_end_spin, True, True, 0)
+        output_box.pack_start(output_hsep3, False, False, 0)
+        output_box.pack_start(self.queue_button, False, False, 0)
 
         # -- Queue -- #
         self.queue = Queue()
 
         # -- Notebook --#
         input_label = Gtk.Label('Input')
+        output_label = Gtk.Label('Output')
         queue_label = Gtk.Label('Queue')
-
-        input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        input_box.set_property('margin', 6)
-        input_box.pack_start(self.tracks_scrwin, True, True, 0)
-        input_box.pack_start(hsep, False, False, 0)
-        input_box.pack_start(grid, False, False, 0)
 
         notebook = Gtk.Notebook()
         notebook.append_page(input_box, input_label)
+        notebook.append_page(output_box, output_label)
         notebook.append_page(self.queue.vbox, queue_label)
 
         for tab in notebook.get_children():
@@ -218,7 +228,7 @@ class MainWindow(Gtk.Window):
         self.about_dlg.run()
         self.about_dlg.hide()
 
-    def on_open_clicked(self, button):
+    def on_select_clicked(self, button):
         dlg = Gtk.FileChooserDialog('Select File(s)', self,
                                     Gtk.FileChooserAction.OPEN,
                                     ('Cancel',
@@ -243,12 +253,9 @@ class MainWindow(Gtk.Window):
             # We want these to be edited globally
             for f in self.files:
                 f.filters = self.workfile.filters
-                f.width = self.workfile.width
-                f.height = self.workfile.height
-                f.fpsnum = self.workfile.fpsnum
-                f.fpsden = self.workfile.fpsden
-                f.first = self.workfile.first
-                f.last = self.workfile.last
+                f.dimensions = self.workfile.dimensions
+                f.fps = self.workfile.fps
+                f.trim = self.workfile.trim
 
             if len(self.files) > 1:
                 self.out_name_entry.set_text('')
@@ -262,8 +269,9 @@ class MainWindow(Gtk.Window):
 
             if len(self.files) == 1 or isconsistent:
                 self._populate_tracklist()
-                self.flt_conf_button.set_sensitive(True)
+                self.filters_button.set_sensitive(True)
                 self.queue_button.set_sensitive(True)
+                self._update_summary()
 
         dlg.destroy()
 
@@ -300,8 +308,8 @@ class MainWindow(Gtk.Window):
         return True
 
     def _populate_tracklist(self):
-        for child in self.tracks_grid.get_children():
-            self.tracks_grid.remove(child)
+        for child in self.input_grid.get_children():
+            self.input_grid.remove(child)
 
         type_label = Gtk.Label('Type')
         format_label = Gtk.Label('Format')
@@ -313,13 +321,13 @@ class MainWindow(Gtk.Window):
 
         hsep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
 
-        self.tracks_grid.attach(type_label, 0, 0, 1, 1)
-        self.tracks_grid.attach(format_label, 2, 0, 1, 1)
-        self.tracks_grid.attach(title_label, 4, 0, 1, 1)
-        self.tracks_grid.attach(lang_label, 6, 0, 1, 1)
-        self.tracks_grid.attach(codec_label, 8, 0, 1, 1)
-        self.tracks_grid.attach(default_label, 10, 0, 1, 1)
-        self.tracks_grid.attach(hsep, 0, 1, 11, 1)
+        self.input_grid.attach(type_label, 0, 0, 1, 1)
+        self.input_grid.attach(format_label, 2, 0, 1, 1)
+        self.input_grid.attach(title_label, 4, 0, 1, 1)
+        self.input_grid.attach(lang_label, 6, 0, 1, 1)
+        self.input_grid.attach(codec_label, 8, 0, 1, 1)
+        self.input_grid.attach(default_label, 10, 0, 1, 1)
+        self.input_grid.attach(hsep, 0, 1, 11, 1)
 
         # Dummy radios to serve as groups
         video_radio = Gtk.RadioButton()
@@ -384,20 +392,46 @@ class MainWindow(Gtk.Window):
             default_radio.set_active(t.default)
             default_radio.connect('toggled', self.on_default_toggled, i)
 
-            self.tracks_grid.attach(type_label, 0, i + 2, 1, 1)
-            self.tracks_grid.attach(format_label, 2, i + 2, 1, 1)
-            self.tracks_grid.attach(title_entry, 4, i + 2, 1, 1)
-            self.tracks_grid.attach(lang_entry, 6, i + 2, 1, 1)
-            self.tracks_grid.attach(codec_hbox, 8, i + 2, 1, 1)
-            self.tracks_grid.attach(default_radio, 10, i + 2, 1, 1)
+            self.input_grid.attach(type_label, 0, i + 2, 1, 1)
+            self.input_grid.attach(format_label, 2, i + 2, 1, 1)
+            self.input_grid.attach(title_entry, 4, i + 2, 1, 1)
+            self.input_grid.attach(lang_entry, 6, i + 2, 1, 1)
+            self.input_grid.attach(codec_hbox, 8, i + 2, 1, 1)
+            self.input_grid.attach(default_radio, 10, i + 2, 1, 1)
 
             i += 1
 
         for j in range(5):
             vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-            self.tracks_grid.attach(vsep, j * 2 + 1, 0, 1, i + 3)
+            self.input_grid.attach(vsep, j * 2 + 1, 0, 1, i + 3)
 
-        self.tracks_grid.show_all()
+        self.input_grid.show_all()
+
+    def _update_summary(self):
+        f = self.workfile
+        f.dimensions[0:2] = f.dimensions[2:5]
+        f.fps[0:2] = f.fps[2:5]
+
+        for flt in self.workfile.filters:
+            if isinstance(flt, SourcePlugin) and flt.args['fpsnum'] > 0:
+                f.fps[0:2] = [flt.args['fpsnum'], flt.args['fpsden']]
+            elif isinstance(flt, ResizePlugin) or isinstance(flt, CropAbs):
+                f.dimensions[0:2] = [flt.args['width'], flt.args['height']]
+            elif isinstance(flt, CropRel):
+                f.dimensions[0] -= flt.args['right'] + flt.args['left']
+                f.dimensions[1] -= flt.args['top'] + flt.args['bottom']
+
+        self.dimensions_label.set_text('Dimensions: ' +
+                                       str(f.dimensions[0]) +
+                                       'x' +
+                                       str(f.dimensions[1]))
+        if f.fps[0:2] != [0, 1]:
+            self.fps_label.set_text('FPS: ' +
+                                    str(f.fps[0]) +
+                                    '/' +
+                                    str(f.fps[1]))
+        else:
+            self.fps_label.set_text('FPS: VFR')
 
     def on_title_changed(self, entry, i):
         title = entry.get_text()
@@ -411,7 +445,7 @@ class MainWindow(Gtk.Window):
 
     def on_codec_changed(self, cbtext, i):
         c = cbtext.get_active_text()
-        conf_button = self.tracks_grid.get_child_at(8, i + 2).get_children()[1]
+        conf_button = self.input_grid.get_child_at(8, i + 2).get_children()[1]
         for f in self.files:
             t = f.tracklist[i]
             if c in ['Disable', 'Mux']:
@@ -432,8 +466,12 @@ class MainWindow(Gtk.Window):
                     t.codec.channel = t.channel
                     t.codec.rate = t.rate
 
+    def on_trim_changed(self, spin, i):
+        self.workfile.trim[i] = spin.get_value_as_int()
+
     def on_filters_clicked(self, button):
         VapourSynth(self.workfile).show_dialog(self)
+        self._update_summary()
 
     def on_conf_clicked(self, button, i):
         if self.workfile.tracklist[i].codec:

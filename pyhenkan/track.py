@@ -1,7 +1,6 @@
 import os
 import re
 import subprocess
-import vapoursynth as vs
 
 from pyhenkan.queue import Queue
 from pyhenkan.vapoursynth import VapourSynth

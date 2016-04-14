@@ -283,19 +283,6 @@ class F3kdb(DebandPlugin):
         # self.args['random_param_grain'] = 1.0
 
 
-class MiscPlugin(Plugin):
-    def __init__(self, unit, function, dialog):
-        Plugin.__init__(self, unit, function, dialog)
-
-
-class Trim(MiscPlugin):
-    def __init__(self):
-        MiscPlugin.__init__(self, 'std', 'Trim', TrimDialog)
-
-        self.args['first'] = 0
-        self.args['last'] = 0
-
-
 class PluginDialog(Gtk.Dialog):
     def __init__(self, plugin, parent):
         title = '{}.{}'.format(plugin.unit, plugin.function)
@@ -588,19 +575,6 @@ class F3kdbDialog(PluginDialog):
                     self.cbtext('dither_algo', dither_algos)],
                    [self.label('Output Depth'),
                     self.spin('output_depth', output_depths)]]
-
-        self.populate_grid(widgets)
-
-
-class TrimDialog(PluginDialog):
-    def __init__(self, plugin, parent):
-        PluginDialog.__init__(self, plugin, parent)
-
-        firsts = Gtk.Adjustment(0, 0, 1000000, 1, 100)
-        lasts = Gtk.Adjustment(0, 0, 1000000, 1, 100)
-
-        widgets = [[self.label('First'), self.spin('first', firsts)],
-                   [self.label('Last'), self.spin('last', lasts)]]
 
         self.populate_grid(widgets)
 

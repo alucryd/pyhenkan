@@ -27,12 +27,15 @@ class VapourSynth:
         clip = self.mediafile.filters[0].get_clip(self.mediafile.path)
         for f in self.mediafile.filters[1:]:
             clip = f.get_clip(clip)
+        t = self.mediafile.trim
+        if t != [0, 1]:
+            clip = clip[t[0]:t[1] + 1]
         return clip
 
 
 class VapourSynthDialog(Gtk.Dialog):
     def __init__(self, parent, mediafile):
-        Gtk.Dialog.__init__(self, 'VapourSynth filters', parent, 0,
+        Gtk.Dialog.__init__(self, 'VapourSynth Filters', parent, 0,
                             use_header_bar=1)
 
         # Get environment
@@ -110,7 +113,6 @@ class VapourSynthDialog(Gtk.Dialog):
                 type_cbtext.append_text('Resize')
                 type_cbtext.append_text('Denoise')
                 type_cbtext.append_text('Deband')
-                type_cbtext.append_text('Misc')
 
             if i > 0 and f is not None:
                 if isinstance(f, plugin.CropPlugin):
@@ -125,9 +127,6 @@ class VapourSynthDialog(Gtk.Dialog):
                 elif isinstance(f, plugin.DebandPlugin):
                     plugins = self.env.deband_plugins
                     type_cbtext.set_active(3)
-                elif isinstance(f, plugin.MiscPlugin):
-                    plugins = self.env.misc_plugins
-                    type_cbtext.set_active(4)
 
             type_cbtext.connect('changed', self.on_type_changed, i)
 
@@ -181,9 +180,6 @@ class VapourSynthDialog(Gtk.Dialog):
         self._populate_grid()
 
     def on_remove_clicked(self, button, i):
-        if self.filters[i].function == 'Trim':
-            self.mediafile.first = 0
-            self.mediafile.last = 0
         self.filters.pop(i)
 
         self._populate_grid()
@@ -214,18 +210,9 @@ class VapourSynthDialog(Gtk.Dialog):
             plugins = self.env.denoise_plugins
         elif t == 'Deband':
             plugins = self.env.deband_plugins
-        elif t == 'Misc':
-            plugins = self.env.misc_plugins
-
-        # Trimming several times is a bad idea
-        trim = False
-        for f in self.filters:
-            if isinstance(f, plugin.Trim):
-                trim = True
 
         for p in plugins:
-            if not (p == 'Trim' and trim):
-                plugin_cbtext.append_text(p)
+            plugin_cbtext.append_text(p)
 
         self.show_all()
 
@@ -233,40 +220,24 @@ class VapourSynthDialog(Gtk.Dialog):
         p = cbtext.get_active_text()
         type_cbtext = self.grid.get_child_at(0, i)
         t = type_cbtext.get_active_text()
-        path = self.mediafile.path
         if t == 'Source':
-            self.filters[i] = self.env.source_plugins[p][0](path)
-            self.filters[i].args['fpsnum'] = self.mediafile.fpsnum
-            self.filters[i].args['fpsden'] = self.mediafile.fpsden
+            self.filters[i] = self.env.source_plugins[p][0]()
+            self.filters[i].args['fpsnum'] = self.mediafile.fps[2]
+            self.filters[i].args['fpsden'] = self.mediafile.fps[3]
         elif t == 'Crop':
             self.filters[i] = self.env.crop_plugins[p][0]()
         elif t == 'Resize':
             self.filters[i] = self.env.resize_plugins[p][0]()
-            self.filters[i].args['width'] = self.mediafile.width
-            self.filters[i].args['height'] = self.mediafile.height
+            self.filters[i].args['width'] = self.mediafile.dimensions[2]
+            self.filters[i].args['height'] = self.mediafile.dimensions[3]
         elif t == 'Denoise':
             self.filters[i] = self.env.denoise_plugins[p][0]()
         elif t == 'Deband':
             self.filters[i] = self.env.deband_plugins[p][0]()
-        elif t == 'Misc':
-            self.filters[i] = self.env.misc_plugins[p][0]()
-            if p == 'Trim':
-                self.filters[i].args['first'] = self.mediafile.first
-                self.filters[i].args['last'] = self.mediafile.last
 
         self._populate_grid()
 
     def on_conf_clicked(self, button, i):
         self.filters[i].show_dialog(self)
-        f = self.filters[i]
-        if isinstance(f, plugin.SourcePlugin):
-            self.mediafile.fpsnum = self.filters[i].args['fpsnum']
-            self.mediafile.fpsden = self.filters[i].args['fpsden']
-        elif isinstance(f, plugin.ResizePlugin):
-            self.mediafile.width = self.filters[i].args['width']
-            self.mediafile.height = self.filters[i].args['height']
-        elif isinstance(f, plugin.Trim):
-            self.mediafile.first = self.filters[i].args['first']
-            self.mediafile.last = self.filters[i].args['last']
 
 # vim: ts=4 sw=4 et:
