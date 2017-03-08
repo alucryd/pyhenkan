@@ -39,18 +39,21 @@ class MainWindow(Gtk.Window):
         self.sflt.set_name('VapourSynth scripts')
         self.sflt.add_pattern('*.vpy')
 
-        vext = ['3gp', 'avi', 'flv', 'm2ts', 'mkv', 'mp4', 'ogm', 'webm']
+        vext = ['3gp', 'avi', 'flv', 'm2ts', 'mkv', 'mp4', 'ogm', 'ts', 'webm']
         self.vflt = Gtk.FileFilter()
         self.vflt.set_name('Video files')
         for ext in vext:
             self.vflt.add_pattern('*.' + ext)
 
-        aext = ['aac', 'ac3', 'dts', 'flac', 'm4a', 'mka', 'mp3', 'mpc', 'ogg',
-                'opus', 'thd', 'wav', 'wv']
+        aext = ['aac', 'ac3', 'dts', 'flac', 'm4a', 'mka', 'mp3', 'mpc', 'ogg', 'opus', 'thd', 'wav', 'wv']
         self.aflt = Gtk.FileFilter()
         self.aflt.set_name('Audio files')
         for ext in aext:
             self.aflt.add_pattern('*.' + ext)
+
+        self.noflt = Gtk.FileFilter()
+        self.noflt.set_name("All files")
+        self.noflt.add_pattern("*")
 
         # -- Header Bar -- #
         tools_sccr_button = Gtk.Button()
@@ -236,6 +239,7 @@ class MainWindow(Gtk.Window):
                                      'Open', Gtk.ResponseType.OK))
         dlg.set_property('select-multiple', True)
         dlg.add_filter(self.vflt)
+        dlg.add_filter(self.noflt)
         dlg.set_current_folder(self.wdir)
 
         response = dlg.run()
